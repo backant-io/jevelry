@@ -1,4 +1,4 @@
-/** The stdout document of `jevlery ask`. Fields are added, never renamed or removed, while PROTOCOL is 1. */
+/** The stdout document of `jevelry ask`. Fields are added, never renamed or removed, while PROTOCOL is 1. */
 export const PROTOCOL = 1 as const;
 
 export type Verdict = "act" | "mark" | "fall_back";

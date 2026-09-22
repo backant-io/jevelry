@@ -206,7 +206,7 @@ export function parseJevel(markdown: string, dirName: string, path = "<inline>")
   return { jevel, warnings: warningsOf(jevel) };
 }
 
-/** First match wins: --jevels dirs, then JEVLERY_JEVELS entries, then ./jevels, then $JEVLERY_HOME/jevels. */
+/** First match wins: --jevels dirs, then JEVELRY_JEVELS entries, then ./jevels, then $JEVELRY_HOME/jevels. */
 export function discoveryDirs(input: { cli?: string[]; env?: string; cwd: string; home: string }): string[] {
   const ordered = [
     ...(input.cli ?? []),

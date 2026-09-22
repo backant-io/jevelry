@@ -17,7 +17,7 @@ export {
   type Parsed,
   type Repeat,
 } from "./jevel.js";
-export { appendLine, findAsk, jevleryHome, outcomeOf, readLog, LOG_FILE, type AskLine, type LogLine, type OutcomeLine } from "./log.js";
+export { appendLine, findAsk, jevelryHome, outcomeOf, readLog, LOG_FILE, type AskLine, type LogLine, type OutcomeLine } from "./log.js";
 export * from "./protocol.js";
 export { renderReport, report, type QuestionReport } from "./report.js";
 export { DEFAULT_THRESHOLDS, certaintyOf, mergeThresholds, verdictOf, type Thresholds } from "./verdict.js";

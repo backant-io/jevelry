@@ -1,9 +1,9 @@
 {
-  "name": "jevlery",
+  "name": "jevelry",
   "version": "0.1.0",
   "description": "A runtime for Jev, TypeSafe's System One model: jevels in, verdicts out",
   "type": "module",
-  "bin": { "jevlery": "bin/jevlery.js" },
+  "bin": { "jevelry": "bin/jevelry.js" },
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }, "./package.json": "./package.json" },
   "scripts": {
     "build": "tsup",
@@ -14,9 +14,9 @@
     "prepublishOnly": "npm run lint && npm run build"
   },
   "files": ["dist", "bin", "jevels", "docs/protocol", "LICENSE", "README.md"],
-  "repository": { "type": "git", "url": "git+https://github.com/backant-io/jevlery.git" },
+  "repository": { "type": "git", "url": "git+https://github.com/backant-io/jevelry.git" },
   "homepage": "https://backant.io",
-  "bugs": { "url": "https://github.com/backant-io/jevlery/issues" },
+  "bugs": { "url": "https://github.com/backant-io/jevelry/issues" },
   "engines": { "node": ">=20" },
   "author": "Pavel Hegler <business@hegler.tech>",
   "license": "MIT",

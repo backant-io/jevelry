@@ -104,7 +104,7 @@ describe("discovery", () => {
     expect(dirs).toEqual(["/a", "/b", "/c", "/w/jevels", "/h/jevels"]);
   });
   it("finds the first directory holding the jevel and lists every jevel once", () => {
-    const root = mkdtempSync(join(tmpdir(), "jevlery-"));
+    const root = mkdtempSync(join(tmpdir(), "jevelry-"));
     const first = join(root, "first");
     const second = join(root, "second");
     for (const dir of [first, second]) {

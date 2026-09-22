@@ -1,9 +1,9 @@
-# jevlery: a runtime for Jev, the way Claude Code is a runtime for an LLM
+# jevelry: a runtime for Jev, the way Claude Code is a runtime for an LLM
 
-**Repo:** `backant-io/jevlery`, npm package `jevlery`, binary `jevlery`.
+**Repo:** `backant-io/jevelry`, npm package `jevelry`, binary `jevelry`.
 **Status:** design, drafted 2026-09-22 from the owner's direction in a brainstorming session.
 **Consumer that drives the first release:** Agent Office (`backant-io/agent-office`), whose reflex
-layer spawns `jevlery` the way it spawns `claude` and `pi`. The office's own design lives in that
+layer spawns `jevelry` the way it spawns `claude` and `pi`. The office's own design lives in that
 repo; this document is only the runtime.
 
 ## 1. Why
@@ -17,7 +17,7 @@ can answer, turn probabilities into a verdict the host can branch on, and rememb
 asked so the answers can be measured against what later happened.
 
 Claude Code is the runtime that does the equivalent work around an LLM: a print mode a program
-can drive, skills that package a capability, metering, retries, a local record. jevlery is that
+can drive, skills that package a capability, metering, retries, a local record. jevelry is that
 for Jev. A host spawns one binary, reads one JSON document, and never speaks HTTP or holds a
 credential.
 
@@ -55,24 +55,24 @@ Read from the documentation on 2026-09-22 (`jev-1.13.0`, alias `jev-latest`):
    that takes about a hundred.
 2. **A jevel is the unit of use, and it is a file.** Adding a use case is adding a directory with
    one `JEVEL.md`, exactly the shape a Claude Code skill has: frontmatter the runtime reads, a body
-   a person or an agent reads. No code changes in jevlery and no code changes in the host beyond
+   a person or an agent reads. No code changes in jevelry and no code changes in the host beyond
    the one hook that builds the state and reads the verdicts.
 3. **Verdicts, not floats.** Every answer comes back with its raw probabilities and a verdict
    (`act`, `mark`, `fall_back`) computed from thresholds the jevel declares. The host branches on
    the verdict; the numbers stay for the record.
 4. **Composition stays in the host.** Weights, "gate only if A and not B", routing tables: those
-   are the host's control flow, which the TypeSafe guidance says code must own. jevlery evaluates
+   are the host's control flow, which the TypeSafe guidance says code must own. jevelry evaluates
    one jevel against one state and stops.
 5. **A local log with outcomes, from day one.** Every ask is appended to a JSONL log under
-   `$JEVLERY_HOME`; `jevlery outcome` records what later proved true; `jevlery report` computes
+   `$JEVELRY_HOME`; `jevelry outcome` records what later proved true; `jevelry report` computes
    agreement per question. Calibration then works for any host, not only the office. A host that
    keeps its own record (the office does) keeps it; the log is the runtime's, never the host's
    truth.
 6. **No fake mode.** The product is the real call. Tests stub the SDK's `fetch` seam, and hosts
-   double jevlery at their own seam (the office doubles its `Reflex` trait in process).
-7. **The host keeps the key out of its own hands.** jevlery reads `TYPESAFE_API_KEY` from its own
+   double jevelry at their own seam (the office doubles its `Reflex` trait in process).
+7. **The host keeps the key out of its own hands.** jevelry reads `TYPESAFE_API_KEY` from its own
    environment; a host passes the environment through and never parses, stores or logs the key.
-   jevlery never writes it to the log or to stdout.
+   jevelry never writes it to the log or to stdout.
 8. **The protocol is additive and pinned.** The stdout document carries `protocol: 1`. Fields are
    added, never renamed or removed; a host may pin example documents byte for byte.
 
@@ -88,9 +88,9 @@ must equal `name` in the frontmatter.
 name: wake-gate                  # required; [a-z0-9-]+; equals the directory name
 version: 1                       # required; integer; bumped by hand when questions change
 format: 1                        # optional; the JEVEL.md format version, default 1
-model: jev-1.13.0                # optional pin; else JEVLERY_MODEL, else the SDK default
+model: jev-1.13.0                # optional pin; else JEVELRY_MODEL, else the SDK default
 state:
-  required: [employee, events]   # top-level keys the state must carry; missing is exit 2
+  required: [employee, events, candidates, filing]  # top-level keys the state must carry; missing is exit 2
   budget_tokens: 12000           # optional; an estimate over it is exit 5 before any call
 verdict:                         # optional jevel-wide defaults for every question
   act: 0.9
@@ -139,12 +139,12 @@ Field by field:
 
 ### 4.2 Body (Markdown)
 
-Prose for whoever uses or tunes the jevel. Four headings are conventional and `jevlery check`
+Prose for whoever uses or tunes the jevel. Four headings are conventional and `jevelry check`
 warns when one is missing: **When to use**, **State** (what to send and how to filter it),
 **Verdicts** (what each verdict means for the host), **Example** (one state and the expected
 answers). The body is never sent to the model.
 
-### 4.3 Validation (`jevlery check`)
+### 4.3 Validation (`jevelry check`)
 
 Refused (exit 2): missing or malformed frontmatter; `name` not matching the directory; an unknown
 `type`; `choice` with fewer than 2 or more than 255 options; `score` with fewer than 2 or more
@@ -159,8 +159,8 @@ written as checks, so a jevel that would answer badly is told before it is used.
 ### 4.4 Discovery
 
 Jevels resolve, first match wins, from: `--jevels <dir>` (repeatable), each entry of
-`JEVLERY_JEVELS` (path list, `:` separated), `./jevels`, `$JEVLERY_HOME/jevels`. `jevlery list`
-prints every jevel found with its source directory; `jevlery show <name>` prints the resolved
+`JEVELRY_JEVELS` (path list, `:` separated), `./jevels`, `$JEVELRY_HOME/jevels`. `jevelry list`
+prints every jevel found with its source directory; `jevelry show <name>` prints the resolved
 frontmatter as JSON and the body.
 
 ## 5. Verdicts
@@ -173,7 +173,7 @@ For each answer the runtime computes a certainty `c` and compares it to the ques
 
 `verdict = act` when `c >= act`, `mark` when `mark <= c < act`, else `fall_back`. The meaning the
 host attaches: act on the answer; act and mark the record for review; take the path it took
-before jevlery existed. The docs' three-band pattern, made a value.
+before jevelry existed. The docs' three-band pattern, made a value.
 
 The raw `probabilities`, `confidence`, `noul`, `score` and `legend` are always returned beside the
 verdict, so a host that wants a different certainty measure has what it needs.
@@ -181,12 +181,12 @@ verdict, so a host that wants a different certainty measure has what it needs.
 ## 6. The CLI
 
 ```
-jevlery ask <jevel> (--state @file | --state - | --state '<json>') [--model <id>] [--jevels <dir>]... [--no-log]
-jevlery ask --questions @file.json --state ...      # one-off questions without a jevel
-jevlery outcome <log_id> <question> (agree | disagree | <value>) [--note <text>]
-jevlery report [--jevel <name>] [--since <iso>] [--json]
-jevlery list | show <name> | check <name>
-jevlery models
+jevelry ask <jevel> (--state @file | --state - | --state '<json>') [--model <id>] [--jevels <dir>]... [--no-log]
+jevelry ask --questions @file.json --state ...      # one-off questions without a jevel
+jevelry outcome <log_id> <question> (agree | disagree | <value>) [--note <text>]
+jevelry report [--jevel <name>] [--since <iso>] [--json]
+jevelry list | show <name> | check <name>
+jevelry models
 ```
 
 - `ask` prints exactly one JSON document on stdout: the answers (section 7) on exit 0, an error
@@ -204,9 +204,9 @@ jevlery models
 - `models` prints `GET /v1/models` through the SDK.
 
 Environment: `TYPESAFE_API_KEY` (required for `ask` and `models`), `TYPESAFE_BASE_URL` (SDK,
-optional), `JEVLERY_MODEL` (default model when neither the jevel nor `--model` pins one; else
-the SDK default `jev-latest`), `JEVLERY_HOME` (default `~/.jevlery`), `JEVLERY_JEVELS`,
-`JEVLERY_TIMEOUT_MS` (default 30000).
+optional), `JEVELRY_MODEL` (default model when neither the jevel nor `--model` pins one; else
+the SDK default `jev-latest`), `JEVELRY_HOME` (default `~/.jevelry`), `JEVELRY_JEVELS`,
+`JEVELRY_TIMEOUT_MS` (default 30000).
 
 Exit codes a host branches on:
 
@@ -268,7 +268,7 @@ from a 400 or a 422 carries no `field`, and a host reads `field` as optional on 
 
 ## 8. The log
 
-`$JEVLERY_HOME/log.jsonl`, append-only, one JSON object per line, two kinds:
+`$JEVELRY_HOME/log.jsonl`, append-only, one JSON object per line, two kinds:
 
 ```json
 {"kind":"ask","id":"…","at":"2026-09-22T10:00:00Z","jevel":{"name":"wake-gate","version":1},"model":"jev-1.13.0","state_hash":"sha256:…","answers":{…},"usage":{…},"cwd":"/path/the/host/ran/in"}
@@ -303,8 +303,8 @@ exit 7 with the field named: it is never defaulted.
 ## 11. Repository layout and packaging
 
 ```
-jevlery/
-  bin/jevlery.js              #!/usr/bin/env node; imports ../dist/cli.js
+jevelry/
+  bin/jevelry.js              #!/usr/bin/env node; imports ../dist/cli.js
   src/cli.ts                  commander program; wires the commands
   src/jevel.ts                JEVEL.md discovery, parsing, validation, repeat expansion
   src/ask.ts                  builds the SDK request, calls it, shapes the protocol document
@@ -326,7 +326,7 @@ Dependencies: `@typesafe-ai/sdk`, `commander`, `yaml`. Dev: `typescript`, `tsup`
 host that prefers in-process use; the CLI is the contract, the library is a convenience.
 
 Scripts: `build` (tsup), `test` (vitest run, after build), `lint` (tsc --noEmit),
-`prepublishOnly` (build). Published to npm as `jevlery`; `npx jevlery` works without an install.
+`prepublishOnly` (build). Published to npm as `jevelry`; `npx jevelry` works without an install.
 
 ## 12. Testing
 
@@ -336,9 +336,9 @@ Scripts: `build` (tsup), `test` (vitest run, after build), `lint` (tsc --noEmit)
   response bodies taken from the API documentation, one per question type, plus `401`, `422`,
   `429` with `Retry-After`, `529`, and a body with an unknown answer type. Every exit code in
   section 6 has a test that reaches it.
-- CLI: one end-to-end test spawns `bin/jevlery.js` against a `node:http` server started by the
+- CLI: one end-to-end test spawns `bin/jevelry.js` against a `node:http` server started by the
   test and reached through `TYPESAFE_BASE_URL`, with a key in the environment and
-  `JEVLERY_HOME` in a temporary directory: `check`, `ask`, `outcome`, `report` in sequence, and
+  `JEVELRY_HOME` in a temporary directory: `check`, `ask`, `outcome`, `report` in sequence, and
   the stdout document validated against `docs/protocol/ask.schema.json`.
 - Protocol pin: the three examples under `docs/protocol/` are produced by the code from the
   recorded responses and compared byte for byte.
@@ -364,9 +364,9 @@ the authoring loop for now.
 
 ## 14. Acceptance
 
-- `npx jevlery check wake-gate` on the shipped example refuses each of the 4.3 defects when they
+- `npx jevelry check wake-gate` on the shipped example refuses each of the 4.3 defects when they
   are introduced and warns on each listed smell.
-- `npx jevlery ask wake-gate --state @state.json` with a valid key prints one protocol document,
+- `npx jevelry ask wake-gate --state @state.json` with a valid key prints one protocol document,
   exit 0, with a verdict on every question, and appends one line to the log.
 - Over-budget state exits 5 before any request is made (the test server sees no request).
 - `429` and `529` from the test server exit 3 after the SDK's retries with `retry_after_ms`
@@ -380,8 +380,8 @@ the authoring loop for now.
 
 ## 15. What the first consumer needs from this
 
-Agent Office spawns `jevlery ask <jevel> --state -` with the state on stdin, the office's own
-jevels directory in `JEVLERY_JEVELS`, and `TYPESAFE_API_KEY` passed through from the daemon's
+Agent Office spawns `jevelry ask <jevel> --state -` with the state on stdin, the office's own
+jevels directory in `JEVELRY_JEVELS`, and `TYPESAFE_API_KEY` passed through from the daemon's
 environment. It maps exit 3 to its provider `paused` (until `retry_after_ms`), exit 4 to
 `closed`, exits 2, 5, 6 and 7 to a recorded fallback; reads `model`, `usage.input_tokens`,
 `state_hash` and every verdict into its own record; and pins `docs/protocol/` examples in its
@@ -391,4 +391,4 @@ conformance tests. Nothing in the office reads the log; the office's record is i
 
 *Owner-flagged defaults to confirm or amend: license (MIT proposed; backant-memory ships
 Elastic-2.0, agentic-engineering-101 ships MIT); runtime default thresholds (`act 0.9`,
-`mark 0.7`); the log's location (`~/.jevlery/log.jsonl`); the token estimate divisor (3).*
+`mark 0.7`); the log's location (`~/.jevelry/log.jsonl`); the token estimate divisor (3).*

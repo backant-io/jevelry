@@ -7,18 +7,22 @@ import { describe, expect, it } from "vitest";
 
 const key = process.env.TYPESAFE_API_KEY;
 const haveKey = key !== undefined && key.trim() !== "";
-if (!haveKey) process.stderr.write("jevlery live tests skipped: TYPESAFE_API_KEY is not set\n");
+if (!haveKey) process.stderr.write("jevelry live tests skipped: TYPESAFE_API_KEY is not set\n");
 const live = haveKey ? describe : describe.skip;
 
 const schema = JSON.parse(readFileSync("docs/protocol/ask.schema.json", "utf8"));
 const validate = new Ajv({ allErrors: true, strict: true }).compile(schema);
-const home = mkdtempSync(join(tmpdir(), "jevlery-live-"));
+const home = mkdtempSync(join(tmpdir(), "jevelry-live-"));
+
+// The SDK reads TYPESAFE_LOG_LEVEL and this suite asserts an empty stderr: an operator who has it
+// set in their shell would fail the ask tests on SDK log lines, so the child never inherits it.
+const { TYPESAFE_LOG_LEVEL: _logLevel, ...parentEnv } = process.env;
 
 const run = (args: string[]) =>
-  spawnSync("node", ["bin/jevlery.js", ...args], {
+  spawnSync("node", ["bin/jevelry.js", ...args], {
     encoding: "utf8",
     timeout: 60000,
-    env: { ...process.env, JEVLERY_HOME: home, JEVLERY_JEVELS: join(process.cwd(), "jevels") },
+    env: { ...parentEnv, JEVELRY_HOME: home, JEVELRY_JEVELS: join(process.cwd(), "jevels") },
   });
 
 const REFERENCE_STATE = "Help! My payouts have been failing for 3 days.";

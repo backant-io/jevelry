@@ -18,14 +18,14 @@ let home: string;
  */
 const run = (args: string[], options: { input?: string; env?: Record<string, string | undefined> } = {}) =>
   new Promise<{ status: number | null; stdout: string; stderr: string }>((resolve, reject) => {
-    const child = spawn("node", ["bin/jevlery.js", ...args], {
+    const child = spawn("node", ["bin/jevelry.js", ...args], {
       env: {
         PATH: process.env.PATH,
         HOME: home,
         TYPESAFE_API_KEY: "test-key",
         TYPESAFE_BASE_URL: server.url,
-        JEVLERY_HOME: join(home, ".jevlery"),
-        JEVLERY_JEVELS: FIXTURES,
+        JEVELRY_HOME: join(home, ".jevelry"),
+        JEVELRY_JEVELS: FIXTURES,
         ...options.env,
       },
     });
@@ -43,7 +43,7 @@ const state = { employee: { title: "COO", authority: ["read_readings"] }, events
 
 beforeAll(async () => {
   server = await startServer();
-  home = mkdtempSync(join(tmpdir(), "jevlery-cli-"));
+  home = mkdtempSync(join(tmpdir(), "jevelry-cli-"));
 });
 afterAll(async () => server.close());
 
@@ -55,7 +55,7 @@ describe("check, list, show", () => {
     expect(r.stderr).toContain("wake-gate v1: 3 questions, 0 warnings");
   });
   it("check exits 2 naming the field for a defective jevel", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "jevlery-bad-"));
+    const dir = mkdtempSync(join(tmpdir(), "jevelry-bad-"));
     mkdirSync(join(dir, "bad"));
     writeFileSync(join(dir, "bad", "JEVEL.md"), "---\nname: bad\nversion: 1\nquestions:\n  q: { type: rank, instructions: x }\n---\n");
     const r = await run(["check", "bad", "--jevels", dir]);
@@ -84,7 +84,7 @@ describe("ask", () => {
     expect(r.stdout).toBe(`${JSON.stringify(doc, null, 2)}\n`);
     expect(doc.log_id).toMatch(/^[0-9a-f-]{36}$/);
     expect(doc.answers.worth_a_turn?.verdict).toBe("act");
-    const log = readFileSync(join(home, ".jevlery", "log.jsonl"), "utf8").trim().split("\n");
+    const log = readFileSync(join(home, ".jevelry", "log.jsonl"), "utf8").trim().split("\n");
     expect(log).toHaveLength(1);
     expect(JSON.parse(log[0] ?? "")).toMatchObject({ kind: "ask", id: doc.log_id, jevel: { name: "wake-gate", version: 1 } });
   });
@@ -101,7 +101,7 @@ describe("ask", () => {
     const doc = JSON.parse(r.stdout) as { protocol: number };
     expect(doc.protocol).toBe(1);
     expect(r.stdout).toBe(`${JSON.stringify(doc, null, 2)}\n`);
-    expect(r.stderr).toContain("jevlery: sdk:");
+    expect(r.stderr).toContain("jevelry: sdk:");
   });
   it("asks one-off questions without a jevel", async () => {
     const r = await run(["ask", "--questions", JSON.stringify({ urgent: { type: "noul", instructions: "Is it urgent?" } }), "--state", '"Help!"']);
@@ -147,9 +147,9 @@ describe("ask", () => {
     expect(JSON.parse(missingQuestions.stdout)).toMatchObject({ error: { code: "bad_input", field: "questions" } });
   });
   it("keeps the paid answer when the log cannot be written, warning instead of failing", async () => {
-    const dir = mkdtempSync(join(tmpdir(), "jevlery-blocked-"));
+    const dir = mkdtempSync(join(tmpdir(), "jevelry-blocked-"));
     writeFileSync(join(dir, "blocker"), "a regular file, so no home can be made beneath it");
-    const r = await run(["ask", "wake-gate", "--state", JSON.stringify(state)], { env: { JEVLERY_HOME: join(dir, "blocker", "home") } });
+    const r = await run(["ask", "wake-gate", "--state", JSON.stringify(state)], { env: { JEVELRY_HOME: join(dir, "blocker", "home") } });
     expect(r.status).toBe(0);
     const doc = JSON.parse(r.stdout) as { log_id: string | null };
     expect(validate(doc)).toBe(true);
@@ -174,13 +174,13 @@ describe("outcome and report", () => {
   it("fails report with a documented exit and one sentence when the log cannot be read", async () => {
     // `report` was the one command without a try/catch, so a log it cannot read left commander's
     // own rejection path to answer with the undocumented exit 1.
-    const dir = mkdtempSync(join(tmpdir(), "jevlery-unreadable-"));
+    const dir = mkdtempSync(join(tmpdir(), "jevelry-unreadable-"));
     mkdirSync(join(dir, "log.jsonl"));
-    const r = await run(["report"], { env: { JEVLERY_HOME: dir } });
+    const r = await run(["report"], { env: { JEVELRY_HOME: dir } });
     expect(r.status).toBe(6);
     expect(r.stdout).toBe("");
     expect(r.stderr.trimEnd().split("\n")).toHaveLength(1);
-    expect(r.stderr).toMatch(/^jevlery: /);
+    expect(r.stderr).toMatch(/^jevelry: /);
   });
   it("refuses an unknown log id and a value that names nothing", async () => {
     expect((await run(["outcome", "nope", "worth_a_turn", "agree"])).status).toBe(2);

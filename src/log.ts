@@ -5,9 +5,9 @@ import type { Answer, Usage } from "./protocol.js";
 
 export const LOG_FILE = "log.jsonl";
 
-export function jevleryHome(env: NodeJS.ProcessEnv, homedir: string): string {
-  const configured = env.JEVLERY_HOME;
-  return configured && configured.trim() !== "" ? configured : join(homedir, ".jevlery");
+export function jevelryHome(env: NodeJS.ProcessEnv, homedir: string): string {
+  const configured = env.JEVELRY_HOME;
+  return configured && configured.trim() !== "" ? configured : join(homedir, ".jevelry");
 }
 
 export interface AskLine {
@@ -55,11 +55,11 @@ export async function readLog(home: string): Promise<LogLine[]> {
     try {
       parsed = JSON.parse(raw);
     } catch {
-      process.stderr.write(`jevlery: skipped line ${index + 1} of ${LOG_FILE}: not JSON\n`);
+      process.stderr.write(`jevelry: skipped line ${index + 1} of ${LOG_FILE}: not JSON\n`);
       return;
     }
     if (typeof parsed !== "object" || parsed === null) {
-      process.stderr.write(`jevlery: skipped line ${index + 1} of ${LOG_FILE}: not a log line\n`);
+      process.stderr.write(`jevelry: skipped line ${index + 1} of ${LOG_FILE}: not a log line\n`);
       return;
     }
     lines.push(parsed as LogLine);

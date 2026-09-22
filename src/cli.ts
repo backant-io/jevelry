@@ -7,22 +7,22 @@ import { type Questions, TypeSafeClient } from "@typesafe-ai/sdk";
 import { Command } from "commander";
 import { ask, errorBody } from "./ask.js";
 import { JevelError, discoveryDirs, listJevels, loadJevel } from "./jevel.js";
-import { appendLine, findAsk, jevleryHome, outcomeOf, readLog } from "./log.js";
+import { appendLine, findAsk, jevelryHome, outcomeOf, readLog } from "./log.js";
 import { type AskDocument, type ErrorBody, type ErrorDocument, PROTOCOL } from "./protocol.js";
 import { renderReport, report } from "./report.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(here, "..", "package.json"), "utf8")) as { version: string };
 
-const say = (line: string): void => { process.stderr.write(`jevlery: ${line}\n`); };
+const say = (line: string): void => { process.stderr.write(`jevelry: ${line}\n`); };
 const out = (document: AskDocument | ErrorDocument | unknown): void => { process.stdout.write(`${JSON.stringify(document, null, 2)}\n`); };
 
 function home(): string {
-  return jevleryHome(process.env, homedir());
+  return jevelryHome(process.env, homedir());
 }
 
 function dirs(cli: string[] | undefined): string[] {
-  const env = process.env.JEVLERY_JEVELS;
+  const env = process.env.JEVELRY_JEVELS;
   return discoveryDirs({ cli: cli ?? [], ...(env ? { env } : {}), cwd: process.cwd(), home: home() });
 }
 
@@ -56,9 +56,12 @@ function readSource(source: string, field: string): unknown {
  * to stderr instead, so the one-document protocol holds whatever the environment asks for.
  */
 function client(): TypeSafeClient {
-  const timeout = Number(process.env.JEVLERY_TIMEOUT_MS ?? 30000);
-  const model = process.env.JEVLERY_MODEL;
-  const toStderr = (m: string, ...a: unknown[]): void => { say(`sdk: ${[m, ...a.map(String)].join(" ")}`); };
+  const timeout = Number(process.env.JEVELRY_TIMEOUT_MS ?? 30000);
+  const model = process.env.JEVELRY_MODEL;
+  // An extra argument is usually an object: `String` would render it `[object Object]` and lose the
+  // line's content, so it is JSON, and `String` only for what JSON cannot hold (a cycle, undefined).
+  const render = (a: unknown): string => { try { return JSON.stringify(a) ?? String(a); } catch { return String(a); } };
+  const toStderr = (m: string, ...a: unknown[]): void => { say(`sdk: ${[m, ...a.map(render)].join(" ")}`); };
   const logger = { debug: toStderr, info: toStderr, warn: toStderr, error: toStderr };
   return new TypeSafeClient(model && model.trim() !== "" ? { timeout, defaultModel: model, logger } : { timeout, logger });
 }
@@ -76,7 +79,7 @@ function failCommand(error: unknown): never {
   process.exit(body.exit);
 }
 
-export const program = new Command("jevlery")
+export const program = new Command("jevelry")
   .description("A runtime for Jev, TypeSafe's System One model: jevels in, verdicts out")
   .version(pkg.version);
 
@@ -85,7 +88,7 @@ program
   .description("evaluate a state against a jevel (or --questions) and print one protocol document")
   .requiredOption("--state <source>", "@file, - for stdin, or inline JSON")
   .option("--questions <source>", "@file or inline JSON: the API's questions map, for a one-off ask")
-  .option("--model <id>", "model id, overriding the jevel's pin and JEVLERY_MODEL")
+  .option("--model <id>", "model id, overriding the jevel's pin and JEVELRY_MODEL")
   .option("--jevels <dir>", "a jevels directory searched first (repeatable)", (d: string, all: string[]) => [...all, d], [] as string[])
   .option("--no-log", "do not append this ask to the log")
   .action(async (jevelName: string | undefined, opts: { state: string; questions?: string; model?: string; jevels: string[]; log: boolean }) => {
