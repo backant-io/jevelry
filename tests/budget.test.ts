@@ -38,6 +38,15 @@ describe("checkBudgets", () => {
     expect(breach?.ceiling).toBe(MODEL_STATE_PLUS_QUESTION_TOKENS);
     expect(breach?.estimate).toBeGreaterThan(MODEL_STATE_PLUS_QUESTION_TOKENS);
   });
+  it("keeps the order when one request breaches every ceiling at once", () => {
+    const state = "x".repeat(40_000 * 3);
+    const huge = { a: { type: "noul", instructions: "y".repeat(30_000 * 3) } };
+    expect(checkBudgets(state, huge, 1000)).toEqual({ limit: "jevel", estimate: 40_000, ceiling: 1000 });
+    const breach = checkBudgets(state, huge);
+    expect(breach?.limit).toBe("state_plus_question");
+    expect(breach?.ceiling).toBe(MODEL_STATE_PLUS_QUESTION_TOKENS);
+    expect(breach?.estimate).toBeGreaterThan(MODEL_TOTAL_TOKENS);
+  });
   it("names total when the state fits but the sum of questions does not", () => {
     const state = "x".repeat(20_000 * 3);
     const many: Record<string, unknown> = {};
