@@ -22,7 +22,7 @@ questions:
       expected_result: "What should happen once the work is done is left out."
       acceptance: "How anybody tells the work is finished is left out."
       scope: "How far the work reaches, which systems or cases it covers, is left out."
-      nothing: "`issue` carries all four pieces, so somebody can start on it as it stands."
+      nothing: "`issue` carries all four pieces, so somebody can start on it as it stands, or `issue` says too little to name one missing piece."
     verdict: { act: 0.8, mark: 0.6 }
 ---
 # issue-readiness

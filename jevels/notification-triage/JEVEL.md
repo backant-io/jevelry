@@ -20,7 +20,7 @@ questions:
       act_now: "Something in the batch needs an answer or a fix within the hour."
       batch_for_later: "The batch is worth reading at the next break and every item in it can wait that long."
       ignore: "Automated noise, duplicates, or messages that were already handled elsewhere."
-      unclear: "The batch mixes both kinds, or the notifications say too little to place them."
+      unclear: "The batch holds one notification that needs an answer within the hour and another that can wait, or the notifications say too little to place them."
     verdict: { act: 0.8, mark: 0.6 }
   depth:
     type: score

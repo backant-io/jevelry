@@ -14,7 +14,7 @@ questions:
       team_lead: "It needs a decision about priorities, people or money that the team cannot make alone."
       on_call: "Something is broken or getting worse right now and needs hands on it."
       security: "It touches credentials, customer data, access rights or a suspected attack."
-      nobody: "It is informational, already handled, or answered by what `context` says."
+      nobody: "It is informational, already handled, or answered by what `context` says, or `request` names nothing for anybody to do."
     verdict: { act: 0.8, mark: 0.6 }
   urgent:
     type: noul

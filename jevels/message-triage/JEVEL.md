@@ -29,7 +29,7 @@ questions:
     instructions: "Is the sender of `message` a customer or somebody writing on a customer's behalf?"
     criteria:
       true: "The sender buys or uses the product, or writes for somebody who does."
-      false: "The sender is a colleague, a vendor, a service account, or somebody with an account nowhere in your product."
+      false: "The sender is a colleague, a vendor, a service account, or somebody who has no account with you."
     verdict: { act: 0.85, mark: 0.7 }
 ---
 # message-triage

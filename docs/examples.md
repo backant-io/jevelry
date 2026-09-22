@@ -1,6 +1,6 @@
 # Examples
 
-The README shows you the part of an answer your code reads. This page shows you the whole document and the commands around it, on the two jevels that ship with the package, with the numbers from our live run.
+The README shows you the part of an answer your code reads. This page shows you the whole document and the commands around it, on two of the jevels that ship with the package, with the numbers from our live run.
 
 ## The whole document
 
