@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/backant-io/jevlery/docs/protocol/ask.schema.json",
+  "title": "jevlery ask stdout document, protocol 1",
+  "oneOf": [{ "$ref": "#/definitions/answers" }, { "$ref": "#/definitions/error" }],
+  "definitions": {
+    "verdict": { "enum": ["act", "mark", "fall_back"] },
+    "probabilities": { "type": "object", "additionalProperties": { "type": "number" } },
+    "noul": {
+      "type": "object",
+      "required": ["type", "noul", "yes", "certainty", "verdict"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "noul" },
+        "noul": { "type": "number", "minimum": 0, "maximum": 1 },
+        "yes": { "type": "boolean" },
+        "certainty": { "type": "number", "minimum": 0, "maximum": 1 },
+        "verdict": { "$ref": "#/definitions/verdict" }
+      }
+    },
+    "choice": {
+      "type": "object",
+      "required": ["type", "choice", "probabilities", "confidence", "certainty", "verdict"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "choice" },
+        "choice": { "type": "string" },
+        "probabilities": { "$ref": "#/definitions/probabilities" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "certainty": { "type": "number", "minimum": 0, "maximum": 1 },
+        "verdict": { "$ref": "#/definitions/verdict" }
+      }
+    },
+    "score": {
+      "type": "object",
+      "required": ["type", "score", "legend", "probabilities", "confidence", "certainty", "verdict"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "score" },
+        "score": { "type": "number" },
+        "legend": { "type": "object" },
+        "probabilities": { "$ref": "#/definitions/probabilities" },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "certainty": { "type": "number", "minimum": 0, "maximum": 1 },
+        "verdict": { "$ref": "#/definitions/verdict" }
+      }
+    },
+    "answers": {
+      "type": "object",
+      "required": ["protocol", "log_id", "jevel", "model", "state_hash", "answers", "usage"],
+      "additionalProperties": false,
+      "properties": {
+        "protocol": { "const": 1 },
+        "log_id": { "type": ["string", "null"] },
+        "jevel": {
+          "type": ["object", "null"],
+          "required": ["name", "version"],
+          "additionalProperties": false,
+          "properties": { "name": { "type": "string" }, "version": { "type": "integer" } }
+        },
+        "model": { "type": "string" },
+        "state_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+        "answers": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [{ "$ref": "#/definitions/noul" }, { "$ref": "#/definitions/choice" }, { "$ref": "#/definitions/score" }]
+          }
+        },
+        "usage": {
+          "type": "object",
+          "required": ["input_tokens", "output_tokens"],
+          "additionalProperties": false,
+          "properties": { "input_tokens": { "type": "integer" }, "output_tokens": { "type": "integer" } }
+        }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["protocol", "error"],
+      "additionalProperties": false,
+      "properties": {
+        "protocol": { "const": 1 },
+        "error": {
+          "type": "object",
+          "required": ["exit", "code", "message"],
+          "additionalProperties": false,
+          "properties": {
+            "exit": { "enum": [2, 3, 4, 5, 6, 7] },
+            "code": { "enum": ["bad_input", "rate_limited", "overloaded", "auth", "over_budget", "transport", "unreadable_answer"] },
+            "message": { "type": "string" },
+            "retry_after_ms": { "type": "integer", "minimum": 0 },
+            "field": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

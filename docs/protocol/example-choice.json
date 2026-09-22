@@ -1,0 +1,25 @@
+{
+  "protocol": 1,
+  "log_id": null,
+  "jevel": null,
+  "model": "jev-1.13.0",
+  "state_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "answers": {
+    "department": {
+      "type": "choice",
+      "choice": "billing",
+      "probabilities": {
+        "billing": 0.88,
+        "technical": 0.12,
+        "sales": 0
+      },
+      "confidence": 0.81,
+      "certainty": 0.81,
+      "verdict": "mark"
+    }
+  },
+  "usage": {
+    "input_tokens": 318,
+    "output_tokens": 34
+  }
+}
