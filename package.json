@@ -1,6 +1,6 @@
 {
   "name": "jevelry",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A runtime for Jev, TypeSafe's System One model: jevels in, verdicts out",
   "type": "module",
   "bin": {
