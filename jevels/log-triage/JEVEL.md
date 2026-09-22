@@ -52,17 +52,18 @@ questions:
     type: noul
     instructions:
       question: "Do the lines in `lines` call for somebody to look at them today?"
-      inspect: "every line in `lines`, and the last lines of the burst in particular"
-      focus: "What decides this is whether work is still failing where the burst ends, or whether the lines get worse as they go."
+      inspect: "every line in `lines`, following each request or job that failed to the end of the burst"
+      focus: "What decides this is whether the work that failed is still failing where the burst ends, or whether the lines get worse as they go. A success on other work, such as another profile or another endpoint, leaves the failing work failing."
     criteria:
       true:
-        what: "Requests, jobs or data are still failing in the last lines of the burst, or the lines report a condition that grows worse line by line"
+        what: "A request, job or piece of data that failed in the burst has no success after its failures, or the lines report a condition that grows worse line by line"
         examples:
           - "the last lines are still rejecting requests with a 400"
           - "each line reports more dropped jobs than the line before it"
           - "the burst ends with the process exiting"
+          - "a 400 for one profile, then a 200 for another profile, and no 200 for the profile that failed"
       false:
-        what: "The lines are routine, or a failure in them has recovered by the last line"
+        what: "The lines are routine, or the same request or job that failed succeeds by the last line"
         examples:
           - "retry succeeded, and the lines after it are 200s"
           - "INFO lines about a job that finished"
@@ -108,4 +109,4 @@ On a burst of log lines your monitoring collected, to tell an outage from a misc
 
 ## Example
 
-The example state holds five lines from `image-resizer` about a profile file that is missing, the requests it rejects, and one request for another profile that goes through. It answers `kind` = `misconfiguration`, `needs_a_person` yes and `severity` at level 1.
+The example state holds five lines from `image-resizer` about a profile file that is missing, the requests it rejects, and one request for another profile that goes through. It answers `kind` = `misconfiguration` and `severity` at level 1 at `act`, and `needs_a_person` yes at `mark`, because the burst ends on a success for another profile.
