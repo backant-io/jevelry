@@ -5,7 +5,7 @@ import * as lib from "../src/index.js";
 describe("shipped jevels", () => {
   it("every jevel under ./jevels loads with no warnings", () => {
     const shipped = lib.listJevels([join(process.cwd(), "jevels")]);
-    expect(shipped.map((j) => j.name)).toEqual(["return-kind", "wake-gate"]);
+    expect(shipped.map((j) => j.name)).toEqual(["duplicate-issue", "ticket-triage"]);
     for (const { name } of shipped) {
       const { warnings } = lib.loadJevel(name, [join(process.cwd(), "jevels")]);
       expect(warnings, name).toEqual([]);
