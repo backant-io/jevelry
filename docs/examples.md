@@ -174,7 +174,7 @@ When you find out whether the ticket above was really urgent, you record it agai
     npx jevelry report --jevel ticket-triage
 
     jevel          question     asks  act  mark  fall_back  outcomes  agree(act)  agree(mark)  certainty
-    ticket-triage  frustration  1     0    1     0          0         -           -            0.59
+    ticket-triage  frustration  1     0    1     0          0         -           -            0.64
     ticket-triage  team         1     1    0     0          0         -           -            1.00
     ticket-triage  urgent       1     1    0     0          1         100%        -            0.98
 

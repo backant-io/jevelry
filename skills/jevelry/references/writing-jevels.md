@@ -157,8 +157,8 @@ To ask every case in this repository against the real API, with the key read fro
 In your own project you ask each case the way the suite does and read the answers next to `expect`:
 
     jq -c '.[]' jevels/<name>/cases.json | while read -r c; do
-      echo "$c" | jq -r .name
-      npx jevelry ask <name> --state "$(echo "$c" | jq -c .state)" | jq -c '.answers | map_values({choice, yes, score, verdict})'
+      printf '%s\n' "$c" | jq -r .name
+      npx jevelry ask <name> --state "$(printf '%s\n' "$c" | jq -c .state)" | jq -c '.answers | map_values({choice, yes, score, verdict})'
     done
 
 A clear case that Jev gets wrong, or gets right at `fall_back`, means the criteria or the state are wrong, and you rewrite them. Rewriting the question usually beats lowering the threshold. You move an expectation only when the expectation itself was the mistake, and you say so in the commit.
