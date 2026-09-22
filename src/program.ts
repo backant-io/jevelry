@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { type Questions, TypeSafeClient } from "@typesafe-ai/sdk";
 import { Command } from "commander";
 import { ask, errorBody } from "./ask.js";
-import { installSkill, promptForKey, whereToPutTheKey } from "./install.js";
+import { installSkill, knownAgents, promptForKey, unknownAgents, whereToPutTheKey } from "./install.js";
 import { JevelError, discoveryDirs, listJevels, loadJevel } from "./jevel.js";
 import { resolveKey, storeKey } from "./key.js";
 import { appendLine, findAsk, jevelryHome, outcomeOf, readLog } from "./log.js";
@@ -33,7 +33,13 @@ function dirs(cli: string[] | undefined): string[] {
  * live under the person's home directory, not under `$JEVELRY_HOME`, which only holds the log.
  */
 function installed(project: boolean, agents: string[] | undefined): void {
-  for (const result of installSkill({ home: homedir(), cwd: process.cwd(), project, agents: agents ?? ["all"] })) {
+  const requested = agents ?? ["all"];
+  const unknown = unknownAgents(requested);
+  for (const name of unknown) say(`unknown agent ${name}; known: ${knownAgents().join(", ")}`);
+  // Every name a typo: nothing was installed and nothing would have been. That is the host's
+  // defect (exit 2), never the silent success a loop over an empty list used to report.
+  if (unknown.length === requested.length) process.exit(2);
+  for (const result of installSkill({ home: homedir(), cwd: process.cwd(), project, agents: requested })) {
     say(result.installed ? `installed the skill for ${result.agent} at ${result.dir}` : `no ${result.agent} directory found, skipped`);
   }
 }
@@ -258,7 +264,7 @@ export function buildProgram(): Command {
         say("a TypeSafe key is already available");
         return;
       }
-      const value = await promptForKey();
+      const value = await promptForKey(home());
       if (value === undefined) {
         say(whereToPutTheKey(home()));
         return;

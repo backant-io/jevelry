@@ -14,6 +14,9 @@ describe("resolveKey", () => {
     const dir = home();
     storeKey("from-the-file", FILE_STORE, dir);
     expect(resolveKey({ ...FILE_STORE, TYPESAFE_API_KEY: "from-the-env" }, dir)).toBe("from-the-env");
+    // Trimmed like the keychain and the file are: `export TYPESAFE_API_KEY="$(cat key.txt)"` keeps
+    // the newline, and the API refuses a key with one for a reason nobody can see in the output.
+    expect(resolveKey({ ...FILE_STORE, TYPESAFE_API_KEY: "  from-the-env\n" }, dir)).toBe("from-the-env");
     // A blank variable is a host that exported nothing, not a host that means "no key".
     expect(resolveKey({ ...FILE_STORE, TYPESAFE_API_KEY: "   " }, dir)).toBe("from-the-file");
   });

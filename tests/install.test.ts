@@ -2,8 +2,9 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
-import { installSkill } from "../src/install.js";
+import type { Interface } from "node:readline";
+import { describe, expect, it, vi } from "vitest";
+import { installSkill, promptForKey } from "../src/install.js";
 
 const PACKAGE_SKILL = join(process.cwd(), "skills", "jevelry");
 const read = (...parts: string[]) => readFileSync(join(...parts), "utf8");
@@ -89,5 +90,50 @@ describe("jevelry install", () => {
     expect(r.status).toBe(0);
     expect(r.stderr).toContain(`jevelry: no key stored; put it in TYPESAFE_API_KEY, your keychain (service typesafe-api-key, account jevelry) or ${join(home, "env")}`);
     expect(existsSync(join(home, "env"))).toBe(false);
+  });
+
+  it("refuses a name no agent answers to instead of exiting 0 having done nothing", () => {
+    const home = homeWithAgents();
+    const r = run(["install-skill", "--agent", "nosuchagent"], { HOME: home, JEVELRY_HOME: home });
+    // A typo used to filter the list down to nothing and report success, which reads as installed.
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("jevelry: unknown agent nosuchagent; known: claude-code, codex, cursor, opencode, pi, agents");
+    expect(existsSync(join(home, ".codex", "skills", "jevelry"))).toBe(false);
+  });
+
+  it("installs the agents it knows and still names the one it does not", () => {
+    const home = homeWithAgents();
+    const r = run(["install-skill", "--agent", "codex", "nosuchagent"], { HOME: home, JEVELRY_HOME: home });
+    expect(r.status).toBe(0);
+    expect(r.stderr).toContain("jevelry: unknown agent nosuchagent; known: claude-code, codex, cursor, opencode, pi, agents");
+    expect(r.stderr).toContain(`jevelry: installed the skill for codex at ${join(home, ".codex", "skills", "jevelry")}`);
+    expect(existsSync(join(home, ".codex", "skills", "jevelry", "SKILL.md"))).toBe(true);
+  });
+});
+
+describe("promptForKey", () => {
+  it("reads nothing when readline cannot hide what is typed", async () => {
+    const stdin = process.stdin as NodeJS.ReadStream;
+    const wasTTY = stdin.isTTY;
+    const stderr: string[] = [];
+    const wrote = vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => {
+      stderr.push(String(chunk));
+      return true;
+    });
+    let closed = false;
+    let asked = false;
+    // An interface without `_writeToOutput`: the private hook the echo is muted through is not
+    // readline's promise to anybody, and echoing the key is worse than not reading it.
+    const bare = { close: () => { closed = true; }, on: () => bare, question: () => { asked = true; } } as unknown as Interface;
+    try {
+      stdin.isTTY = true;
+      await expect(promptForKey("/tmp/jevelry-home", () => bare)).resolves.toBeUndefined();
+    } finally {
+      stdin.isTTY = wasTTY;
+      wrote.mockRestore();
+    }
+    expect(asked, "stdin must never be read without the echo muted").toBe(false);
+    expect(closed).toBe(true);
+    expect(stderr.join("")).toBe("jevelry: hidden input is unavailable on this Node version; put the key in TYPESAFE_API_KEY, your keychain (service typesafe-api-key, account jevelry) or /tmp/jevelry-home/env\n");
   });
 });

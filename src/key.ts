@@ -25,8 +25,10 @@ function keyFile(home: string): string {
  * other machine's store. Nothing here is logged: the value is the one secret this runtime holds.
  */
 export function resolveKey(env: NodeJS.ProcessEnv, home: string): string | undefined {
-  const fromEnv = env[KEY_VARIABLE];
-  if (fromEnv !== undefined && fromEnv.trim() !== "") return fromEnv;
+  // Trimmed like the keychain and the file are: a key exported with a stray newline is the same
+  // key, and a variable holding only blanks is a host that exported nothing.
+  const fromEnv = env[KEY_VARIABLE]?.trim();
+  if (fromEnv !== undefined && fromEnv !== "") return fromEnv;
   if (useKeychain(env)) {
     const found = spawnSync("security", ["find-generic-password", "-s", KEY_SERVICE, "-a", KEY_ACCOUNT, "-w"], { encoding: "utf8", timeout: 3000 });
     const value = found.status === 0 ? (found.stdout ?? "").trim() : "";
