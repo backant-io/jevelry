@@ -13,7 +13,7 @@
     "lint": "tsc --noEmit",
     "prepublishOnly": "npm run lint && npm run build"
   },
-  "files": ["dist", "bin", "jevels", "docs/protocol", "docs/assets", "LICENSE", "README.md"],
+  "files": ["dist", "bin", "jevels", "skills", "docs/protocol", "docs/assets", "LICENSE", "README.md"],
   "repository": { "type": "git", "url": "git+https://github.com/backant-io/jevelry.git" },
   "homepage": "https://backant.io",
   "bugs": { "url": "https://github.com/backant-io/jevelry/issues" },

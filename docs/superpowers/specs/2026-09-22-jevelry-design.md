@@ -316,7 +316,8 @@ jevelry/
   docs/protocol/              ask.schema.json and the three pinned examples
   docs/superpowers/specs/     this document and its successors
   jevels/                     example jevels shipped with the package (used by the tests)
-  package.json                type: module; bin; engines node >= 20; files: dist, bin, jevels, docs/protocol, LICENSE
+  skills/jevelry/             SKILL.md and references/ for coding agents, installed by `jevelry install`
+  package.json                type: module; bin; engines node >= 20; files: dist, bin, jevels, skills, docs/protocol, LICENSE
   tsup.config.ts              entry src/cli.ts and src/index.ts; esm; node20; dts
   vitest.config.ts
 ```
