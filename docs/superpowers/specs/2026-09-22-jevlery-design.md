@@ -255,7 +255,10 @@ On any non-zero exit stdout carries one document instead, so a host reads one pl
 
 `code` is one of `bad_input` (2), `rate_limited` and `overloaded` (3), `auth` (4),
 `over_budget` (5), `transport` (6), `unreadable_answer` (7). `retry_after_ms` is present only
-when the server gave a delay; `field` is present for `bad_input` and `unreadable_answer`.
+when the server gave a delay. `field` is present when the runtime itself knows the field at fault
+(a defect in the jevel, a defect in the state, an answer it cannot read) and absent when the
+refusal came from the API or the SDK, which name the fault in `message` instead: so a `bad_input`
+from a 400 or a 422 carries no `field`, and a host reads `field` as optional on every code.
 
 - The document is written under `docs/protocol/` as a JSON Schema and three example documents
   (one per question type), plus one error example. A test asserts the examples validate and that a recorded API response
@@ -342,12 +345,13 @@ Scripts: `build` (tsup), `test` (vitest run, after build), `lint` (tsc --noEmit)
 - `npm test` never reaches the real API. There is no fake mode in the product; the seam is the
   SDK's own `fetch` option and the base URL.
 - Live: `npm run test:live` is the one suite that reaches TypeSafe, on demand, with
-  `TYPESAFE_API_KEY` in the environment (read from the owner's keychain inside the command, never
-  printed). It lists the models, asks the reference noul and the shipped `wake-gate` jevel,
-  validates the documents against the schema, asserts bounds rather than exact probabilities (an
-  alias moves), and checks the log never holds the key. Without a key it skips itself with one
-  stderr sentence. It is the acceptance run, and the answer to "the recorded bodies are claims
-  about the API, not the API".
+  `TYPESAFE_API_KEY` in the environment. The operator's own command line supplies it, from a
+  keychain for example; the suite reads only the environment variable, holds no credential store of
+  its own, and never prints the key. It lists the models, asks the reference noul and the shipped
+  `wake-gate` jevel, validates the documents against the schema, asserts bounds rather than exact
+  probabilities (an alias moves), and checks the log never holds the key. Without a key it skips
+  itself with one stderr sentence. It is the acceptance run, and the answer to "the recorded bodies
+  are claims about the API, not the API".
 
 ## 13. Non-goals
 

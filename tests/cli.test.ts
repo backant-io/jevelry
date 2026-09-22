@@ -78,6 +78,10 @@ describe("ask", () => {
     expect(r.status).toBe(0);
     const doc = JSON.parse(r.stdout) as { log_id: string; answers: Record<string, { verdict: string }> };
     expect(validate(doc)).toBe(true);
+    // The bytes, not only the schema: `out()` is a second stringify site, and section 3.8 lets a
+    // host pin an example document byte for byte, so two spaces and one trailing newline are the
+    // contract and a bare `JSON.stringify` here would be a silent protocol change.
+    expect(r.stdout).toBe(`${JSON.stringify(doc, null, 2)}\n`);
     expect(doc.log_id).toMatch(/^[0-9a-f-]{36}$/);
     expect(doc.answers.worth_a_turn?.verdict).toBe("act");
     const log = readFileSync(join(home, ".jevlery", "log.jsonl"), "utf8").trim().split("\n");
