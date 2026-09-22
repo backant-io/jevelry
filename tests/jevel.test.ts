@@ -81,6 +81,17 @@ describe("parseJevel", () => {
     );
     expect(warnings.some((w) => w.includes("questions.q.criteria.true") && w.includes("negation"))).toBe(true);
   });
+  it("warns on a structured noul whose true.what reads as a negation", () => {
+    const noul = (what: string) =>
+      parseJevel(
+        minimal(
+          `name: t\nversion: 1\nmodel: jev-1.13.0\nquestions:\n  q: { type: noul, instructions: "Is it?", criteria: { true: { what: "${what}", examples: [] }, false: { what: "Urgent", examples: [] } } }`,
+        ),
+        "t",
+      ).warnings;
+    expect(noul("Not urgent").some((w) => w.includes("questions.q.criteria.true.what") && w.includes("negation"))).toBe(true);
+    expect(noul("The customer asks for an answer today").some((w) => w.includes("negation"))).toBe(false);
+  });
   it("warns on a double negative in instructions", () => {
     const { warnings } = parseJevel(
       minimal(`name: t\nversion: 1\nmodel: jev-1.13.0\nquestions:\n  q: { type: noul, instructions: "Is it not true that no refund was asked?" }`),

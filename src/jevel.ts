@@ -156,8 +156,15 @@ function fieldsOf(entry: unknown): string | null {
 function warningsOf(jevel: Jevel): string[] {
   const warnings: string[] = [];
   for (const [id, q] of Object.entries(jevel.questions)) {
-    if (q.type === "noul" && isRecord(q.criteria) && typeof q.criteria.true === "string" && NEGATION_FIRST_WORD.test(q.criteria.true)) {
-      warnings.push(`questions.${id}.criteria.true reads as a negation; a noul answers best when true means yes`);
+    // A structured noul puts the yes side in `true.what`, so reading only the string form would
+    // leave this warning dead on every jevel written the way Jev reads best.
+    if (q.type === "noul" && isRecord(q.criteria)) {
+      const side = q.criteria.true;
+      const yes = isRecord(side) ? side.what : side;
+      if (typeof yes === "string" && NEGATION_FIRST_WORD.test(yes)) {
+        const at = isRecord(side) ? "criteria.true.what" : "criteria.true";
+        warnings.push(`questions.${id}.${at} reads as a negation; a noul answers best when true means yes`);
+      }
     }
     // One structured entry among the others means Jev compares a labelled entry with an unlabelled
     // one, and a field one entry carries alone reads as a property only that entry can have.
