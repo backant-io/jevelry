@@ -15,11 +15,42 @@
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT">
 </p>
 
-You were probably asking a chat model to "return JSON" so your code could decide something: is this ticket urgent, which team gets it, is this bug report a duplicate of one you already have. Then you parse the text, the parse breaks on a Tuesday, you add a retry, and you still have no idea how sure the model actually was.
+Your code and your coding agent probably make the same small calls over and over again: is this ticket urgent, which team gets it, is this bug report a duplicate of one you already have, is this test failing because of the code or because of the machine it ran on. Today each of those is a prompt that returns text you have to parse, and you have no idea how sure the model was when it answered.
 
-You don't have to do that anymore. We have built jevelry, a runtime for Jev, the decision model from TypeSafe. You hand it your state and a jevel, and it hands your code a verdict with the probability and the confidence behind it, so you can branch on it the way you would on any other value.
+You don't have to do that anymore. We have built jevelry, and it asks Jev, the decision model from TypeSafe, each of those questions with one command. The questions live in a small file called a jevel, and sixteen of them come with the package ready to use. Jev also tells you how sure it is, a number from 0 to 1 called the confidence, and the jevel turns that into one of three answers your code can act on:
 
-Think of Jev as a colleague you ask one quick question and who answers with a number, and the jevels are the questions you keep ready for it.
+| Answer | What it means | What you do |
+|---|---|---|
+| `act` | Jev is sure | go ahead |
+| `mark` | Jev is fairly sure | go ahead and flag it so somebody takes a look |
+| `fall_back` | Jev is unsure | do what you did before jevelry |
+
+A ticket triage sends about 1,280 input tokens and TypeSafe charges $0.042 per million, so one ticket costs about $0.00005 and a dollar covers around 18,000 of them.
+
+## Where it helps
+
+### In your app
+
+A support ticket comes in and somebody has to decide which team gets it and whether it goes to the top of the queue. Your code writes the ticket to a file and asks:
+
+    npx jevelry ask ticket-triage --state @ticket.json
+
+On `act` your code routes the ticket to the team Jev picked, on `mark` it routes it and flags it for whoever owns the queue, and on `fall_back` it leaves the ticket for a person, the same way it did before.
+
+### In your agent
+
+Your coding agent runs the tests and one of them fails with `connect EPERM`, because the sandbox blocked the network call. Usually the agent guesses, and it probably starts rewriting code that was fine. With the jevelry skill installed it puts the failing output in a file and asks first:
+
+    npx jevelry ask review-comment-kind --state @failure.json
+
+If Jev answers `environment` with `act`, the agent reports the sandbox problem and leaves your code alone, if it answers `defect` the agent fixes the code, and on `fall_back` it reads the failing output more closely itself before it touches anything. For a burst of log lines from a service it does the same with `log-triage`.
+
+### Trusting it
+
+Every jevel ships with a `cases.json`, a few realistic states with the answer a person would give, and our live tests ask every one of them against the real API. The clear cases land on the right answer and the unclear ones, the kind a colleague would ask you a question back about, stay below `act`. Once it runs in your code, you tell jevelry what turned out to be true and the report shows you how often `act` was right for each question:
+
+    npx jevelry outcome <log_id> urgent yes
+    npx jevelry report --jevel ticket-triage
 
 ## What is underneath
 
@@ -35,7 +66,7 @@ jevelry is everything around that call: it loads your jevel, checks the state be
 
 ## Free
 
-jevelry is free and MIT. TypeSafe charges per input token, 0.042 dollars per million, and output tokens are free. The `ticket-triage` example, three questions about one support ticket, costs 1,280 input tokens, which is about $0.00005.
+jevelry is free and MIT. TypeSafe charges per input token, 0.042 dollars per million, and output tokens are free. The `ticket-triage` example, three questions about one support ticket, costs 1,280 input tokens.
 
 ## Start simple
 
@@ -178,7 +209,7 @@ Currently jevelry asks Jev questions and hands you the answers, and that is the 
 
 ## How do we know you can trust it
 
-128 tests run offline against recorded answers from TypeSafe's API reference. 5 tests run against the real API on demand with `npm run test:live`, and the last run answered with `jev-1.13.0` in 3.49 seconds for four calls. One of those tests reads the log afterwards and checks that your key stays out of it.
+170 tests run offline against recorded answers from TypeSafe's API reference and against the sixteen jevels and their cases. 89 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, and five more cover the API itself. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## Use it from code
 
