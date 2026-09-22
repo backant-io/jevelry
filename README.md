@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT">
 </p>
 
-You were probably asking a chat model to "return JSON" so your code could decide something: is this ticket urgent, which team gets it, is this return from the reviewer a real defect or just a formality. Then you parse the text, the parse breaks on a Tuesday, you add a retry, and you still have no idea how sure the model actually was.
+You were probably asking a chat model to "return JSON" so your code could decide something: is this ticket urgent, which team gets it, is this bug report a duplicate of one you already have. Then you parse the text, the parse breaks on a Tuesday, you add a retry, and you still have no idea how sure the model actually was.
 
 You don't have to do that anymore. We have built jevelry, a runtime for Jev, the decision model from TypeSafe. You hand it your state and a jevel, and it hands your code a verdict with the probability and the confidence behind it, so you can branch on it the way you would on any other value.
 
@@ -23,7 +23,7 @@ Think of Jev as a colleague you ask one quick question and who answers with a nu
 
 ## What is underneath
 
-Jev takes a state (a support ticket, a work report, the events that woke an employee) and typed questions, and it answers each one with a calibrated probability. There are three kinds of questions:
+Jev takes a state (a support ticket, a bug report, the form somebody just filled in) and typed questions, and it answers each one with a calibrated probability. There are three kinds of questions:
 
 | Question | You ask | You get back |
 |---|---|---|
@@ -39,26 +39,65 @@ jevelry is free and MIT. TypeSafe charges per input token, 0.042 dollars per mil
 
 ## Start simple
 
-Put your key in the environment and ask the jevel that ships with the package:
+Put your key in the environment and ask one of the two jevels that ship with the package:
 
     export TYPESAFE_API_KEY=...
-    npx jevelry ask wake-gate --state @state.json
+    npx jevelry ask ticket-triage --state @ticket.json
 
 You get one document back on stdout:
 
     {
       "protocol": 1,
-      "log_id": "505bc2df-dccd-4a2a-8986-2d54a2d3144f",
-      "jevel": { "name": "wake-gate", "version": 1 },
-      "model": "jev-1.13.0",
-      "state_hash": "sha256:a8df89ae899f477781a85436008114de390469a3c434d722c209942d032e9d87",
-      "answers": {
-        "worth_a_turn": { "type": "noul", "noul": 0.19, "yes": false, "certainty": 0.81, "verdict": "mark" },
-        "depth": { "type": "score", "score": 0.43, "legend": { "0": "routine: a known verb on a known object", "1": "judgment: a choice between reasonable options", "2": "hard: the answer depends on reading and weighing several records" }, "probabilities": { "0": 0.65, "1": 0.26, "2": 0.09 }, "confidence": 0.36, "certainty": 0.36, "verdict": "fall_back" },
-        "same_as[0]": { "type": "noul", "noul": 0.88, "yes": true, "certainty": 0.88, "verdict": "act" },
-        "same_as[1]": { "type": "noul", "noul": 0.17, "yes": false, "certainty": 0.83, "verdict": "mark" }
+      "log_id": "becfc166-7921-4fe3-a189-4c2c5b164bce",
+      "jevel": {
+        "name": "ticket-triage",
+        "version": 1
       },
-      "usage": { "input_tokens": 615, "output_tokens": 77 }
+      "model": "jev-1.13.0",
+      "state_hash": "sha256:b883d3e23a85340c82fbc76833692e80c5e08f898de8d1d059849d5e29ad418b",
+      "answers": {
+        "team": {
+          "type": "choice",
+          "choice": "billing",
+          "probabilities": {
+            "account": 0,
+            "technical": 0,
+            "billing": 1,
+            "other": 0
+          },
+          "confidence": 1,
+          "certainty": 1,
+          "verdict": "act"
+        },
+        "urgent": {
+          "type": "noul",
+          "noul": 0.98,
+          "yes": true,
+          "certainty": 0.98,
+          "verdict": "act"
+        },
+        "frustration": {
+          "type": "score",
+          "score": 0.73,
+          "legend": {
+            "0": "calm: neutral or friendly wording",
+            "1": "frustrated: annoyed, repeats the problem, mentions earlier attempts",
+            "2": "very angry: threatens to leave, insults, or writes in capitals"
+          },
+          "probabilities": {
+            "0": 0.27,
+            "1": 0.73,
+            "2": 0
+          },
+          "confidence": 0.59,
+          "certainty": 0.59,
+          "verdict": "mark"
+        }
+      },
+      "usage": {
+        "input_tokens": 588,
+        "output_tokens": 77
+      }
     }
 
 This is the answer from our live test. Your code reads `verdict` and decides what to do, and the probabilities are in the document if you want to apply your own rule.
@@ -69,31 +108,31 @@ A jevel is a folder with one `JEVEL.md` in it, the same way a skill for your cod
 
 ```yaml
 ---
-name: return-kind
+name: ticket-triage
 version: 1
 model: jev-1.13.0
 state:
-  required: [return]
+  required: [ticket]
 questions:
-  kind:
+  team:
     type: choice
-    instructions: "What does `return.reason` say is wrong with the work?"
+    instructions: "Which team should handle `ticket`?"
     criteria:
-      defect_in_work: "Something is wrong in the work itself."
-      procedural: "Only a rule of the process was broken."
-      environment: "Only the machine or the provider failed."
-      unclear: "The reason does not say."
+      billing: "Payments, invoices, refunds, subscription changes."
+      technical: "Bugs, outages, error messages, integrations, data that looks wrong."
+      account: "Login, password, permissions, closing or changing an account."
+      other: "Anything the three teams above do not cover, or a message with no request in it."
     verdict: { act: 0.8, mark: 0.6 }
 ---
 ```
 
 Adding a use case is adding a folder. jevelry finds jevels in `--jevels <dir>`, then `JEVELRY_JEVELS`, then `./jevels`, then `~/.jevelry/jevels`, and it checks them before you spend a token:
 
-    npx jevelry check return-kind
+    npx jevelry check ticket-triage
     npx jevelry list
-    npx jevelry show return-kind
+    npx jevelry show ticket-triage
 
-`check` refuses a jevel the API would refuse anyway (more than 255 options, a threshold outside 0 to 1, a question without instructions) and warns you about the cases Jev handles poorly: a yes/no question whose "yes" means no, a double negative, a model that is not pinned. Two jevels ship with the package, `wake-gate` and `return-kind`, so you have something to copy.
+`check` refuses a jevel the API would refuse anyway (more than 255 options, a threshold outside 0 to 1, a question without instructions) and warns you about the cases Jev handles poorly: a yes/no question whose "yes" means no, a double negative, a model that is not pinned. Two jevels ship with the package, `ticket-triage` for a support queue and `duplicate-issue` for a bug tracker, so you have something to copy.
 
 ## Verdicts
 
@@ -111,13 +150,13 @@ The thresholds live in the jevel, per question, so a question that skips an expe
 
 Every ask is appended to `~/.jevelry/log.jsonl` with its answers, its verdicts and a hash of the state. When you later know what was actually true, you tell jevelry, and it tells you how often each question was right:
 
-    npx jevelry outcome 505bc2df-dccd-4a2a-8986-2d54a2d3144f worth_a_turn no
-    npx jevelry report --jevel wake-gate
+    npx jevelry outcome becfc166-7921-4fe3-a189-4c2c5b164bce urgent yes
+    npx jevelry report --jevel ticket-triage
 
-    jevel      question      asks  act  mark  fall_back  outcomes  agree(act)  agree(mark)  certainty
-    wake-gate  depth         1     0    0     1          0         -           -            0.36
-    wake-gate  same_as       2     1    1     0          0         -           -            0.86
-    wake-gate  worth_a_turn  1     0    1     0          1         -           100%         0.81
+    jevel          question     asks  act  mark  fall_back  outcomes  agree(act)  agree(mark)  certainty
+    ticket-triage  frustration  1     0    1     0          0         -           -            0.59
+    ticket-triage  team         1     1    0     0          0         -           -            1.00
+    ticket-triage  urgent       1     1    0     0          1         100%        -            0.98
 
 After a few hundred asks that table shows you which thresholds to move and which question to rewrite. For a question that repeats over a list, the answer key carries the index, so you write `same_as[0]`.
 
@@ -140,7 +179,7 @@ Currently jevelry asks Jev questions and hands you the answers, and that is the 
 
 ## How do we know you can trust it
 
-111 tests run offline against recorded answers from TypeSafe's API reference. 4 tests run against the real API on demand with `npm run test:live`, and the last run answered with `jev-1.13.0` in 2.49 seconds for three calls. One of those tests reads the log afterwards and checks that your key stays out of it.
+111 tests run offline against recorded answers from TypeSafe's API reference. 4 tests run against the real API on demand with `npm run test:live`, and the last run answered with `jev-1.13.0` in 3.49 seconds for four calls. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## Use it from code
 
@@ -165,7 +204,7 @@ import { ask, loadJevel, discoveryDirs } from "jevelry";
 
     npm install -g jevelry
     export TYPESAFE_API_KEY=...
-    jevelry check wake-gate
-    jevelry ask wake-gate --state @state.json
+    jevelry check ticket-triage
+    jevelry ask ticket-triage --state @ticket.json
 
 Get a key and read about Jev at https://docs.typesafe.ai.
