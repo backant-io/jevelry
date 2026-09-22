@@ -21,7 +21,7 @@ questions:
     criteria:
       true: "It names the file, the test, the clause or the behaviour to change."
       false: "It says only that the work was returned, or repeats a verdict without a location."
-    verdict: { act: 0.85 }
+    verdict: { act: 0.85, mark: 0.7 }
 ---
 # return-kind
 
@@ -36,7 +36,7 @@ On every `task.returned` event, to read the reason as a kind the office can coun
 ## Verdicts
 
 `kind` with `act`: count the return under that kind. `mark`: count it and flag it for a manager's eye. `fall_back`: count it as `unclear`.
-`actionable` no with `act`: the reviewer's return is a bounce, not a finding.
+`actionable` no with `act`: the reviewer's return is a bounce, not a finding. `mark` (certainty from 0.7 to 0.85, the runtime default this question keeps): count it and flag it for a manager's eye.
 
 ## Example
 

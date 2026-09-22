@@ -59,7 +59,8 @@ const SCORE_LEVELS = { min: 2, max: 10 };
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const isEntry = (value: unknown): boolean =>
+/** The API's `EntryType`: text only, as a string, a JSON object or an array. Nothing else is input. */
+export const isEntry = (value: unknown): boolean =>
   typeof value === "string" || Array.isArray(value) || isRecord(value);
 
 function splitFrontmatter(markdown: string): { frontmatter: string; body: string } {

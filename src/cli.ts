@@ -164,9 +164,13 @@ program
   .option("--since <iso>")
   .option("--json", "machine-readable rows")
   .action(async (opts: { jevel?: string; since?: string; json?: boolean }) => {
-    const rows = report(await readLog(home()), { ...(opts.jevel ? { jevel: opts.jevel } : {}), ...(opts.since ? { since: opts.since } : {}) });
-    if (opts.json) out(rows);
-    else process.stdout.write(renderReport(rows));
+    try {
+      const rows = report(await readLog(home()), { ...(opts.jevel ? { jevel: opts.jevel } : {}), ...(opts.since ? { since: opts.since } : {}) });
+      if (opts.json) out(rows);
+      else process.stdout.write(renderReport(rows));
+    } catch (error) {
+      failCommand(error);
+    }
   });
 
 program

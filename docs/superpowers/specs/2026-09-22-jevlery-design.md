@@ -213,6 +213,7 @@ Exit codes a host branches on:
 | exit | meaning | stderr says |
 | --- | --- | --- |
 | 0 | answered | nothing |
+| 1 | a usage error or an unexpected failure (commander's own message, or an error no other code covers) | one sentence |
 | 2 | the jevel or the state is wrong (host defect) | which field, which rule |
 | 3 | rate limited or overloaded after the SDK's retries | `retry_after_ms` if the server gave one |
 | 4 | authentication refused or key missing | which variable to set |

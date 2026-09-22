@@ -88,6 +88,16 @@ describe("ask with a jevel", () => {
     expect(result.ok && result.document.model).toBe("jev-1.14.0");
     expect(calls[0]?.body.model).toBe("jev-1.14.0");
   });
+  it("refuses a state that is not an entry before any call, rather than letting the API refuse it", async () => {
+    // `42`, `null` and `true` are JSON the API will not take: unchecked they cost a round trip and
+    // come back as a 422, which reads as an API defect rather than the host's own bad state.
+    for (const bad of [42, null, true]) {
+      const { fetch, calls } = scriptedFetch([]);
+      const result = await ask({ client: client(fetch), state: bad as never, jevel });
+      expect(result, String(bad)).toMatchObject({ ok: false, error: { exit: 2, code: "bad_input", field: "state" } });
+      expect(calls, String(bad)).toHaveLength(0);
+    }
+  });
   it("refuses a state missing a required key before any call", async () => {
     const { fetch, calls } = scriptedFetch([]);
     const result = await ask({ client: client(fetch), state: { employee: {} }, jevel });

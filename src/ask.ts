@@ -14,7 +14,7 @@ import {
   UnprocessableEntityError,
 } from "@typesafe-ai/sdk";
 import { checkBudgets } from "./budget.js";
-import { type Jevel, JevelError, checkState, expandQuestions } from "./jevel.js";
+import { type Jevel, JevelError, checkState, expandQuestions, isEntry } from "./jevel.js";
 import { type Answer, type AskDocument, EXIT, type ErrorBody, type ErrorCode, PROTOCOL, type Usage } from "./protocol.js";
 import { DEFAULT_THRESHOLDS, type Thresholds, certaintyOf, verdictOf } from "./verdict.js";
 
@@ -125,6 +125,10 @@ export type AskResult = { ok: true; document: AskDocument } | { ok: false; error
 
 export async function ask(input: AskInput): Promise<AskResult> {
   try {
+    // The first check of all: the CLI reads the state as arbitrary JSON, so a number, a boolean or
+    // a `null` would otherwise reach the wire and come back a 422 after a paid round trip. The SDK
+    // takes a `null` too; a null state answers nothing, so it is refused here with the rest.
+    if (!isEntry(input.state)) throw new JevelError("state", "state must be a string, a JSON object or an array");
     let questions: Questions;
     let thresholds: Record<string, Thresholds>;
     if (input.jevel) {

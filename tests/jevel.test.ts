@@ -25,7 +25,7 @@ describe("parseJevel", () => {
     expect(jevel.version).toBe(1);
     expect(jevel.format).toBe(1);
     expect(jevel.model).toBe("jev-1.13.0");
-    expect(jevel.state).toEqual({ required: ["employee", "events"], budget_tokens: 12000 });
+    expect(jevel.state).toEqual({ required: ["employee", "events", "candidates", "filing"], budget_tokens: 12000 });
     expect(jevel.verdict).toEqual({ act: 0.9, mark: 0.7 });
     expect(Object.keys(jevel.questions)).toEqual(["worth_a_turn", "depth", "same_as"]);
     expect(jevel.questions.same_as?.repeat).toEqual({ over: "candidates", as: "candidate" });

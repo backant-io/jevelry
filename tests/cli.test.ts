@@ -127,6 +127,13 @@ describe("ask", () => {
     expect(r.status).toBe(2);
     expect(JSON.parse(r.stdout)).toMatchObject({ error: { code: "bad_input", field: "state" } });
   });
+  it("exits 2 on a state that is JSON but not an entry, without reaching the server", async () => {
+    const before = server.requests.length;
+    const r = await run(["ask", "wake-gate", "--state", "42"]);
+    expect(r.status).toBe(2);
+    expect(JSON.parse(r.stdout)).toMatchObject({ error: { code: "bad_input", field: "state" } });
+    expect(server.requests.length).toBe(before);
+  });
   it("exits 2 naming the field when a @file cannot be read, never 6", async () => {
     const missingState = await run(["ask", "wake-gate", "--state", "@/nope/missing.json"]);
     expect(missingState.status).toBe(2);
@@ -159,6 +166,17 @@ describe("outcome and report", () => {
     const row = rows.find((r) => r.question === "worth_a_turn");
     expect(row?.outcomes).toBeGreaterThanOrEqual(1);
     expect(row?.agreement_act).toBe(1);
+  });
+  it("fails report with a documented exit and one sentence when the log cannot be read", async () => {
+    // `report` was the one command without a try/catch, so a log it cannot read left commander's
+    // own rejection path to answer with the undocumented exit 1.
+    const dir = mkdtempSync(join(tmpdir(), "jevlery-unreadable-"));
+    mkdirSync(join(dir, "log.jsonl"));
+    const r = await run(["report"], { env: { JEVLERY_HOME: dir } });
+    expect(r.status).toBe(6);
+    expect(r.stdout).toBe("");
+    expect(r.stderr.trimEnd().split("\n")).toHaveLength(1);
+    expect(r.stderr).toMatch(/^jevlery: /);
   });
   it("refuses an unknown log id and a value that names nothing", async () => {
     expect((await run(["outcome", "nope", "worth_a_turn", "agree"])).status).toBe(2);

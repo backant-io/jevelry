@@ -21,7 +21,14 @@ describe("getPath", () => {
 
 describe("checkState", () => {
   it("passes when every required key is present", () => {
-    expect(() => checkState(jevel, { employee: {}, events: [], candidates: [] })).not.toThrow();
+    expect(() => checkState(jevel, { employee: {}, events: [], candidates: [], filing: {} })).not.toThrow();
+  });
+  it("refuses a state without `candidates`, which `same_as` repeats over, naming state.required", () => {
+    // Unrequired, the missing collection surfaces from the repeat expansion instead, which names a
+    // question the host never wrote rather than the key it forgot to send.
+    expect(() => checkState(jevel, { employee: {}, events: [], filing: {} })).toThrowError(
+      expect.objectContaining({ field: "state.required", message: expect.stringContaining("`candidates`") }) as unknown as Error,
+    );
   });
   it("names the first missing required key", () => {
     expect(() => checkState(jevel, { employee: {} })).toThrowError(

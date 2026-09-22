@@ -3,7 +3,7 @@ name: wake-gate
 version: 1
 model: jev-1.13.0
 state:
-  required: [employee, events]
+  required: [employee, events, candidates, filing]
   budget_tokens: 12000
 verdict:
   act: 0.9
@@ -37,11 +37,12 @@ Before waking an employee on its own mail.
 
 ## State
 
-`employee` (title, authority), `events` (kind, actor, subject, summary), optional `candidates` and `filing`.
+`employee` (title, authority), `events` (kind, actor, subject, summary), `candidates` (may be empty) and `filing` are all required: `same_as` repeats over `candidates` and reads `filing`.
 
 ## Verdicts
 
 `worth_a_turn` no with `act`: skip the turn. Anything else: wake as before.
+`depth` has no mark band on purpose: `act` and `mark` both sit at 0.7, so the office either acts on the depth it reads or falls back to the path it took before.
 
 ## Example
 
