@@ -34,7 +34,7 @@ questions:
       focus: "The notification that asks the most of the person decides the lane for the whole batch."
     criteria:
       act_now:
-        what: "Something waits on the person now: a notification names something broken, a deadline within the hour, or somebody blocked until the person answers"
+        what: "Something waits on the person now: a notification names something broken, a deadline today, or somebody blocked until the person answers"
         not_for: "A batch where every notification keeps until the person's next sitting, which belongs to batch_for_later"
         examples:
           - "production alert still firing"
@@ -42,7 +42,7 @@ questions:
           - "decide by 15:00 today"
       batch_for_later:
         what: "A notification is worth reading or answering, and every notification keeps until the person's next sitting"
-        not_for: "A batch where something is broken now or somebody is blocked now, which belongs to act_now"
+        not_for: "A batch where something is broken now or somebody is blocked now, which belongs to act_now, or a batch of digests and automated all-clears, which belongs to ignore"
         examples:
           - "please review my pull request this week"
           - "a question on the design doc, no rush"

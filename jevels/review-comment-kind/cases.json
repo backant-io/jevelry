@@ -20,7 +20,7 @@
     "state": {
       "comment": {
         "author": "ci-bot",
-        "text": "FAIL tests/live/api.test.ts > asks ticket-triage\nTypeError: fetch failed\n  cause: Error: connect EPERM 104.18.2.1:443 - Local (0.0.0.0:0)\n  errno: -1, code: 'EPERM', syscall: 'connect'\nThe sandbox policy denies outbound network access for this job.\nTests: 1 failed, 141 passed",
+        "text": "FAIL tests/live/api.test.ts > asks ticket-triage\nTypeError: fetch failed\n  cause: Error: connect EPERM 104.18.2.1:443 - Local (0.0.0.0:0)\n  errno: -1, code: 'EPERM', syscall: 'connect'\nTests: 1 failed, 141 passed",
         "file": "tests/live/api.test.ts"
       }
     },

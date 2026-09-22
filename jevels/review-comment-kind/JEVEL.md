@@ -37,7 +37,7 @@ questions:
         what: "Names the CI, the sandbox, the tooling, a permission or the machine the code ran on as what went wrong, and the code itself is not what the comment is about"
         not_for: "A test that failed because the code is wrong, which belongs to defect"
         examples:
-          - "connect EPERM 104.18.2.1:443, the sandbox denied the network call"
+          - "connect EACCES 10.0.0.12:5432, the sandbox denied the database connection"
           - "the CI runner ran out of disk"
           - "permission denied writing to /var/cache on the build machine"
       question:

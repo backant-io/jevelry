@@ -95,7 +95,7 @@ On every inbound message, in mail or chat, to sort what wants an answer from wha
 
 ## State
 
-`message`: `{ "channel": "email", "from": "...", "to": "...", "subject": "...", "body": "..." }`. Send the message as it arrived, both addresses included, because `from_a_customer` holds the sender's domain against the recipient's.
+`message`: `{ "channel": "email", "from": "...", "to": "...", "subject": "...", "body": "..." }`. Send the message as it arrived, both addresses included, because `from_a_customer` holds the sender's domain against the recipient's. When `message.to` is missing, a colleague's message can read as a customer's.
 
 ## Verdicts
 

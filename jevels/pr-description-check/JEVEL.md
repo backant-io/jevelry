@@ -67,7 +67,7 @@ questions:
     instructions:
       question: "Does `pr.body` name something to watch when this change ships?"
       inspect: "`pr.body`"
-      focus: "Look for a named risk, a migration, a rollback plan, a feature flag or a behaviour change users will notice."
+      focus: "Look for a named risk, a migration, a rollback plan, a feature flag or a behaviour change users will notice. Only what `pr.body` says counts; a migration or a flag that appears in the diff summary and goes unmentioned in the body is left out of this."
     criteria:
       true:
         what: "The body names a risk, a migration, a rollback, a feature flag or a behaviour change to watch"
