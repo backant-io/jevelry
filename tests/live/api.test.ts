@@ -47,30 +47,58 @@ live("the real TypeSafe API", () => {
     expect(doc.usage.input_tokens).toBeGreaterThan(0);
   });
 
-  it("answers the shipped wake-gate jevel with all three answer types", () => {
+  it("answers the shipped ticket-triage jevel with all three answer types", () => {
     const state = {
-      employee: { title: "COO", authority: ["read_readings", "set_model_policy"] },
-      events: [{ kind: "task.submitted", actor: "implementer", subject: "task_1", summary: "the implementer handed in the readings task" }],
-      filing: { title: "xAI credits are out again" },
-      candidates: [{ title: "xAI credits out, 403 on every turn" }, { title: "the reaper reads a cause it cannot parse" }],
+      ticket: {
+        subject: "Charged twice",
+        message: "I was charged twice for order A-104 and I need this fixed today, my accountant is waiting.",
+        customer_since: "2024-03",
+      },
     };
-    const r = run(["ask", "wake-gate", "--state", JSON.stringify(state)]);
+    const r = run(["ask", "ticket-triage", "--state", JSON.stringify(state)]);
     expect(r.stderr).toBe("");
     expect(r.status).toBe(0);
-    const doc = JSON.parse(r.stdout) as { answers: Record<string, { type: string; verdict: string; legend?: Record<string, unknown> }> };
+    const doc = JSON.parse(r.stdout) as { answers: Record<string, { type: string; verdict: string; choice?: string; yes?: boolean; legend?: Record<string, unknown> }> };
     expect(validate(doc), JSON.stringify(validate.errors)).toBe(true);
-    expect(Object.keys(doc.answers)).toEqual(["worth_a_turn", "depth", "same_as[0]", "same_as[1]"]);
-    expect(doc.answers.worth_a_turn?.type).toBe("noul");
-    expect(doc.answers.depth?.type).toBe("score");
-    expect(Object.keys(doc.answers.depth?.legend ?? {})).toEqual(["0", "1", "2"]);
+    expect(Object.keys(doc.answers)).toEqual(["team", "urgent", "frustration"]);
+    expect(doc.answers.team?.type).toBe("choice");
+    expect(doc.answers.urgent?.type).toBe("noul");
+    expect(doc.answers.frustration?.type).toBe("score");
+    expect(doc.answers.team?.choice).toBe("billing");
+    expect(doc.answers.urgent?.yes).toBe(true);
+    expect(Object.keys(doc.answers.frustration?.legend ?? {})).toEqual(["0", "1", "2"]);
     for (const answer of Object.values(doc.answers)) expect(["act", "mark", "fall_back"]).toContain(answer.verdict);
   });
 
-  it("logged both asks and never the key", () => {
+  it("answers the shipped duplicate-issue jevel over its candidates", () => {
+    const state = {
+      issue: {
+        title: "Export button does nothing on Safari",
+        body: "Clicking Export on the reports page does nothing in Safari 17. Chrome works. Expected a CSV download.",
+      },
+      candidates: [
+        { title: "Export fails in Safari 17", body: "The CSV export silently fails on Safari 17.2, works on Chrome." },
+        { title: "Dark mode colours wrong on the settings page", body: "Labels are unreadable in dark mode." },
+      ],
+    };
+    const r = run(["ask", "duplicate-issue", "--state", JSON.stringify(state)]);
+    expect(r.stderr).toBe("");
+    expect(r.status).toBe(0);
+    const doc = JSON.parse(r.stdout) as { answers: Record<string, { type: string; verdict: string; yes?: boolean }> };
+    expect(validate(doc), JSON.stringify(validate.errors)).toBe(true);
+    expect(Object.keys(doc.answers)).toEqual(["same_as[0]", "same_as[1]", "actionable"]);
+    expect(doc.answers["same_as[0]"]?.yes).toBe(true);
+    expect(doc.answers["same_as[1]"]?.yes).toBe(false);
+    expect(doc.answers.actionable?.yes).toBe(true);
+    for (const answer of Object.values(doc.answers)) expect(["act", "mark", "fall_back"]).toContain(answer.verdict);
+  });
+
+  it("logged every ask and never the key", () => {
     const r = run(["report", "--json"]);
     expect(r.status).toBe(0);
     const rows = JSON.parse(r.stdout) as Array<{ jevel: string; question: string; asks: number }>;
-    expect(rows.some((row) => row.jevel === "wake-gate" && row.question === "worth_a_turn" && row.asks === 1)).toBe(true);
+    expect(rows.some((row) => row.jevel === "ticket-triage" && row.question === "team" && row.asks === 1)).toBe(true);
+    expect(rows.some((row) => row.jevel === "duplicate-issue" && row.question === "same_as" && row.asks === 2)).toBe(true);
     expect(rows.some((row) => row.jevel === "(questions)" && row.question === "is_urgent")).toBe(true);
     const log = readFileSync(join(home, "log.jsonl"), "utf8");
     expect(log).not.toContain(key as string);

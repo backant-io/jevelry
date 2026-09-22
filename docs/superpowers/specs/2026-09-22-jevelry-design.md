@@ -85,37 +85,37 @@ must equal `name` in the frontmatter.
 
 ```yaml
 ---
-name: wake-gate                  # required; [a-z0-9-]+; equals the directory name
+name: ticket-triage              # required; [a-z0-9-]+; equals the directory name
 version: 1                       # required; integer; bumped by hand when questions change
-format: 1                        # optional; the JEVEL.md format version, default 1
 model: jev-1.13.0                # optional pin; else JEVELRY_MODEL, else the SDK default
 state:
-  required: [employee, events, candidates, filing]  # top-level keys the state must carry; missing is exit 2
-  budget_tokens: 12000           # optional; an estimate over it is exit 5 before any call
-verdict:                         # optional jevel-wide defaults for every question
-  act: 0.9
-  mark: 0.7
+  required: [ticket]             # top-level keys the state must carry; missing is exit 2
+  budget_tokens: 8000            # optional; an estimate over it is exit 5 before any call
 questions:
-  worth_a_turn:
-    type: noul
-    instructions: "Does any event in `events` require an act that `employee`, holding `employee.authority`, must perform now?"
+  team:
+    type: choice
+    instructions: "Which team should handle `ticket`?"
     criteria:
-      true: "An event names work, a review, a message or a decision only this employee can act on."
-      false: "Every event is informational, already handled, or for somebody else."
-    verdict: { act: 0.9, mark: 0.7 }
-  depth:
+      billing: "Payments, invoices, refunds, subscription changes."
+      technical: "Bugs, outages, error messages, integrations, data that looks wrong."
+      account: "Login, password, permissions, closing or changing an account."
+      other: "Anything the three teams above do not cover, or a message with no request in it."
+    verdict: { act: 0.8, mark: 0.6 }  # optional; else the jevel-wide verdict, else the runtime defaults
+  urgent:
+    type: noul
+    instructions: "Does `ticket.message` say or imply that the customer needs an answer today?"
+    criteria:
+      true: "The customer names a deadline, says work or money is blocked, or asks for an immediate fix."
+      false: "The customer asks a question or reports something that can wait."
+    verdict: { act: 0.85, mark: 0.7 }
+  frustration:
     type: score
-    instructions: "How much reasoning does acting on `events` need?"
+    instructions: "How frustrated is the customer in `ticket.message`?"
     criteria:
-      - "routine: a known verb on a known object"
-      - "judgment: a choice between reasonable options"
-      - "hard: the answer depends on reading and weighing several records"
-    verdict: { act: 0.7 }
-  same_as:
-    type: noul
-    repeat: { over: candidates, as: candidate }
-    instructions: "Does `candidate` describe the same incident as `filing`?"
-    verdict: { act: 0.85 }
+      - "calm: neutral or friendly wording"
+      - "frustrated: annoyed, repeats the problem, mentions earlier attempts"
+      - "very angry: threatens to leave, insults, or writes in capitals"
+    verdict: { act: 0.7, mark: 0.5 }
 ---
 ```
 
@@ -129,13 +129,15 @@ Field by field:
 - `verdict` on a question overrides the jevel-wide `verdict`, which overrides the runtime defaults
   (`act: 0.9`, `mark: 0.7`). A threshold is a number in `[0, 1]` and `mark` must not exceed `act`.
 - `repeat: { over: <path>, as: <name> }` expands one question into one per element of the array
-  at `<path>` in the state. The runtime rewrites the question so that `<name>` becomes the exact
+  at `<path>` in the state, as the shipped `duplicate-issue` jevel does over its `candidates`.
+  The runtime rewrites the question so that `<name>` becomes the exact
   backticked path of the element (`candidates[3]`), and names the answers `<question>[<index>]`.
   A `repeat` over a path that is not an array in the state is exit 2. This is the only way a jevel
   may ask about a collection: counting and aggregation are the host's.
 - `state.required` lists top-level keys; the check is presence, not shape. It is the one place a
   jevel says what it needs, so a host that sends the wrong thing hears it before paying.
 - `state.budget_tokens` is a jevel-specific ceiling under the model's hard budget (section 9).
+- `format` is optional, the `JEVEL.md` format version, and defaults to 1; this build reads no other.
 
 ### 4.2 Body (Markdown)
 
@@ -187,6 +189,8 @@ jevelry outcome <log_id> <question> (agree | disagree | <value>) [--note <text>]
 jevelry report [--jevel <name>] [--since <iso>] [--json]
 jevelry list | show <name> | check <name>
 jevelry models
+jevelry install [--no-key] [--project] [--agent <names...>]
+jevelry install-skill [--project] [--agent <names...>]
 ```
 
 - `ask` prints exactly one JSON document on stdout: the answers (section 7) on exit 0, an error
@@ -202,6 +206,15 @@ jevelry models
   agreement among `act` verdicts, agreement among `mark` verdicts, mean certainty. `--json` for
   hosts.
 - `models` prints `GET /v1/models` through the SDK.
+- `install` copies the packaged skill under `skills/jevelry/` into every coding agent directory it
+  finds under the home directory (or, with `--project`, into `.claude/skills` and `.agents/skills`
+  of the working directory), prints one line per agent, and then asks once for a key unless
+  `--no-key` is given; `install-skill` is the copy alone.
+- The key resolves in one order, used by every command and by the installer's "already available"
+  check: `TYPESAFE_API_KEY` when non-blank, then the macOS keychain entry (service
+  `typesafe-api-key`, account `jevelry`), then the `TYPESAFE_API_KEY=` line of
+  `$JEVELRY_HOME/env`; `install` stores into the keychain on macOS and into that file elsewhere,
+  and `JEVELRY_KEY_STORE=file` forces the file on any machine.
 
 Environment: `TYPESAFE_API_KEY` (required for `ask` and `models`), `TYPESAFE_BASE_URL` (SDK,
 optional), `JEVELRY_MODEL` (default model when neither the jevel nor `--model` pins one; else
@@ -227,16 +240,17 @@ Exit codes a host branches on:
 {
   "protocol": 1,
   "log_id": "3f0c2e6a-6f1c-4c7b-9a0e-4d1e6a2b7c11",
-  "jevel": { "name": "wake-gate", "version": 1 },
+  "jevel": { "name": "ticket-triage", "version": 1 },
   "model": "jev-1.13.0",
   "state_hash": "sha256:…",
   "answers": {
-    "worth_a_turn": { "type": "noul", "noul": 0.08, "yes": false, "certainty": 0.92, "verdict": "act" },
-    "depth": { "type": "score", "score": 0.4, "legend": { "0": "routine", "1": "judgment", "2": "hard" },
-               "probabilities": { "0": 0.7, "1": 0.2, "2": 0.1 }, "confidence": 0.55, "certainty": 0.55, "verdict": "fall_back" },
-    "same_as[0]": { "type": "noul", "noul": 0.97, "yes": true, "certainty": 0.97, "verdict": "act" }
+    "team": { "type": "choice", "choice": "billing", "probabilities": { "billing": 0.91, "technical": 0.06, "account": 0.02, "other": 0.01 },
+              "confidence": 0.88, "certainty": 0.88, "verdict": "act" },
+    "urgent": { "type": "noul", "noul": 0.98, "yes": true, "certainty": 0.98, "verdict": "act" },
+    "frustration": { "type": "score", "score": 0.73, "legend": { "0": "calm", "1": "frustrated", "2": "very angry" },
+                     "probabilities": { "0": 0.27, "1": 0.73, "2": 0 }, "confidence": 0.59, "certainty": 0.59, "verdict": "mark" }
   },
-  "usage": { "input_tokens": 1412, "output_tokens": 30 }
+  "usage": { "input_tokens": 588, "output_tokens": 77 }
 }
 ```
 
@@ -244,7 +258,8 @@ Exit codes a host branches on:
 - `state_hash` is SHA-256 over the canonical JSON of the state as sent (keys sorted, no
   whitespace), so a host can recognise an identical state without a second call.
 - Every answer carries the API's own fields for its type, plus `certainty` and `verdict`; a noul
-  adds `yes`.
+  adds `yes`. A `repeat` question answers one entry per element, so the shipped
+  `duplicate-issue` jevel answers `same_as[0]`, `same_as[1]` and `actionable` in the same shape.
 ### 7.1 The error document
 
 On any non-zero exit stdout carries one document instead, so a host reads one place:
@@ -271,8 +286,8 @@ from a 400 or a 422 carries no `field`, and a host reads `field` as optional on 
 `$JEVELRY_HOME/log.jsonl`, append-only, one JSON object per line, two kinds:
 
 ```json
-{"kind":"ask","id":"…","at":"2026-09-22T10:00:00Z","jevel":{"name":"wake-gate","version":1},"model":"jev-1.13.0","state_hash":"sha256:…","answers":{…},"usage":{…},"cwd":"/path/the/host/ran/in"}
-{"kind":"outcome","id":"…","question":"worth_a_turn","outcome":"agree","value":null,"note":null,"at":"2026-09-22T10:07:00Z"}
+{"kind":"ask","id":"…","at":"2026-09-22T10:00:00Z","jevel":{"name":"ticket-triage","version":1},"model":"jev-1.13.0","state_hash":"sha256:…","answers":{…},"usage":{…},"cwd":"/path/the/host/ran/in"}
+{"kind":"outcome","id":"…","question":"urgent","outcome":"agree","value":null,"note":null,"at":"2026-09-22T10:07:00Z"}
 ```
 
 - The state itself is not logged, only its hash: the state is the host's data and can be large.
@@ -305,7 +320,10 @@ exit 7 with the field named: it is never defaulted.
 ```
 jevelry/
   bin/jevelry.js              #!/usr/bin/env node; imports ../dist/cli.js
-  src/cli.ts                  commander program; wires the commands
+  src/cli.ts                  the entry: builds the program and parses argv
+  src/program.ts              commander program; wires the commands
+  src/install.ts              the skill copy into the coding agents, and the key prompt
+  src/key.ts                  the key: environment, keychain, `$JEVELRY_HOME/env`
   src/jevel.ts                JEVEL.md discovery, parsing, validation, repeat expansion
   src/ask.ts                  builds the SDK request, calls it, shapes the protocol document
   src/verdict.ts              certainty and verdict, pure
@@ -316,7 +334,8 @@ jevelry/
   docs/protocol/              ask.schema.json and the three pinned examples
   docs/superpowers/specs/     this document and its successors
   jevels/                     example jevels shipped with the package (used by the tests)
-  package.json                type: module; bin; engines node >= 20; files: dist, bin, jevels, docs/protocol, LICENSE
+  skills/jevelry/             SKILL.md and references/ for coding agents, installed by `jevelry install`
+  package.json                type: module; bin; engines node >= 20; files: dist, bin, jevels, skills, docs/protocol, LICENSE
   tsup.config.ts              entry src/cli.ts and src/index.ts; esm; node20; dts
   vitest.config.ts
 ```
@@ -348,7 +367,7 @@ Scripts: `build` (tsup), `test` (vitest run, after build), `lint` (tsc --noEmit)
   `TYPESAFE_API_KEY` in the environment. The operator's own command line supplies it, from a
   keychain for example; the suite reads only the environment variable, holds no credential store of
   its own, and never prints the key. It lists the models, asks the reference noul and the shipped
-  `wake-gate` jevel, validates the documents against the schema, asserts bounds rather than exact
+  `ticket-triage` and `duplicate-issue` jevels, validates the documents against the schema, asserts bounds rather than exact
   probabilities (an alias moves), and checks the log never holds the key. Without a key it skips
   itself with one stderr sentence. It is the acceptance run, and the answer to "the recorded bodies
   are claims about the API, not the API".
@@ -364,17 +383,17 @@ the authoring loop for now.
 
 ## 14. Acceptance
 
-- `npx jevelry check wake-gate` on the shipped example refuses each of the 4.3 defects when they
+- `npx jevelry check ticket-triage` on the shipped example refuses each of the 4.3 defects when they
   are introduced and warns on each listed smell.
-- `npx jevelry ask wake-gate --state @state.json` with a valid key prints one protocol document,
+- `npx jevelry ask ticket-triage --state @ticket.json` with a valid key prints one protocol document,
   exit 0, with a verdict on every question, and appends one line to the log.
 - Over-budget state exits 5 before any request is made (the test server sees no request).
 - `429` and `529` from the test server exit 3 after the SDK's retries with `retry_after_ms`
   reported; `401` exits 4; a missing key exits 4 without a request.
 - `outcome` then `report` shows agreement for the question, and `report --json` is readable by a
   program.
-- A jevel with `repeat` over a five-element array sends five questions in one request and returns
-  five answers named `<question>[i]`.
+- `duplicate-issue` with a five-element `candidates` array sends five questions in one request and
+  returns five answers named `same_as[i]`.
 - The protocol examples under `docs/protocol/` are byte-identical to what the code produces.
 - The key never appears in the log, in stdout, or in any error text.
 
