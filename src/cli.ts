@@ -26,12 +26,22 @@ function dirs(cli: string[] | undefined): string[] {
   return discoveryDirs({ cli: cli ?? [], ...(env ? { env } : {}), cwd: process.cwd(), home: home() });
 }
 
-/** `-` is stdin, `@path` is a file, anything else is inline JSON. */
+/**
+ * `-` is stdin, `@path` is a file, anything else is inline JSON. A read that fails is the host's
+ * mistake, not the transport's: it is bad_input with the field named, never a catch-all exit 6.
+ */
 function readSource(source: string, field: string): unknown {
   let text: string;
-  if (source === "-") text = readFileSync(0, "utf8");
-  else if (source.startsWith("@")) text = readFileSync(source.slice(1), "utf8");
-  else text = source;
+  if (source === "-" || source.startsWith("@")) {
+    const from = source === "-" ? "standard input" : source.slice(1);
+    try {
+      text = readFileSync(source === "-" ? 0 : from, "utf8");
+    } catch (error) {
+      throw new JevelError(field, `${field} could not be read from ${from}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  } else {
+    text = source;
+  }
   try {
     return JSON.parse(text);
   } catch {
@@ -100,18 +110,24 @@ program
     const document = result.document;
     if (opts.log) {
       const id = randomUUID();
-      await appendLine(home(), {
-        kind: "ask",
-        id,
-        at: new Date().toISOString(),
-        jevel: document.jevel,
-        model: document.model,
-        state_hash: document.state_hash,
-        answers: document.answers,
-        usage: document.usage,
-        cwd: process.cwd(),
-      });
-      document.log_id = id;
+      // The answer is the product and the log is this runtime's own record, never the host's truth:
+      // a log that cannot be written costs a warning and a null log_id, never the paid answer.
+      try {
+        await appendLine(home(), {
+          kind: "ask",
+          id,
+          at: new Date().toISOString(),
+          jevel: document.jevel,
+          model: document.model,
+          state_hash: document.state_hash,
+          answers: document.answers,
+          usage: document.usage,
+          cwd: process.cwd(),
+        });
+        document.log_id = id;
+      } catch (error) {
+        say(`warning: the ask was answered but could not be logged: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
     out(document);
   });

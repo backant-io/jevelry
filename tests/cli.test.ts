@@ -117,6 +117,24 @@ describe("ask", () => {
     expect(r.status).toBe(2);
     expect(JSON.parse(r.stdout)).toMatchObject({ error: { code: "bad_input", field: "state" } });
   });
+  it("exits 2 naming the field when a @file cannot be read, never 6", async () => {
+    const missingState = await run(["ask", "wake-gate", "--state", "@/nope/missing.json"]);
+    expect(missingState.status).toBe(2);
+    expect(JSON.parse(missingState.stdout)).toMatchObject({ error: { code: "bad_input", field: "state" } });
+    const missingQuestions = await run(["ask", "--questions", "@/nope/missing.json", "--state", '"Help!"']);
+    expect(missingQuestions.status).toBe(2);
+    expect(JSON.parse(missingQuestions.stdout)).toMatchObject({ error: { code: "bad_input", field: "questions" } });
+  });
+  it("keeps the paid answer when the log cannot be written, warning instead of failing", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "jevlery-blocked-"));
+    writeFileSync(join(dir, "blocker"), "a regular file, so no home can be made beneath it");
+    const r = await run(["ask", "wake-gate", "--state", JSON.stringify(state)], { env: { JEVLERY_HOME: join(dir, "blocker", "home") } });
+    expect(r.status).toBe(0);
+    const doc = JSON.parse(r.stdout) as { log_id: string | null };
+    expect(validate(doc)).toBe(true);
+    expect(doc.log_id).toBeNull();
+    expect(r.stderr).toContain("could not be logged");
+  });
 });
 
 describe("outcome and report", () => {

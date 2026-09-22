@@ -16,9 +16,11 @@ export async function startServer(): Promise<TestServer> {
         return json(200, { models: [{ name: "jev-latest", description: "the latest", release_date: "2026-09-01" }] });
       }
       if (req.method !== "POST" || req.url !== "/v1/systemone") return json(404, { error: "not found" });
-      if (req.headers.authorization !== "Bearer test-key") return json(401, { error: "bad key" });
+      // Counted before the auth check: a `requests.length` guard must tell "no request was made"
+      // from "a request was made and refused", which a push after the 401 could not.
       const body = JSON.parse(raw) as { state: unknown; questions: Record<string, { type: string; criteria?: unknown }> };
       requests.push(body);
+      if (req.headers.authorization !== "Bearer test-key") return json(401, { error: "bad key" });
       const fail = (body.state as { fail?: number } | null)?.fail;
       if (fail === 429) return json(429, { error: "slow down" }, { "retry-after-ms": "10" });
       if (fail !== undefined) return json(fail, { error: `failing with ${fail}` });
