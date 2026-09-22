@@ -21,7 +21,7 @@ Sixteen ship with the package, in general shapes, each with the questions, the t
 | `notification-triage` | a batch of notifications collected for one person | `worth_interrupting`, `handle`, `depth` | `person`, `notifications` |
 | `pr-description-check` | a pull request description against its diff summary | `describes_the_change`, `mentions_tests`, `leaves_work_out`, `risk_noted` | `pr` |
 | `reply-check` | a reply to a question or a report, to close the thread or keep it open | `addresses_it`, `next` | `question`, `reply` |
-| `review-comment-kind` | a comment on a pull request, to sort it | `kind`, `actionable`, `blocking` | `comment` |
+| `review-comment-kind` | a review comment or a failing test output, to sort it | `kind`, `actionable`, `blocking` | `comment` |
 | `review-quality` | a finished code review, as a whole | `thoroughness`, `constructive`, `found_a_real_defect` | `review` |
 | `task-difficulty` | a task before you route it to a model or a person | `depth`, `needs_specialist`, `well_specified` | `task` |
 | `ticket-triage` | a new support ticket, before a person reads it | `team`, `urgent`, `frustration` | `ticket` |

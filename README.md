@@ -15,35 +15,41 @@
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT">
 </p>
 
-Your code and your coding agent probably make the same small calls over and over again: is this ticket urgent, which team gets it, is this bug report a duplicate of one you already have, is this test failing because of the code or because of the machine it ran on. Today each of those is a prompt that returns text you have to parse, and you have no idea how sure the model was when it answered.
+<p align="center"><b>Small decisions for your code and your coding agent, answered by Jev with a verdict you can act on.</b></p>
 
-You don't have to do that anymore. We have built jevelry, and it asks Jev, the decision model from TypeSafe, each of those questions with one command. The questions live in a small file called a jevel, and sixteen of them come with the package ready to use. Jev also tells you how sure it is, a number from 0 to 1 called the confidence, and the jevel turns that into one of three answers your code can act on:
+Your code and your coding agent make the same small calls every day: is this ticket urgent, which team should get it, is this bug a duplicate, did this test fail because of the code or because of the machine it ran on. Today each of those is usually a prompt that returns text you parse, and you don't learn how sure the model was.
 
-| Answer | What it means | What you do |
+jevelry asks each of those questions to Jev, the decision model from TypeSafe, with one command. A question lives in a small file called a jevel, and sixteen ready-made jevels ship with the package. Jev answers with how sure it is, and the jevel turns that into one of three verdicts:
+
+| Verdict | Meaning | What your code does |
 |---|---|---|
-| `act` | Jev is sure | go ahead |
-| `mark` | Jev is fairly sure | go ahead and flag it so somebody takes a look |
-| `fall_back` | Jev is unsure | do what you did before jevelry |
+| `act` | Jev is sure | uses the answer |
+| `mark` | Jev is fairly sure | uses the answer and flags it for a person |
+| `fall_back` | Jev is unsure | does what it did before jevelry |
 
-A ticket triage sends about 1,280 input tokens and TypeSafe charges $0.042 per million, so one ticket costs about $0.00005 and a dollar covers around 18,000 of them.
+One ticket triage is about 1,280 input tokens at $0.042 per million, roughly $0.00005, so a dollar covers around 18,000 decisions.
 
 ## Where it helps
 
 ### In your app
 
-A support ticket comes in and somebody has to decide which team gets it and whether it goes to the top of the queue. Your code writes the ticket to a file and asks:
+A support ticket comes in and needs a team and a priority:
 
-    npx jevelry ask ticket-triage --state @ticket.json
+```sh
+npx jevelry ask ticket-triage --state '{"ticket": {"subject": "Charged twice", "message": "I was billed twice this month, please refund one today."}}'
+```
 
-On `act` your code routes the ticket to the team Jev picked, on `mark` it routes it and flags it for whoever owns the queue, and on `fall_back` it leaves the ticket for a person, the same way it did before.
+On `act` your code routes the ticket to the team Jev picked, on `mark` it routes it and flags it for the queue owner, and on `fall_back` it leaves the ticket for a person, the same way it works today.
 
-### In your agent
+### In your coding agent
 
-Your coding agent runs the tests and one of them fails with `connect EPERM`, because the sandbox blocked the network call. Usually the agent guesses, and it probably starts rewriting code that was fine. With the jevelry skill installed it puts the failing output in a file and asks first:
+A test fails with `connect EPERM` because the sandbox blocked a network call. Left alone, your agent will probably start rewriting code that was fine. With the jevelry skill installed, it asks first:
 
-    npx jevelry ask review-comment-kind --state @failure.json
+```sh
+npx jevelry ask review-comment-kind --state '{"comment": {"author": "ci-bot", "text": "FAIL tests/api.test.ts\nTypeError: fetch failed\n  cause: Error: connect EPERM 104.18.2.1:443"}}'
+```
 
-If Jev answers `environment` with `act`, the agent reports the sandbox problem and leaves your code alone, if it answers `defect` the agent fixes the code, and on `fall_back` it reads the failing output more closely itself before it touches anything. For a burst of log lines from a service it does the same with `log-triage`.
+On `environment` the agent reports the sandbox problem and leaves your code alone, on `defect` it fixes the code, and on `fall_back` it reads the output closely itself before it touches anything. A burst of service logs goes to `log-triage` the same way.
 
 ### Trusting it
 
