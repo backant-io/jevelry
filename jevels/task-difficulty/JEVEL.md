@@ -1,6 +1,6 @@
 ---
 name: task-difficulty
-version: 1
+version: 2
 model: jev-1.13.0
 state:
   required: [task]
@@ -8,25 +8,65 @@ state:
 questions:
   depth:
     type: score
-    instructions: "How much thinking does `task` take to finish?"
+    instructions:
+      question: "Which of these situations does `task` read like?"
+      inspect: "`task.description` and `task.acceptance`"
+      focus: "Judge how much of the approach the task leaves for the person who picks it up. How long the work takes stays out of this."
     criteria:
-      - "routine: a known pattern, and the steps follow from `task.description`"
-      - "judgment: trade-offs to weigh, and several designs would work"
-      - "hard: the approach itself has to be worked out, and getting it wrong is expensive"
+      - what: "The steps are spelled out in the description, or the task repeats work done the same way before"
+        signals:
+          - "add a flag that prints the same rows as JSON"
+          - "same as last month's export"
+          - "bump the version and rerun the release script"
+      - what: "The task needs a decision between options the description names or leaves open, and any of them would work"
+        signals:
+          - "in memory or Redis, either is fine"
+          - "pick a library for the date parsing"
+          - "decide where the setting lives"
+      - what: "The approach itself is unknown, or whether it is done depends on something outside the description"
+        signals:
+          - "nobody knows yet where the records go missing"
+          - "done when security signs off"
+          - "find out why it is slow"
     verdict: { act: 0.7, mark: 0.55 }
   needs_specialist:
     type: noul
-    instructions: "Does `task` call for somebody with specific expertise, such as security, databases, infrastructure or a regulated domain?"
+    instructions:
+      question: "Does `task` call for somebody with specific expertise, such as security, databases, infrastructure or a regulated domain?"
+      inspect: "`task.title`, `task.description` and `task.acceptance`"
+      focus: "Look for a field the task names where a generalist would be guessing."
     criteria:
-      true: "The description or the acceptance names a field where a generalist would be guessing."
-      false: "A competent generalist can finish it with what `task` says."
+      true:
+        what: "The description or the acceptance names a field where a generalist would be guessing"
+        examples:
+          - "rotate the KMS keys that encrypt customer data"
+          - "rewrite the replication setup of the primary database"
+          - "the change needs sign-off under the payment card rules"
+      false:
+        what: "A competent generalist can finish it with what `task` says"
+        examples:
+          - "add a --json flag to the export command"
+          - "cache the product list"
     verdict: { act: 0.85, mark: 0.7 }
   well_specified:
     type: noul
-    instructions: "Do `task.description` and `task.acceptance` together say what done looks like?"
+    instructions:
+      question: "Does `task.acceptance` say how you would know the task is done?"
+      inspect: "`task.acceptance`, with `task.description` for what the checks refer to"
+      focus: "Look for a check somebody can run or see: an output, a test, a number or a behaviour."
     criteria:
-      true: "The work and the finish line are both stated, so somebody can start on it today."
-      false: "The description or the acceptance leaves the finish line open."
+      true:
+        what: "The acceptance names a check somebody can run or see to know the task is done"
+        examples:
+          - "export --json prints a JSON array with one object per row"
+          - "p95 of the product list under 200 ms in the load test"
+          - "a unit test covers both paths"
+      false:
+        what: "The acceptance is empty, restates the title, or leaves done to somebody's taste or approval"
+        examples:
+          - "onboarding feels better"
+          - "security is happy with it"
+          - "done when done"
     verdict: { act: 0.8, mark: 0.6 }
 ---
 # task-difficulty

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { Ajv } from "ajv";
 import { describe, expect, it } from "vitest";
 import { expandQuestions, loadJevel } from "../../src/jevel.js";
-import { WITH_CASES, readCases } from "../helpers/withCases.js";
+import { readCases } from "../helpers/withCases.js";
 
 const key = process.env.TYPESAFE_API_KEY;
 const haveKey = key !== undefined && key.trim() !== "";
@@ -59,8 +59,8 @@ live("every shipped jevel answers its own example", () => {
 // What the example.json test cannot tell you: whether the questions decide. One ask per case, and
 // every answer is held to the value a person would give the same state, so a criteria rewrite that
 // reads well and answers worse fails here rather than in somebody's queue.
-live("every jevel with cases decides each of them", () => {
-  for (const name of WITH_CASES) {
+live("every shipped jevel decides each of its cases", () => {
+  for (const name of names) {
     for (const c of readCases(name)) {
       it(`${name}: ${c.name}`, () => {
         const r = run(["ask", name, "--state", JSON.stringify(c.state)]);

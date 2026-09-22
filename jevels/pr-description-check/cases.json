@@ -1,0 +1,57 @@
+[
+  {
+    "name": "a pricing cache with named tests and a migration the body skips",
+    "state": {
+      "pr": {
+        "title": "Cache the pricing table in memory",
+        "body": "The pricing table was read from the database on every quote. It is now loaded once at boot and refreshed every five minutes. Added unit tests for the refresh timer and ran the quote suite locally.",
+        "diff_summary": "src/pricing/cache.ts (new, +84), src/pricing/quote.ts (+12/-9), src/boot.ts (+4), tests/pricing/cache.test.ts (new, +61), migrations/2026-09-20-drop-pricing-index.sql (new, +3)"
+      }
+    },
+    "expect": { "describes_the_change": true, "mentions_tests": true, "leaves_work_out": true, "risk_noted": false }
+  },
+  {
+    "name": "a flag rename that covers every file and says how to roll back",
+    "state": {
+      "pr": {
+        "title": "Rename --dry to --dry-run",
+        "body": "Renames the --dry flag of the import command to --dry-run, to match the export command. The old --dry keeps working for one release and prints a deprecation warning, so scripts have time to move. Updated the CLI docs and the flag test, and ran the CLI suite locally.",
+        "diff_summary": "src/cli/flags.ts (+14/-6), docs/cli/import.md (+3/-3), tests/cli/flags.test.ts (+22/-4)"
+      }
+    },
+    "expect": { "describes_the_change": true, "mentions_tests": true, "leaves_work_out": false, "risk_noted": true }
+  },
+  {
+    "name": "a flag rename whose diff also adds a migration",
+    "state": {
+      "pr": {
+        "title": "Rename the beta_pricing flag",
+        "body": "Renames the beta_pricing feature flag to tiered_pricing everywhere it is read.",
+        "diff_summary": "src/flags.ts (+3/-3), src/pricing/quote.ts (+2/-2), migrations/2026-09-21-add-tier-column.sql (new, +18)"
+      }
+    },
+    "expect": { "describes_the_change": true, "mentions_tests": false, "leaves_work_out": true, "risk_noted": false }
+  },
+  {
+    "name": "a template body over changes in three services",
+    "state": {
+      "pr": {
+        "title": "Updates",
+        "body": "Fixes stuff, see ticket.",
+        "diff_summary": "services/billing/worker.ts (+40/-12), services/auth/session.ts (+8/-2), services/search/index.ts (+61/-30), config/production.yaml (+2/-1)"
+      }
+    },
+    "expect": { "describes_the_change": false, "mentions_tests": false, "leaves_work_out": true, "risk_noted": false }
+  },
+  {
+    "name": "a dependency bump whose body leans on a green CI",
+    "state": {
+      "pr": {
+        "title": "Bump express to 5.1",
+        "body": "Bumps express from 4.21 to 5.1. CI is green.",
+        "diff_summary": "package.json (+1/-1), package-lock.json (+212/-190), src/server/routes.ts (+6/-4)"
+      }
+    },
+    "expect": { "describes_the_change": true, "mentions_tests": null }
+  }
+]

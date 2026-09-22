@@ -1,0 +1,61 @@
+[
+  {
+    "name": "a --json flag with the steps and the checks spelled out",
+    "state": {
+      "task": {
+        "title": "Add a --json flag to the export command",
+        "description": "The export command prints a table of rows. Add a --json flag that prints the same rows as a JSON array on stdout, and keep the table as the default output.",
+        "acceptance": "export --json prints a JSON array with one object per row, the table output is unchanged without the flag, and a unit test covers both paths."
+      }
+    },
+    "expect": {
+      "depth": 0,
+      "needs_specialist": false,
+      "well_specified": true
+    }
+  },
+  {
+    "name": "a product list cache where either store would do",
+    "state": {
+      "task": {
+        "title": "Cache the product list",
+        "description": "The product list endpoint hits the database on every request and p95 is 900 ms. Cache it, either in process memory or in the Redis we already run; pick whichever fits the deploy better and write down why.",
+        "acceptance": "p95 of GET /products under 200 ms in the existing load test, and product edits show up within one minute."
+      }
+    },
+    "expect": {
+      "depth": 1,
+      "needs_specialist": false,
+      "well_specified": true
+    }
+  },
+  {
+    "name": "a key rotation nobody has planned, done when security signs off",
+    "state": {
+      "task": {
+        "title": "Rotate the keys that encrypt customer PII",
+        "description": "The KMS keys that encrypt customer personal data were created in 2021 and have never been rotated. Nobody on the team knows yet how to rotate them without downtime, because three services decrypt with them at runtime.",
+        "acceptance": "Done when security signs off."
+      }
+    },
+    "expect": {
+      "depth": 2,
+      "needs_specialist": true,
+      "well_specified": false
+    }
+  },
+  {
+    "name": "an onboarding task that ends on a feeling",
+    "state": {
+      "task": {
+        "title": "Improve onboarding",
+        "description": "New users drop off during onboarding. Make it better.",
+        "acceptance": "Onboarding feels better."
+      }
+    },
+    "expect": {
+      "depth": null,
+      "well_specified": false
+    }
+  }
+]

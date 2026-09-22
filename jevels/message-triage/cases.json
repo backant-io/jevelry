@@ -1,0 +1,50 @@
+[
+  {
+    "name": "an assignment from the lead that blocks the release today",
+    "state": {
+      "message": {
+        "channel": "chat",
+        "from": "marta@acme.example",
+        "subject": "Release 4.2",
+        "body": "Jonas, the release notes for 4.2 are yours. Please write them and post them in the release channel today; the release is blocked until they are in."
+      }
+    },
+    "expect": { "kind": "needs_reply", "urgency": 2, "from_a_customer": false }
+  },
+  {
+    "name": "a status report that closes the thread",
+    "state": {
+      "message": {
+        "channel": "email",
+        "from": "lee@acme.example",
+        "subject": "Re: March numbers",
+        "body": "Closing this one: I reran the March export and the totals now match the ledger. Nothing else to do on your side."
+      }
+    },
+    "expect": { "kind": "fyi", "urgency": 0, "from_a_customer": false }
+  },
+  {
+    "name": "a customer asking for a corrected invoice before Friday",
+    "state": {
+      "message": {
+        "channel": "email",
+        "from": "accounts@brightwater.example",
+        "subject": "Invoice 2026-0917 has the wrong address",
+        "body": "Hello, we use your Team plan and invoice 2026-0917 still shows our old office address. Could you send a corrected copy before our payment run on Friday? Thanks, Priya from Brightwater accounts"
+      }
+    },
+    "expect": { "kind": "needs_reply", "urgency": 1, "from_a_customer": true }
+  },
+  {
+    "name": "metrics that are getting worse, with no ask in the message",
+    "state": {
+      "message": {
+        "channel": "email",
+        "from": "cto@acme.example",
+        "subject": "Weekly numbers",
+        "body": "Signup conversion dropped from 4.1% to 3.2% this week, the third drop in a row, and p95 page load on the pricing page went from 1.8s to 2.6s."
+      }
+    },
+    "expect": { "kind": null, "from_a_customer": false }
+  }
+]

@@ -1,0 +1,77 @@
+[
+  {
+    "name": "a division that runs before the empty-list guard",
+    "state": {
+      "comment": {
+        "author": "priya",
+        "text": "This divides by the item count before checking whether the list is empty, so an empty batch throws here. Please move the guard above the division before this goes in.",
+        "file": "src/billing/average.ts",
+        "snippet": "const average = total / items.length;"
+      }
+    },
+    "expect": {
+      "kind": "defect",
+      "actionable": true,
+      "blocking": true
+    }
+  },
+  {
+    "name": "a test tail where the sandbox denied the network call",
+    "state": {
+      "comment": {
+        "author": "ci-bot",
+        "text": "FAIL tests/live/api.test.ts > asks ticket-triage\nTypeError: fetch failed\n  cause: Error: connect EPERM 104.18.2.1:443 - Local (0.0.0.0:0)\n  errno: -1, code: 'EPERM', syscall: 'connect'\nThe sandbox policy denies outbound network access for this job.\nTests: 1 failed, 141 passed",
+        "file": "tests/live/api.test.ts"
+      }
+    },
+    "expect": {
+      "kind": "environment",
+      "actionable": false
+    }
+  },
+  {
+    "name": "a naming nit the reviewer marks as optional",
+    "state": {
+      "comment": {
+        "author": "tom",
+        "text": "nit: I would call this retryCount, n is hard to search for. Up to you, fine to merge as is.",
+        "file": "src/webhooks/retry.ts",
+        "snippet": "let n = 0;"
+      }
+    },
+    "expect": {
+      "kind": "style",
+      "actionable": true,
+      "blocking": false
+    }
+  },
+  {
+    "name": "praise for a rewritten loop",
+    "state": {
+      "comment": {
+        "author": "mia",
+        "text": "Nice, this is much easier to read than the old loop.",
+        "file": "src/export/rows.ts"
+      }
+    },
+    "expect": {
+      "kind": "praise",
+      "actionable": false,
+      "blocking": false
+    }
+  },
+  {
+    "name": "a question that may be pointing at a bug",
+    "state": {
+      "comment": {
+        "author": "lee",
+        "text": "Do we really want basic as the default here?",
+        "file": "src/pricing/quote.ts",
+        "snippet": "const tier = customer.tier ?? 'basic';"
+      }
+    },
+    "expect": {
+      "kind": null
+    }
+  }
+]

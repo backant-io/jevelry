@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import * as lib from "../src/index.js";
-import { WITH_CASES, baseName, readCases } from "./helpers/withCases.js";
+import { baseName, readCases } from "./helpers/withCases.js";
 
 const JEVELS = join(process.cwd(), "jevels");
 const dirs = readdirSync(JEVELS).filter((name) => statSync(join(JEVELS, name)).isDirectory()).sort();
@@ -63,11 +63,11 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 const hasWhat = (entry: unknown): boolean => isObject(entry) && typeof entry.what === "string" && entry.what !== "";
 
 describe("cases.json", () => {
-  it("is carried by exactly the jevels WITH_CASES names", () => {
-    expect(dirs.filter((name) => existsSync(join(JEVELS, name, "cases.json")))).toEqual(WITH_CASES);
+  it("is carried by every shipped jevel", () => {
+    for (const name of dirs) expect(existsSync(join(JEVELS, name, "cases.json")), `${name}/cases.json`).toBe(true);
   });
 
-  for (const name of WITH_CASES) {
+  for (const name of dirs) {
     it(`${name}: every case is a state the jevel accepts, with expectations that fit its questions`, () => {
       const { jevel } = lib.loadJevel(name, [JEVELS]);
       const cases = readCases(name);
