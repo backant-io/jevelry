@@ -24,6 +24,9 @@ const run = (args: string[], options: { input?: string; env?: Record<string, str
         HOME: home,
         TYPESAFE_API_KEY: "test-key",
         TYPESAFE_BASE_URL: server.url,
+        // The key store is the file, never this machine's keychain: the missing-key test asserts
+        // exit 4, which a real keychain entry would silently turn into a real request.
+        JEVELRY_KEY_STORE: "file",
         JEVELRY_HOME: join(home, ".jevelry"),
         JEVELRY_JEVELS: FIXTURES,
         ...options.env,

@@ -187,6 +187,8 @@ jevelry outcome <log_id> <question> (agree | disagree | <value>) [--note <text>]
 jevelry report [--jevel <name>] [--since <iso>] [--json]
 jevelry list | show <name> | check <name>
 jevelry models
+jevelry install [--no-key] [--project] [--agent <names...>]
+jevelry install-skill [--project] [--agent <names...>]
 ```
 
 - `ask` prints exactly one JSON document on stdout: the answers (section 7) on exit 0, an error
@@ -202,6 +204,15 @@ jevelry models
   agreement among `act` verdicts, agreement among `mark` verdicts, mean certainty. `--json` for
   hosts.
 - `models` prints `GET /v1/models` through the SDK.
+- `install` copies the packaged skill under `skills/jevelry/` into every coding agent directory it
+  finds under the home directory (or, with `--project`, into `.claude/skills` and `.agents/skills`
+  of the working directory), prints one line per agent, and then asks once for a key unless
+  `--no-key` is given; `install-skill` is the copy alone.
+- The key resolves in one order, used by every command and by the installer's "already available"
+  check: `TYPESAFE_API_KEY` when non-blank, then the macOS keychain entry (service
+  `typesafe-api-key`, account `jevelry`), then the `TYPESAFE_API_KEY=` line of
+  `$JEVELRY_HOME/env`; `install` stores into the keychain on macOS and into that file elsewhere,
+  and `JEVELRY_KEY_STORE=file` forces the file on any machine.
 
 Environment: `TYPESAFE_API_KEY` (required for `ask` and `models`), `TYPESAFE_BASE_URL` (SDK,
 optional), `JEVELRY_MODEL` (default model when neither the jevel nor `--model` pins one; else
@@ -305,7 +316,10 @@ exit 7 with the field named: it is never defaulted.
 ```
 jevelry/
   bin/jevelry.js              #!/usr/bin/env node; imports ../dist/cli.js
-  src/cli.ts                  commander program; wires the commands
+  src/cli.ts                  the entry: builds the program and parses argv
+  src/program.ts              commander program; wires the commands
+  src/install.ts              the skill copy into the coding agents, and the key prompt
+  src/key.ts                  the key: environment, keychain, `$JEVELRY_HOME/env`
   src/jevel.ts                JEVEL.md discovery, parsing, validation, repeat expansion
   src/ask.ts                  builds the SDK request, calls it, shapes the protocol document
   src/verdict.ts              certainty and verdict, pure
