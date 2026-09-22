@@ -1,0 +1,10 @@
+{
+  "question": {
+    "from": "dana@northwind.example",
+    "text": "Did the September invoice go out to Acme, and if it did, on which date?"
+  },
+  "reply": {
+    "from": "sam@billing.example",
+    "text": "It went out on 3 September as invoice 2026-0912, and Acme confirmed receipt the same afternoon."
+  }
+}

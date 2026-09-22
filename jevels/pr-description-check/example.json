@@ -1,0 +1,7 @@
+{
+  "pr": {
+    "title": "Cache the pricing table in memory",
+    "body": "The pricing table was read from the database on every quote. It is now loaded once at boot and refreshed every five minutes. Added unit tests for the refresh timer and ran the quote suite locally.",
+    "diff_summary": "src/pricing/cache.ts (new, +84), src/pricing/quote.ts (+12/-9), src/boot.ts (+4), tests/pricing/cache.test.ts (new, +61), migrations/2026-09-20-drop-pricing-index.sql (new, +3)"
+  }
+}

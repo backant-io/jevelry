@@ -1,0 +1,7 @@
+{
+  "task": {
+    "title": "Add a --json flag to the export command",
+    "description": "The export command prints a table of rows. Add a --json flag that prints the same rows as a JSON array on stdout, and keep the table as the default output.",
+    "acceptance": "export --json prints a JSON array with one object per row, the table output is unchanged without the flag, and a unit test covers both paths."
+  }
+}

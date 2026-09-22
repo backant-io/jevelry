@@ -1,0 +1,16 @@
+{
+  "issue": {
+    "title": "Export button does nothing on Safari",
+    "body": "Clicking Export on the reports page does nothing in Safari 17. Chrome works. Expected a CSV download."
+  },
+  "candidates": [
+    {
+      "title": "Export fails in Safari 17",
+      "body": "The CSV export silently fails on Safari 17.2, works on Chrome."
+    },
+    {
+      "title": "Dark mode colours wrong on the settings page",
+      "body": "Labels are unreadable in dark mode."
+    }
+  ]
+}

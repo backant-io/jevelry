@@ -1,0 +1,16 @@
+{
+  "checklist": {
+    "name": "Release checklist",
+    "steps": [
+      "Run the full test suite on the release branch.",
+      "Tag the release and write the changelog entry.",
+      "Deploy to staging and check the smoke tests.",
+      "Deploy to production during a working hour.",
+      "Post the release notes in the releases channel."
+    ]
+  },
+  "report": {
+    "by": "sam",
+    "text": "Ran the full suite on release/1.8.0 and it came back green. Tagged v1.8.0 and wrote the changelog entry for it. Deployed to staging and the smoke tests were green. Deployed to production at 10:20 on Tuesday."
+  }
+}

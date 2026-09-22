@@ -70,6 +70,16 @@ describe("check, list, show", () => {
     const shown = JSON.parse((await run(["show", "wake-gate"])).stdout.split("\n---\n")[0] ?? "") as { name: string };
     expect(shown.name).toBe("wake-gate");
   });
+  it("show prints the shipped jevel's example state after the body", async () => {
+    // A shipped jevel carries one state whose answers its body names, and `show` is how a person
+    // and an agent read a jevel: the example belongs in the same output as the questions it fits.
+    const r = await run(["show", "ticket-triage"]);
+    expect(r.status).toBe(0);
+    const [document, example] = r.stdout.split("--- example.json\n");
+    expect(document).toContain("## Example");
+    expect(example).toBe(readFileSync(join(process.cwd(), "jevels", "ticket-triage", "example.json"), "utf8"));
+    expect(JSON.parse(example ?? "")).toHaveProperty("ticket");
+  });
 });
 
 describe("ask", () => {

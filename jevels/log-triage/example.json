@@ -1,0 +1,9 @@
+{
+  "service": "image-resizer",
+  "lines": [
+    "2026-09-22T14:02:11Z ERROR open /etc/resizer/profiles.yaml: no such file or directory",
+    "2026-09-22T14:02:11Z ERROR falling back to the built-in profile set",
+    "2026-09-22T14:02:12Z WARN  requested profile thumb-2x is missing from the built-in set, request rejected with 400",
+    "2026-09-22T14:02:19Z WARN  requested profile thumb-2x is missing from the built-in set, request rejected with 400"
+  ]
+}
