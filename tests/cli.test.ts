@@ -89,6 +89,16 @@ describe("ask", () => {
     expect(r.status).toBe(0);
     expect(JSON.parse(r.stdout).protocol).toBe(1);
   });
+  it("keeps stdout one document when TYPESAFE_LOG_LEVEL is set, sending the SDK's own lines to stderr", async () => {
+    // The SDK's default logger is `console`, whose debug and info go to stdout: unfixed, the request
+    // summary and the request body (the state) land in front of the document a host parses.
+    const r = await run(["ask", "wake-gate", "--state", JSON.stringify(state)], { env: { TYPESAFE_LOG_LEVEL: "debug" } });
+    expect(r.status).toBe(0);
+    const doc = JSON.parse(r.stdout) as { protocol: number };
+    expect(doc.protocol).toBe(1);
+    expect(r.stdout).toBe(`${JSON.stringify(doc, null, 2)}\n`);
+    expect(r.stderr).toContain("jevlery: sdk:");
+  });
   it("asks one-off questions without a jevel", async () => {
     const r = await run(["ask", "--questions", JSON.stringify({ urgent: { type: "noul", instructions: "Is it urgent?" } }), "--state", '"Help!"']);
     expect(r.status).toBe(0);

@@ -49,10 +49,18 @@ function readSource(source: string, field: string): unknown {
   }
 }
 
+/**
+ * The SDK resolves its own `logLevel` from `TYPESAFE_LOG_LEVEL` and logs through `console` by
+ * default, whose `debug` and `info` go to stdout: that would put SDK lines in front of the one
+ * document a host parses (and at `debug` the request body, which is the state). Every level goes
+ * to stderr instead, so the one-document protocol holds whatever the environment asks for.
+ */
 function client(): TypeSafeClient {
   const timeout = Number(process.env.JEVLERY_TIMEOUT_MS ?? 30000);
   const model = process.env.JEVLERY_MODEL;
-  return new TypeSafeClient(model && model.trim() !== "" ? { timeout, defaultModel: model } : { timeout });
+  const toStderr = (m: string, ...a: unknown[]): void => { say(`sdk: ${[m, ...a.map(String)].join(" ")}`); };
+  const logger = { debug: toStderr, info: toStderr, warn: toStderr, error: toStderr };
+  return new TypeSafeClient(model && model.trim() !== "" ? { timeout, defaultModel: model, logger } : { timeout, logger });
 }
 
 /** The one exit for a failed `ask`: the error document on stdout, the sentence on stderr, the code. */
