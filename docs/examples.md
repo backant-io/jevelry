@@ -20,10 +20,10 @@ What comes back on stdout, exactly as printed:
 
     {
       "protocol": 1,
-      "log_id": "becfc166-7921-4fe3-a189-4c2c5b164bce",
+      "log_id": "fe899f8e-356a-4301-b8ea-292cb341a8f6",
       "jevel": {
         "name": "ticket-triage",
-        "version": 1
+        "version": 2
       },
       "model": "jev-1.13.0",
       "state_hash": "sha256:b883d3e23a85340c82fbc76833692e80c5e08f898de8d1d059849d5e29ad418b",
@@ -32,10 +32,10 @@ What comes back on stdout, exactly as printed:
           "type": "choice",
           "choice": "billing",
           "probabilities": {
-            "account": 0,
+            "other": 0,
             "technical": 0,
-            "billing": 1,
-            "other": 0
+            "account": 0,
+            "billing": 1
           },
           "confidence": 1,
           "certainty": 1,
@@ -50,24 +50,45 @@ What comes back on stdout, exactly as printed:
         },
         "frustration": {
           "type": "score",
-          "score": 0.73,
+          "score": 0.24,
           "legend": {
-            "0": "calm: neutral or friendly wording",
-            "1": "frustrated: annoyed, repeats the problem, mentions earlier attempts",
-            "2": "very angry: threatens to leave, insults, or writes in capitals"
+            "0": {
+              "what": "The customer states the problem in plain or friendly wording, asks politely, and writes in for the first time",
+              "signals": [
+                "hi, quick question",
+                "thanks in advance",
+                "could you have a look"
+              ]
+            },
+            "1": {
+              "what": "The customer says they have written before, repeats a problem that is still open, or says plainly that they are annoyed",
+              "signals": [
+                "this is the third time I am writing",
+                "still waiting for an answer",
+                "I have tried everything you suggested"
+              ]
+            },
+            "2": {
+              "what": "The customer threatens to leave or to escalate, insults the team, or writes in capitals",
+              "signals": [
+                "cancel my account today",
+                "your support is a joke",
+                "ABSOLUTELY UNACCEPTABLE"
+              ]
+            }
           },
           "probabilities": {
-            "0": 0.27,
-            "1": 0.73,
-            "2": 0
+            "0": 0.78,
+            "1": 0.19,
+            "2": 0.03
           },
-          "confidence": 0.59,
-          "certainty": 0.59,
+          "confidence": 0.64,
+          "certainty": 0.64,
           "verdict": "mark"
         }
       },
       "usage": {
-        "input_tokens": 588,
+        "input_tokens": 1280,
         "output_tokens": 77
       }
     }
@@ -109,19 +130,19 @@ The answers come back as `same_as[0]` and `same_as[1]`, one per candidate, plus 
 
     {
       "protocol": 1,
-      "log_id": "11be7d18-f67b-4bb6-9ecc-bd49a0fd3854",
+      "log_id": "6ff713ca-cf4c-40b3-8ee6-2966a1ec0ce3",
       "jevel": {
         "name": "duplicate-issue",
-        "version": 1
+        "version": 2
       },
       "model": "jev-1.13.0",
       "state_hash": "sha256:519db415584243fda76eed700f344001ee400a3b4386aeb2916b484b62c2c4df",
       "answers": {
         "same_as[0]": {
           "type": "noul",
-          "noul": 0.97,
+          "noul": 0.98,
           "yes": true,
-          "certainty": 0.97,
+          "certainty": 0.98,
           "verdict": "act"
         },
         "same_as[1]": {
@@ -133,21 +154,21 @@ The answers come back as `same_as[0]` and `same_as[1]`, one per candidate, plus 
         },
         "actionable": {
           "type": "noul",
-          "noul": 0.95,
+          "noul": 0.96,
           "yes": true,
-          "certainty": 0.95,
+          "certainty": 0.96,
           "verdict": "act"
         }
       },
       "usage": {
-        "input_tokens": 610,
+        "input_tokens": 1170,
         "output_tokens": 64
       }
     }
 
 ## Telling jevelry what was true
 
-When the ticket above turns out to be urgent after all, or when it does not, you record it against the `log_id` and the question, and the report shows you how the question is doing:
+When you find out whether the ticket above was really urgent, you record it against the `log_id` and the question, and the report shows you how the question is doing:
 
     npx jevelry outcome <log_id> urgent yes
     npx jevelry report --jevel ticket-triage

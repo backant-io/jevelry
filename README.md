@@ -35,7 +35,7 @@ jevelry is everything around that call: it loads your jevel, checks the state be
 
 ## Free
 
-jevelry is free and MIT. TypeSafe charges per input token, 0.042 dollars per million, and output tokens are free. The reference ask in our live test (one question about one sentence) costs 307 input tokens.
+jevelry is free and MIT. TypeSafe charges per input token, 0.042 dollars per million, and output tokens are free. The `ticket-triage` example, three questions about one support ticket, costs 1,280 input tokens, which is about $0.00005.
 
 ## Start simple
 
@@ -48,7 +48,7 @@ You get one JSON document back with an answer per question, and the part your co
 
     "team":        { "choice": "billing",  "confidence": 1.0,  "verdict": "act"  }
     "urgent":      { "noul": 0.98,         "yes": true,        "verdict": "act"  }
-    "frustration": { "score": 0.73,        "confidence": 0.59, "verdict": "mark" }
+    "frustration": { "score": 0.24,        "confidence": 0.64, "verdict": "mark" }
 
 Your code branches on `verdict`, and the probabilities are in the document if you want your own rule. The whole document, the `jq` one-liner, the TypeScript call and the report walkthrough are in [docs/examples.md](docs/examples.md).
 
@@ -80,22 +80,50 @@ A jevel is a folder with one `JEVEL.md` in it, the same way a skill for your cod
 ```yaml
 ---
 name: ticket-triage
-version: 1
+version: 2
 model: jev-1.13.0
 state:
   required: [ticket]
+  budget_tokens: 8000
 questions:
   team:
     type: choice
-    instructions: "Which team should handle `ticket`?"
+    instructions:
+      question: "Which team should handle `ticket`?"
+      focus: "Classify the one thing the customer asks for. A message that touches several topics belongs to the team that owns the request."
+      inspect: "`ticket.subject` and `ticket.message`"
     criteria:
-      billing: "Payments, invoices, refunds, subscription changes."
-      technical: "Bugs, outages, error messages, integrations, data that looks wrong."
-      account: "Login, password, permissions, closing or changing an account."
-      other: "Anything the three teams above do not cover, or a message with no request in it."
+      billing:
+        what: "A charge, an invoice, a refund, a price or a subscription change"
+        not_for: "A feature that fails, which belongs to technical, or a password, which belongs to account"
+        examples:
+          - "I was charged twice for invoice 8841"
+          - "Cancel my subscription and refund this month"
+          - "The invoice shows the wrong VAT number"
+      technical:
+        what: "A feature that fails, an error message, an integration that stopped working, or data on a page that looks wrong"
+        not_for: "A charge the customer disputes, which belongs to billing, or a password, which belongs to account"
+        examples:
+          - "The export button returns a 500"
+          - "Your webhook stopped firing yesterday"
+          - "The dashboard shows last week's numbers"
+      account:
+        what: "Logging in, a password, a seat, a permission, or opening, renaming or closing an account"
+        not_for: "A charge on the account, which belongs to billing, or a page that fails after login, which belongs to technical"
+        examples:
+          - "I cannot log in and the reset mail keeps missing"
+          - "Please remove Anna's admin rights"
+          - "Close my account at the end of the month"
+      other:
+        what: "A message that asks for none of the three above, or that asks for nothing at all"
+        not_for: "A message that names a charge, a broken feature or a login, each of which belongs to one of the three above"
+        examples:
+          - "Thanks, that worked"
+          - "Do you sponsor conferences?"
     verdict: { act: 0.8, mark: 0.6 }
----
 ```
+
+Every option carries the same three fields: what it covers, which neighbouring option it gets mixed up with, and a few examples in the words your customers use, because Jev reads the options next to each other. The rest of the file asks `urgent` as a yes/no question and `frustration` as a score whose levels each describe a situation, and the guide walks you through all three shapes.
 
 Adding a use case is adding a folder. jevelry finds jevels in `--jevels <dir>`, then `JEVELRY_JEVELS`, then `./jevels`, then `~/.jevelry/jevels`, and it checks them before you spend a token:
 
@@ -103,7 +131,7 @@ Adding a use case is adding a folder. jevelry finds jevels in `--jevels <dir>`, 
     npx jevelry list
     npx jevelry show ticket-triage
 
-`check` refuses a jevel the API would refuse anyway (more than 255 options, a threshold outside 0 to 1, a question without instructions) and warns you about the cases Jev handles poorly: a yes/no question whose "yes" means no, a double negative, a model that is not pinned. Sixteen jevels ship with the package, from a support queue and a bug tracker to pull requests, logs, alerts and meeting notes; the list is in [jevels/README.md](jevels/README.md), so you always have something to copy.
+`check` refuses a jevel the API would refuse anyway (more than 255 options, a threshold outside 0 to 1, a question with no instructions) and warns you about the cases Jev handles poorly: a yes/no question whose "yes" means no, a double negative, options that carry different fields, a model that is not pinned. Sixteen jevels ship with the package, from a support queue and a bug tracker to pull requests, logs, alerts and meeting notes, each with an `example.json` to ask it with and a `cases.json` of states it is tested on; the list is in [jevels/README.md](jevels/README.md), so you always have something to copy.
 
 ## Verdicts
 
@@ -146,7 +174,7 @@ After a few hundred asks that table shows you which thresholds to move and which
 | 6 | the network or TypeSafe's servers |
 | 7 | TypeSafe answered a shape this build cannot read |
 
-Currently jevelry asks Jev questions and hands you the answers, and that is the whole of it - this is intentional because Jev is built to answer, and in our own experience a small tool that does one thing is the one you can put in front of your own code and forget about. We are working on an authoring loop so you can try questions against a pasted state before you write the jevel.
+Currently jevelry asks Jev questions and hands you the answers, and that is the whole of it - we built it that way because Jev is built to answer, and in our own experience a small tool that does one thing is the one you can put in front of your own code and forget about. We are working on an authoring loop so you can try questions against a pasted state before you write the jevel.
 
 ## How do we know you can trust it
 
