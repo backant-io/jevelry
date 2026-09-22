@@ -1,0 +1,35 @@
+{
+  "name": "jevelry",
+  "version": "0.1.0",
+  "description": "A runtime for Jev, TypeSafe's System One model: jevels in, verdicts out",
+  "type": "module",
+  "bin": { "jevelry": "bin/jevelry.js" },
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }, "./package.json": "./package.json" },
+  "scripts": {
+    "build": "tsup",
+    "pretest": "npm run build",
+    "test": "vitest run",
+    "test:live": "npm run build && vitest run --config vitest.live.config.ts",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run lint && npm run build"
+  },
+  "files": ["dist", "bin", "jevels", "docs/protocol", "docs/assets", "LICENSE", "README.md"],
+  "repository": { "type": "git", "url": "git+https://github.com/backant-io/jevelry.git" },
+  "homepage": "https://backant.io",
+  "bugs": { "url": "https://github.com/backant-io/jevelry/issues" },
+  "engines": { "node": ">=20" },
+  "author": "Pavel Hegler <business@hegler.tech>",
+  "license": "MIT",
+  "dependencies": {
+    "@typesafe-ai/sdk": "0.6.0",
+    "commander": "^12.1.0",
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "ajv": "^8.17.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "protocol": 1,
+  "log_id": null,
+  "jevel": null,
+  "model": "jev-1.13.0",
+  "state_hash": "sha256:7f6406e52f1f88b05e4e9d8ce6a07e3f0dfbfd5da5fc513c8001e8b16abe8a28",
+  "answers": {
+    "is_urgent": {
+      "type": "noul",
+      "noul": 0.95,
+      "yes": true,
+      "certainty": 0.95,
+      "verdict": "act"
+    }
+  },
+  "usage": {
+    "input_tokens": 307,
+    "output_tokens": 20
+  }
+}

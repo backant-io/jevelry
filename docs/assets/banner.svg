@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d1117"/>
+      <stop offset="1" stop-color="#161b27"/>
+    </linearGradient>
+    <linearGradient id="gem" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b6f7c9"/>
+      <stop offset="0.45" stop-color="#3fb950"/>
+      <stop offset="1" stop-color="#1b5e2a"/>
+    </linearGradient>
+    <linearGradient id="gemDark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2ea043"/>
+      <stop offset="1" stop-color="#0f3d1c"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="300" fill="url(#bg)"/>
+
+  <!-- the gem: a brilliant cut, crown on top, pavilion below -->
+  <g transform="translate(190 150)" stroke="#0d1117" stroke-width="2" stroke-linejoin="round">
+    <polygon points="-100,-30 -60,-72 60,-72 100,-30" fill="url(#gem)"/>
+    <polygon points="-100,-30 100,-30 0,80" fill="url(#gemDark)"/>
+    <polygon points="-60,-72 -30,-30 -100,-30" fill="#7ee787" opacity="0.85"/>
+    <polygon points="60,-72 100,-30 30,-30" fill="#7ee787" opacity="0.85"/>
+    <polygon points="-30,-30 30,-30 0,80" fill="#3fb950" opacity="0.9"/>
+    <polygon points="-60,-72 60,-72 30,-30 -30,-30" fill="#d2ffe0"/>
+    <polygon points="-100,-30 -30,-30 0,80" fill="#1f7a34"/>
+    <polygon points="30,-30 100,-30 0,80" fill="#2a9d47"/>
+  </g>
+  <!-- three small stones, the jevels -->
+  <g stroke="#0d1117" stroke-width="1.5" stroke-linejoin="round">
+    <polygon points="330,196 344,182 372,182 386,196 358,228" fill="#3fb950"/>
+    <polygon points="344,182 372,182 358,196" fill="#d2ffe0"/>
+    <polygon points="404,196 418,182 446,182 460,196 432,228" fill="#3fb950" opacity="0.8"/>
+    <polygon points="418,182 446,182 432,196" fill="#d2ffe0" opacity="0.8"/>
+    <polygon points="478,196 492,182 520,182 534,196 506,228" fill="#3fb950" opacity="0.6"/>
+    <polygon points="492,182 520,182 506,196" fill="#d2ffe0" opacity="0.6"/>
+  </g>
+
+  <g font-family="SFMono-Regular, Menlo, Consolas, monospace">
+    <text x="330" y="118" font-size="64" font-weight="bold" fill="#e6edf3" letter-spacing="8">JEVELRY</text>
+    <text x="332" y="158" font-size="21" fill="#7d8590" letter-spacing="2">jevels in, verdicts out</text>
+    <text x="332" y="268" font-size="18" fill="#3fb950">{ "worth_a_turn": { "noul": 0.19, "verdict": "mark" } }</text>
+  </g>
+</svg>

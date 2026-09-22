@@ -1,0 +1,9 @@
+{
+  "protocol": 1,
+  "error": {
+    "exit": 3,
+    "code": "rate_limited",
+    "message": "TypeSafe answered 429 after the SDK's retries",
+    "retry_after_ms": 1200
+  }
+}
