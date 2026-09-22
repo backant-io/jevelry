@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { EntryType } from "@typesafe-ai/sdk";
+import type { EntryType, Question, Questions } from "@typesafe-ai/sdk";
 import { parse as parseYaml } from "yaml";
 import { mergeThresholds, type Thresholds } from "./verdict.js";
 
@@ -77,7 +77,7 @@ function thresholdsOf(value: unknown, field: string): Partial<Thresholds> {
   for (const key of ["act", "mark"] as const) {
     const n = value[key];
     if (n === undefined) continue;
-    if (typeof n !== "number" || n < 0 || n > 1) throw new JevelError(field, `${field}.${key} must be a number in [0, 1]`);
+    if (typeof n !== "number" || !Number.isFinite(n) || n < 0 || n > 1) throw new JevelError(field, `${field}.${key} must be a number in [0, 1]`);
     out[key] = n;
   }
   return out;
@@ -146,6 +146,11 @@ function warningsOf(jevel: Jevel): string[] {
     }
     const text = typeof q.instructions === "string" ? q.instructions : JSON.stringify(q.instructions);
     if (DOUBLE_NEGATIVE.test(text)) warnings.push(`questions.${id}.instructions may contain a double negative; ask it the direct way`);
+    if (q.repeat && jevel.state.required.includes(q.repeat.as)) {
+      warnings.push(
+        `questions.${id}.repeat.as \`${q.repeat.as}\` is also a required state key; the rewriter would rewrite every reference to it`,
+      );
+    }
   }
   for (const heading of HEADINGS) {
     const present = new RegExp(`^#+\\s*${heading}\\s*$`, "im").test(jevel.body);
@@ -207,7 +212,7 @@ export function discoveryDirs(input: { cli?: string[]; env?: string; cwd: string
     ...(input.env ? input.env.split(":").filter((d) => d !== "") : []),
     join(input.cwd, "jevels"),
     join(input.home, "jevels"),
-  ].map((d) => resolve(d));
+  ].map((d) => resolve(input.cwd, d));
   return ordered.filter((dir, i) => ordered.indexOf(dir) === i);
 }
 
@@ -220,6 +225,7 @@ export function findJevel(name: string, dirs: string[]): string | null {
 }
 
 export function loadJevel(name: string, dirs: string[]): Parsed {
+  if (!NAME.test(name)) throw new JevelError("name", `${name} is not a jevel name: [a-z0-9-]+`);
   const path = findJevel(name, dirs);
   if (!path) throw new JevelError("name", `no jevel named ${name} in: ${dirs.join(", ")}`);
   return parseJevel(readFileSync(path, "utf8"), name, path);
@@ -235,4 +241,88 @@ export function listJevels(dirs: string[]): Array<{ name: string; dir: string; p
     }
   }
   return [...seen.values()];
+}
+
+export function checkState(jevel: Jevel, state: unknown): void {
+  if (jevel.state.required.length === 0) return;
+  if (!isRecord(state)) {
+    throw new JevelError("state.required", `this jevel requires the keys ${jevel.state.required.join(", ")}, so the state must be an object`);
+  }
+  for (const key of jevel.state.required) {
+    if (!(key in state)) throw new JevelError("state.required", `state is missing the required key \`${key}\``);
+  }
+}
+
+/** `a.b[0].c` into the value, or undefined at the first missing step. */
+export function getPath(value: unknown, path: string): unknown {
+  const steps = path.match(/[^.[\]]+/g) ?? [];
+  let current: unknown = value;
+  for (const step of steps) {
+    if (Array.isArray(current)) {
+      const index = Number(step);
+      if (!Number.isInteger(index)) return undefined;
+      current = current[index];
+    } else if (isRecord(current)) {
+      current = current[step];
+    } else {
+      return undefined;
+    }
+    if (current === undefined) return undefined;
+  }
+  return current;
+}
+
+export interface Expanded {
+  questions: Questions;
+  thresholds: Record<string, Thresholds>;
+}
+
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Rewrite every backticked path that starts with `as` to start with `over[i]`, through any JSON structure. */
+function rewritePaths(value: EntryType, as: string, replacement: string): EntryType {
+  const pattern = new RegExp(`\`${escapeRegExp(as)}(?=[\`.\\[])`, "g");
+  const walk = (v: unknown): unknown => {
+    if (typeof v === "string") return v.replace(pattern, `\`${replacement}`);
+    if (Array.isArray(v)) return v.map(walk);
+    if (isRecord(v)) return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, walk(x)]));
+    return v;
+  };
+  return walk(value) as EntryType;
+}
+
+function toSdkQuestion(q: JevelQuestion, instructions: EntryType, criteria: unknown): Question {
+  if (q.type === "noul") {
+    return criteria === undefined
+      ? { type: "noul", instructions }
+      : { type: "noul", instructions, criteria: criteria as { true?: EntryType; false?: EntryType } };
+  }
+  if (q.type === "choice") return { type: "choice", instructions, criteria: criteria as Record<string, EntryType> };
+  return { type: "score", instructions, criteria: criteria as [EntryType, EntryType, ...EntryType[]] };
+}
+
+/** One SDK question per jevel question, or per element for a `repeat`; thresholds merged per name. */
+export function expandQuestions(jevel: Jevel, state: unknown): Expanded {
+  const questions: Questions = {};
+  const thresholds: Record<string, Thresholds> = {};
+  for (const [id, q] of Object.entries(jevel.questions)) {
+    const merged = mergeThresholds(jevel.verdict, q.verdict);
+    if (!q.repeat) {
+      questions[id] = toSdkQuestion(q, q.instructions, q.criteria);
+      thresholds[id] = merged;
+      continue;
+    }
+    const items = getPath(state, q.repeat.over);
+    if (!Array.isArray(items)) {
+      throw new JevelError(`questions.${id}.repeat.over`, `questions.${id} repeats over \`${q.repeat.over}\`, which is not an array in the state`);
+    }
+    for (let i = 0; i < items.length; i++) {
+      const element = `${q.repeat.over}[${i}]`;
+      const name = `${id}[${i}]`;
+      const criteria = q.criteria === undefined ? undefined : rewritePaths(q.criteria as EntryType, q.repeat.as, element);
+      questions[name] = toSdkQuestion(q, rewritePaths(q.instructions, q.repeat.as, element), criteria);
+      thresholds[name] = merged;
+    }
+  }
+  return { questions, thresholds };
 }

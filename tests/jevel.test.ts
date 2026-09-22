@@ -119,3 +119,28 @@ describe("discovery", () => {
     expect(() => loadJevel("nope", [first])).toThrow(/no jevel named nope/);
   });
 });
+
+describe("review rulings", () => {
+  it("refuses a threshold that is not a finite number", () => {
+    expect(() =>
+      parseJevel(minimal(`name: t\nversion: 1\nverdict: { act: .nan }\nquestions:\n  q: { type: noul, instructions: x }`), "t"),
+    ).toThrowError(expect.objectContaining({ field: "verdict" }) as unknown as Error);
+  });
+  it("resolves a relative discovery dir against the injected cwd, not the process cwd", () => {
+    expect(discoveryDirs({ cli: ["rel"], cwd: "/w", home: "/h" })).toEqual(["/w/rel", "/w/jevels", "/h/jevels"]);
+  });
+  it("refuses a jevel name that could escape the discovery dirs", () => {
+    expect(() => loadJevel("../x", [FIXTURES])).toThrowError(
+      expect.objectContaining({ field: "name", message: expect.stringContaining("not a jevel name") }) as unknown as Error,
+    );
+  });
+  it("warns when a repeat `as` is also a required state key", () => {
+    const { warnings } = parseJevel(
+      minimal(
+        `name: t\nversion: 1\nmodel: jev-1.13.0\nstate: { required: [employee] }\nquestions:\n  q: { type: noul, instructions: x, repeat: { over: items, as: employee } }`,
+      ),
+      "t",
+    );
+    expect(warnings.some((w) => w.includes("questions.q.repeat.as") && w.includes("also a required state key"))).toBe(true);
+  });
+});
