@@ -51,17 +51,18 @@ questions:
   actionable:
     type: noul
     instructions:
-      question: "Does `alert` name the service, the symptom and when it started?"
-      inspect: "`alert.name`, `alert.service`, `alert.started_at` and `alert.detail`"
-      focus: "A symptom says what is failing and for whom: the endpoint, the response code, or the work that stopped. A crossed threshold on its own leaves the symptom open."
+      question: "Does `alert.detail` name a symptom a responder can act on?"
+      inspect: "`alert.detail`, with `alert.name` for context"
+      focus: "A symptom says what is failing and how it shows: the endpoint, the response code, the error, or the work that stopped. A crossed threshold on its own leaves the symptom open."
     criteria:
       true:
-        what: "The alert names the service, says what is failing and for whom, and carries the time it started"
+        what: "The detail says what is failing and how it shows, so a responder knows where to look"
         examples:
-          - "5xx rose from 0.2% to 7.1% on the /charge endpoint of checkout-api at 14:04"
-          - "the nightly export job for reporting exited with status 1 at 02:10"
+          - "5xx responses rose to 7.1% and every failing response comes from the /charge endpoint"
+          - "every charge attempt comes back as a 503 from the payment provider"
+          - "the nightly export job exited with status 1"
       false:
-        what: "The alert reports a crossed threshold, a monitor number, or a line that leaves the symptom open"
+        what: "The detail reports a crossed threshold, a monitor number, or a line that leaves open what is failing"
         examples:
           - "Monitor 412 triggered"
           - "value above the configured limit"

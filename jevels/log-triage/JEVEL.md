@@ -108,4 +108,4 @@ On a burst of log lines your monitoring collected, to tell an outage from a misc
 
 ## Example
 
-The example state holds four lines from `image-resizer` about a profile file that is missing and the requests it rejects. It answers `kind` = `misconfiguration` and `needs_a_person` yes. `severity` lands between level 1 and level 2 at `fall_back`, because every line in that burst is a failure, while the fallback line says the other profiles are still served.
+The example state holds five lines from `image-resizer` about a profile file that is missing, the requests it rejects, and one request for another profile that goes through. It answers `kind` = `misconfiguration`, `needs_a_person` yes and `severity` at level 1.
