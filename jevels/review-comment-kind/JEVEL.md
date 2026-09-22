@@ -34,7 +34,7 @@ questions:
           - "split this into two commits"
           - "update the changelog"
       environment:
-        what: "Is about the CI, the sandbox, the tooling, permissions or the machine the code ran on, and the code itself is not what the comment is about"
+        what: "Names the CI, the sandbox, the tooling, a permission or the machine the code ran on as what went wrong, and the code itself is not what the comment is about"
         not_for: "A test that failed because the code is wrong, which belongs to defect"
         examples:
           - "connect EPERM 104.18.2.1:443, the sandbox denied the network call"

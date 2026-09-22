@@ -61,13 +61,12 @@
     }
   },
   {
-    "name": "a question that may be pointing at a bug",
+    "name": "integration tests that failed twice and passed on the rerun",
     "state": {
       "comment": {
         "author": "lee",
-        "text": "Do we really want basic as the default here?",
-        "file": "src/pricing/quote.ts",
-        "snippet": "const tier = customer.tier ?? 'basic';"
+        "text": "The integration tests failed twice on this branch and passed on the third run.",
+        "file": "tests/integration/checkout.test.ts"
       }
     },
     "expect": {

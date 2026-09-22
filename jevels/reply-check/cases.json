@@ -51,15 +51,15 @@
     }
   },
   {
-    "name": "a restart that may or may not have fixed a failing export",
+    "name": "a login fix that mostly works, and one logout that may be the VPN",
     "state": {
       "question": {
-        "from": "dana@northwind.example",
-        "text": "The nightly export to Acme failed twice this week. Can you find out why?"
+        "from": "lee@acme.example",
+        "text": "The login fix shipped yesterday. Is it working for you now?"
       },
       "reply": {
-        "from": "sam@acme.example",
-        "text": "Restarted the export worker and last night's run went through. Let me know if it happens again."
+        "from": "dana@northwind.example",
+        "text": "Mostly. I got logged out once this morning, but that could have been my VPN."
       }
     },
     "expect": {

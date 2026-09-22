@@ -100,21 +100,21 @@
     }
   },
   {
-    "name": "terse comments that point somewhere and say little",
+    "name": "a specific fix wrapped in a jab at the author",
     "state": {
       "review": {
         "pr": "Move the invoice mailer to the queue",
         "comments": [
           {
             "file": "src/mail/invoice.ts",
-            "text": "Wrong layer."
+            "text": "Why is this here? This is the third pull request this month that puts queue logic in the mailer."
           },
           {
-            "file": "src/mail/queue.ts",
-            "text": "Same here."
+            "file": "src/mail/invoice.ts",
+            "text": "Move the enqueue into InvoiceService, like we agreed last time."
           }
         ],
-        "summary": "See comments."
+        "summary": "Requesting changes, see the comments."
       }
     },
     "expect": {

@@ -34,7 +34,7 @@ questions:
     instructions:
       question: "Does `task` call for somebody with specific expertise, such as security, databases, infrastructure or a regulated domain?"
       inspect: "`task.title`, `task.description` and `task.acceptance`"
-      focus: "Look for a field the task names where a generalist would be guessing."
+      focus: "Look for a field the task names where a generalist would be guessing. Using a database, a cache or a queue the team already runs is generalist work; designing, securing or operating one is specialist work."
     criteria:
       true:
         what: "The description or the acceptance names a field where a generalist would be guessing"
@@ -46,7 +46,7 @@ questions:
         what: "A competent generalist can finish it with what `task` says"
         examples:
           - "add a --json flag to the export command"
-          - "cache the product list"
+          - "cache the product list in memory or in the Redis the team already runs"
     verdict: { act: 0.85, mark: 0.7 }
   well_specified:
     type: noul

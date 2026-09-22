@@ -21,8 +21,8 @@ questions:
           - "The migration is yours: run it after the freeze"
           - "Could you send a corrected invoice?"
       fyi:
-        what: "Informs the recipient; nothing is asked of them"
-        not_for: "A message that ends with a question or an assignment, which belongs to needs_reply"
+        what: "Reports something finished, settled or on track; nothing is asked of the recipient and nothing in it is going wrong"
+        not_for: "A message that ends with a question or an assignment, which belongs to needs_reply, or a report of numbers or a service getting worse, which calls for the recipient to act even with no question in it"
         examples:
           - "Review complete, task approved."
           - "For your information: the deploy finished."
@@ -35,7 +35,7 @@ questions:
           - "Approve the budget for Q4?"
       escalation:
         what: "Raises a problem the sender cannot resolve and asks the recipient to step in"
-        not_for: "A routine report of metrics with no ask, which belongs to fyi"
+        not_for: "A report of work finished or settled, which belongs to fyi"
         examples:
           - "This is blocked for two days and I need a decision from you"
           - "Production is down and I cannot reach the owner"
@@ -72,8 +72,8 @@ questions:
     type: noul
     instructions:
       question: "Is `message.from` a customer of the recipient's organisation?"
-      inspect: "`message.from` and how `message.body` describes the sender"
-      focus: "A colleague, a manager or the owner of the organisation is not a customer."
+      compare: "the domain of `message.from` against the domain of `message.to`, and how `message.body` describes the sender"
+      focus: "A sender whose address shares the domain of `message.to` works in the organisation. A colleague, a manager or the owner of the organisation is not a customer."
     criteria:
       true:
         what: "The sender buys or uses the organisation's product and writes from outside it"
@@ -95,7 +95,7 @@ On every inbound message, in mail or chat, to sort what wants an answer from wha
 
 ## State
 
-`message`: `{ "channel": "email", "from": "...", "subject": "...", "body": "..." }`. Send the message as it arrived, sender address included, because `from_a_customer` reads it there.
+`message`: `{ "channel": "email", "from": "...", "to": "...", "subject": "...", "body": "..." }`. Send the message as it arrived, both addresses included, because `from_a_customer` holds the sender's domain against the recipient's.
 
 ## Verdicts
 

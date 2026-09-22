@@ -54,8 +54,22 @@
       }
     },
     "expect": {
-      "depth": null,
+      "depth": 2,
       "well_specified": false
+    }
+  },
+  {
+    "name": "a runtime upgrade across three services with no steps given",
+    "state": {
+      "task": {
+        "title": "Upgrade Node 18 to Node 22",
+        "description": "The billing, search and mailer services still run Node 18, which is out of support. Move them to Node 22.",
+        "acceptance": "All three services run Node 22 in production and their test suites pass."
+      }
+    },
+    "expect": {
+      "depth": null,
+      "well_specified": true
     }
   }
 ]
