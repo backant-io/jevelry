@@ -17,13 +17,13 @@
 
 You were probably asking a chat model to "return JSON" so your code could decide something: is this ticket urgent, which team gets it, is this return from the reviewer a real defect or just a formality. Then you parse the text, the parse breaks on a Tuesday, you add a retry, and you still have no idea how sure the model actually was.
 
-You don't have to do that anymore. We have built jevelry, a runtime for Jev, the decision model from TypeSafe. You hand it your state and a jevel, and it hands your code a verdict. No prompt, no JSON to parse, no guessing how confident the answer was.
+You don't have to do that anymore. We have built jevelry, a runtime for Jev, the decision model from TypeSafe. You hand it your state and a jevel, and it hands your code a verdict with the probability and the confidence behind it, so you can branch on it the way you would on any other value.
 
-Think of Jev as the colleague you ask a quick question and who answers with a number, and of jevelry as the jewelry box you keep those questions in. The questions are the jevels.
+Think of Jev as a colleague you ask one quick question and who answers with a number, and the jevels are the questions you keep ready for it.
 
 ## What is underneath
 
-Jev does not write text. It takes a state (a support ticket, a work report, the events that woke an employee) and typed questions, and it answers each one with calibrated probabilities. Three kinds of questions exist and that is on purpose:
+Jev takes a state (a support ticket, a work report, the events that woke an employee) and typed questions, and it answers each one with a calibrated probability. There are three kinds of questions:
 
 | Question | You ask | You get back |
 |---|---|---|
@@ -31,11 +31,11 @@ Jev does not write text. It takes a state (a support ticket, a work report, the 
 | `score` | how much, on your own levels | a value between the levels, a probability per level, a confidence |
 | `noul` | is this true | one probability, 0 to 1 |
 
-jevelry is everything around that call: it loads your jevel, checks the state before it costs you anything, asks all the questions in one request, turns every answer into a verdict, writes one JSON document to stdout and keeps a log so you can measure the answers later. It uses the official `@typesafe-ai/sdk` and never reads your key itself.
+jevelry is everything around that call: it loads your jevel, checks the state before it costs you anything, asks all the questions in one request, turns every answer into a verdict, writes one JSON document to stdout and keeps a log so you can measure the answers later. The official `@typesafe-ai/sdk` underneath reads your key and talks to the API.
 
 ## Free
 
-jevelry is free and MIT. TypeSafe charges per input token, 0.042 dollars per million at the time of writing, and output tokens are free. The reference ask in our live test (one question about one sentence) costs 307 input tokens.
+jevelry is free and MIT. TypeSafe charges per input token, 0.042 dollars per million, and output tokens are free. The reference ask in our live test (one question about one sentence) costs 307 input tokens.
 
 ## Start simple
 
@@ -44,7 +44,7 @@ Put your key in the environment and ask the jevel that ships with the package:
     export TYPESAFE_API_KEY=...
     npx jevelry ask wake-gate --state @state.json
 
-You get one document back and nothing else on stdout:
+You get one document back on stdout:
 
     {
       "protocol": 1,
@@ -61,7 +61,7 @@ You get one document back and nothing else on stdout:
       "usage": { "input_tokens": 615, "output_tokens": 77 }
     }
 
-That is a real answer from our live run, not a mock-up. Your code reads `verdict` and branches. The numbers stay in the document for the record.
+This is the answer from our live test. Your code reads `verdict` and decides what to do, and the probabilities are in the document if you want to apply your own rule.
 
 ## Jevels
 
@@ -93,7 +93,7 @@ Adding a use case is adding a folder. jevelry finds jevels in `--jevels <dir>`, 
     npx jevelry list
     npx jevelry show return-kind
 
-`check` refuses a jevel that would not work (too many options, a threshold outside 0 to 1, a question without instructions) and warns about the things Jev is known to answer badly: a yes/no question whose "yes" means no, a double negative, a model that is not pinned. Two jevels ship with the package, `wake-gate` and `return-kind`, so you have something to copy.
+`check` refuses a jevel the API would refuse anyway (more than 255 options, a threshold outside 0 to 1, a question without instructions) and warns you about the cases Jev handles poorly: a yes/no question whose "yes" means no, a double negative, a model that is not pinned. Two jevels ship with the package, `wake-gate` and `return-kind`, so you have something to copy.
 
 ## Verdicts
 
@@ -102,14 +102,14 @@ Every answer comes back with a `verdict`, and that is the part your code uses:
 | Verdict | Meaning | What your code usually does |
 |---|---|---|
 | `act` | Jev is sure enough, by the thresholds you set in the jevel | act on the answer |
-| `mark` | a reasonable answer, not a sure one | act and flag it for a person |
+| `mark` | a reasonable answer with less confidence behind it | act and flag it for a person |
 | `fall_back` | not sure | do what you did before jevelry existed |
 
 The thresholds live in the jevel, per question, so a question that skips an expensive step needs a higher bar than a question that only sorts a list. A yes/no question uses how far the probability is from 0.5, a choice or score uses the confidence Jev reports. If you want a different rule, the raw probabilities are in the document as well.
 
 ## Measure it
 
-Every ask is appended to `~/.jevelry/log.jsonl` with its answers and verdicts, never the state and never the key. When you later know what was actually true, you tell jevelry, and it tells you how often each question was right:
+Every ask is appended to `~/.jevelry/log.jsonl` with its answers, its verdicts and a hash of the state. When you later know what was actually true, you tell jevelry, and it tells you how often each question was right:
 
     npx jevelry outcome 505bc2df-dccd-4a2a-8986-2d54a2d3144f worth_a_turn no
     npx jevelry report --jevel wake-gate
@@ -119,7 +119,7 @@ Every ask is appended to `~/.jevelry/log.jsonl` with its answers and verdicts, n
     wake-gate  same_as       2     1    1     0          0         -           -            0.86
     wake-gate  worth_a_turn  1     0    1     0          1         -           100%         0.81
 
-After a few hundred asks that table is how you find out which thresholds to move and which question to rewrite, without guessing. For a question that repeats over a list, the answer key carries the index: `same_as[0]`.
+After a few hundred asks that table shows you which thresholds to move and which question to rewrite. For a question that repeats over a list, the answer key carries the index, so you write `same_as[0]`.
 
 ## When it fails
 
@@ -136,15 +136,15 @@ After a few hundred asks that table is how you find out which thresholds to move
 | 6 | the network or TypeSafe's servers |
 | 7 | TypeSafe answered a shape this build cannot read |
 
-jevelry does not generate text and has no fake mode, and this is intentional. Jev answers questions and nothing else, so the runtime around it should not pretend otherwise, and a test that talks to a fake would only prove the fake. The offline tests run against the SDK's own seam and recorded answers from the API reference; the live test runs against the real API when you give it a key. We are working on an authoring loop so you can try questions against a pasted state before you write the jevel.
+Currently jevelry asks Jev questions and hands you the answers, and that is the whole of it - this is intentional because Jev is built to answer, and in our own experience a small tool that does one thing is the one you can put in front of your own code and forget about. We are working on an authoring loop so you can try questions against a pasted state before you write the jevel.
 
 ## How do we know you can trust it
 
-111 tests run offline and never touch the API. 4 tests run against the real API on demand, `npm run test:live`, and the last run answered with `jev-1.13.0` in 2.49 seconds for three calls. The key never reaches stdout, stderr or the log, and one of the live tests checks exactly that.
+111 tests run offline against recorded answers from TypeSafe's API reference. 4 tests run against the real API on demand with `npm run test:live`, and the last run answered with `jev-1.13.0` in 2.49 seconds for three calls. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## Use it from code
 
-The CLI is the contract, but the same functions are exported if you prefer to stay in process:
+You can also import it and stay in process:
 
 ```ts
 import { ask, loadJevel, discoveryDirs } from "jevelry";
