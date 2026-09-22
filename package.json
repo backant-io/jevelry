@@ -9,6 +9,7 @@
     "build": "tsup",
     "pretest": "npm run build",
     "test": "vitest run",
+    "test:live": "npm run build && vitest run --config vitest.live.config.ts",
     "lint": "tsc --noEmit",
     "prepublishOnly": "npm run lint && npm run build"
   },

@@ -21,6 +21,10 @@ Node 20 or newer.
 
 `ask` prints one JSON document on stdout (`docs/protocol/ask.schema.json`): every answer carries the API's raw probabilities plus `certainty` and a `verdict` of `act`, `mark` or `fall_back` from the jevel's thresholds. On failure it prints an error document and exits 2 (bad jevel or state), 3 (rate limited or overloaded, with `retry_after_ms`), 4 (auth), 5 (over budget), 6 (transport) or 7 (an answer this build cannot read).
 
+## Live check
+
+`npm test` never reaches the API. `npm run test:live` does, with `TYPESAFE_API_KEY` in the environment: it lists the models, asks the reference noul and the shipped `wake-gate` jevel, and checks the log never holds the key. Without a key it skips itself.
+
 ## Jevels
 
 A jevel is a directory with one `JEVEL.md`: YAML frontmatter the runtime reads, a Markdown body people read. See `jevels/wake-gate/JEVEL.md` and the design (https://github.com/backant-io/jevlery/blob/main/docs/superpowers/specs/2026-09-22-jevlery-design.md). Jevels are found in `--jevels <dir>`, `JEVLERY_JEVELS` (colon-separated), `./jevels`, then `$JEVLERY_HOME/jevels`.
