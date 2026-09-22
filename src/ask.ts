@@ -15,7 +15,7 @@ import {
 } from "@typesafe-ai/sdk";
 import { checkBudgets } from "./budget.js";
 import { type Jevel, JevelError, checkState, expandQuestions } from "./jevel.js";
-import { type Answer, type AskDocument, EXIT, type ErrorBody, type ErrorCode, PROTOCOL } from "./protocol.js";
+import { type Answer, type AskDocument, EXIT, type ErrorBody, type ErrorCode, PROTOCOL, type Usage } from "./protocol.js";
 import { DEFAULT_THRESHOLDS, type Thresholds, certaintyOf, verdictOf } from "./verdict.js";
 
 /** Keys sorted at every level, no whitespace: the same state hashes the same however a host built it. */
@@ -43,15 +43,25 @@ export class UnreadableAnswer extends Error {
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
-const isProbabilities = (v: unknown): v is Record<string, number> => isRecord(v) && Object.values(v).every((n) => typeof n === "number");
 
-/** A noul and a confidence are probabilities. Out of range is a defect, never something to clamp. */
+/** A noul, a confidence and every entry of probabilities is a probability. Out of range is a defect, never something to clamp. */
 function probabilityOf(field: string, value: unknown): number {
   if (typeof value !== "number" || !(value >= 0 && value <= 1)) {
     throw new UnreadableAnswer(field, `${field} is not a probability in [0, 1]: ${String(value)}`);
   }
   return value;
 }
+
+/** A score and the usage counts are plain numbers, but never NaN or an infinity: JSON prints those as null. */
+function finiteOf(field: string, value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new UnreadableAnswer(field, `${field} is not a finite number: ${String(value)}`);
+  }
+  return value;
+}
+
+const probabilitiesOf = (field: string, raw: Record<string, unknown>): Record<string, number> =>
+  Object.fromEntries(Object.entries(raw).map(([key, value]) => [key, probabilityOf(`${field}.probabilities.${key}`, value)]));
 
 export function shapeAnswer(name: string, raw: unknown, thresholds: Thresholds): Answer {
   const field = `answers.${name}`;
@@ -62,22 +72,45 @@ export function shapeAnswer(name: string, raw: unknown, thresholds: Thresholds):
     return { type: "noul", noul, yes: noul >= 0.5, certainty, verdict: verdictOf(certainty, thresholds) };
   }
   if (raw.type === "choice") {
-    if (typeof raw.choice !== "string" || !isProbabilities(raw.probabilities)) {
+    if (typeof raw.choice !== "string" || !isRecord(raw.probabilities)) {
       throw new UnreadableAnswer(field, `${field} lacks choice or probabilities`);
     }
+    const probabilities = probabilitiesOf(field, raw.probabilities);
     const confidence = probabilityOf(`${field}.confidence`, raw.confidence);
     const certainty = certaintyOf({ type: "choice", confidence });
-    return { type: "choice", choice: raw.choice, probabilities: raw.probabilities, confidence, certainty, verdict: verdictOf(certainty, thresholds) };
+    return { type: "choice", choice: raw.choice, probabilities, confidence, certainty, verdict: verdictOf(certainty, thresholds) };
   }
   if (raw.type === "score") {
-    if (typeof raw.score !== "number" || !isRecord(raw.legend) || !isProbabilities(raw.probabilities)) {
-      throw new UnreadableAnswer(field, `${field} lacks score, legend or probabilities`);
+    if (!isRecord(raw.legend) || !isRecord(raw.probabilities)) {
+      throw new UnreadableAnswer(field, `${field} lacks legend or probabilities`);
     }
+    const score = finiteOf(`${field}.score`, raw.score);
+    const probabilities = probabilitiesOf(field, raw.probabilities);
     const confidence = probabilityOf(`${field}.confidence`, raw.confidence);
     const certainty = certaintyOf({ type: "score", confidence });
-    return { type: "score", score: raw.score, legend: raw.legend, probabilities: raw.probabilities, confidence, certainty, verdict: verdictOf(certainty, thresholds) };
+    return { type: "score", score, legend: raw.legend, probabilities, confidence, certainty, verdict: verdictOf(certainty, thresholds) };
   }
   throw new UnreadableAnswer(field, `${field} has a type this build does not know: ${String(raw.type)}`);
+}
+
+/**
+ * A 200 is still an unvalidated body: the SDK hands the parsed JSON straight through. Every key of the
+ * stdout document comes from it, so a missing one is exit 7 with the field named, never a silently
+ * dropped key or a V8 TypeError reported as transport.
+ */
+function readEnvelope(result: unknown): { model: string; answers: Record<string, unknown>; usage: Usage } {
+  const envelope = isRecord(result) ? result : {};
+  if (!isRecord(envelope.answers)) throw new UnreadableAnswer("answers", "the API answered 200 without an answers object");
+  if (typeof envelope.model !== "string") throw new UnreadableAnswer("model", "the API answered 200 without naming the model");
+  const usage = isRecord(envelope.usage) ? envelope.usage : {};
+  return {
+    model: envelope.model,
+    answers: envelope.answers,
+    usage: {
+      input_tokens: finiteOf("usage.input_tokens", usage.input_tokens),
+      output_tokens: finiteOf("usage.output_tokens", usage.output_tokens),
+    },
+  };
 }
 
 export interface AskInput {
@@ -114,10 +147,10 @@ export async function ask(input: AskInput): Promise<AskResult> {
       };
     }
     const model = input.model ?? input.jevel?.model;
-    const result = await input.client.systemOne(model === undefined ? { state: input.state, questions } : { state: input.state, questions, model });
+    const result = readEnvelope(await input.client.systemOne(model === undefined ? { state: input.state, questions } : { state: input.state, questions, model }));
     const answers: Record<string, Answer> = {};
     for (const name of Object.keys(questions)) {
-      const raw = (result.answers as Record<string, unknown>)[name];
+      const raw = result.answers[name];
       if (raw === undefined) throw new UnreadableAnswer(`answers.${name}`, `the API returned no answer named ${name}`);
       answers[name] = shapeAnswer(name, raw, thresholds[name] ?? DEFAULT_THRESHOLDS);
     }
@@ -128,7 +161,7 @@ export async function ask(input: AskInput): Promise<AskResult> {
       model: result.model,
       state_hash: stateHash(input.state),
       answers,
-      usage: { input_tokens: result.usage.input_tokens, output_tokens: result.usage.output_tokens },
+      usage: result.usage,
     };
     return { ok: true, document };
   } catch (error) {
@@ -142,8 +175,12 @@ function retryAfterMs(headers: Headers): number | undefined {
   if (ms !== null && /^\d+$/.test(ms.trim())) return Number(ms.trim());
   const after = headers.get("retry-after");
   if (after === null) return undefined;
-  if (/^\d+$/.test(after.trim())) return Number(after.trim()) * 1000;
-  const at = Date.parse(after);
+  const value = after.trim();
+  if (/^\d+$/.test(value)) return Number(value) * 1000;
+  // Only an HTTP date reaches Date.parse, and every HTTP date has a space and a comma in it.
+  // Without that gate `Date.parse("2.5")` reads as a year in 2001 and a garbage header becomes 0 ms.
+  if (!/[\s,]/.test(value)) return undefined;
+  const at = Date.parse(value);
   return Number.isNaN(at) ? undefined : Math.max(0, at - Date.now());
 }
 

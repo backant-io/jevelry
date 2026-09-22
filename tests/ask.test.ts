@@ -37,6 +37,20 @@ describe("ask with one-off questions", () => {
       expect(`${JSON.stringify(result.document, null, 2)}\n`).toBe(expected);
     });
   }
+  it("refuses a probability outside [0, 1] instead of passing it into the document", async () => {
+    const { fetch } = scriptedFetch([
+      () => jsonResponse(200, { ...CHOICE_BODY, answers: { department: { ...CHOICE_BODY.answers.department, probabilities: { billing: 1.5, technical: -0.5 } } } }),
+    ]);
+    const result = await ask({ client: client(fetch), state: REFERENCE_STATE, questions: CHOICE_QUESTIONS as never });
+    expect(result).toMatchObject({ ok: false, error: { exit: 7, code: "unreadable_answer", field: "answers.department.probabilities.billing" } });
+  });
+  it("refuses a non-finite score, which JSON prints as null", async () => {
+    // Number.NaN survives the fixture only as far as JSON.stringify, which puts `null` on the wire:
+    // exactly where the protocol declares a number, so the guard has to fire on it.
+    const { fetch } = scriptedFetch([() => jsonResponse(200, { ...SCORE_BODY, answers: { frustration: { ...SCORE_BODY.answers.frustration, score: Number.NaN } } })]);
+    const result = await ask({ client: client(fetch), state: REFERENCE_STATE, questions: SCORE_QUESTIONS as never });
+    expect(result).toMatchObject({ ok: false, error: { exit: 7, code: "unreadable_answer", field: "answers.frustration.score" } });
+  });
   it("refuses an empty question map before any call", async () => {
     const { fetch, calls } = scriptedFetch([]);
     const result = await ask({ client: client(fetch), state: "x", questions: {} });
@@ -117,6 +131,32 @@ describe("error mapping", () => {
     const { fetch } = scriptedFetch([() => jsonResponse(529, { error: "overloaded" }, { "retry-after-ms": "750" })]);
     const result = await ask({ client: client(fetch), state, questions });
     expect(result).toMatchObject({ ok: false, error: { exit: 3, code: "overloaded", retry_after_ms: 750 } });
+  });
+  it("ignores a Retry-After that is neither seconds nor an HTTP date, rather than reporting no delay as zero", async () => {
+    const { fetch } = scriptedFetch([() => jsonResponse(529, { error: "overloaded" }, { "retry-after": "2.5" })]);
+    const result = await ask({ client: client(fetch), state, questions });
+    expect(result).toEqual({ ok: false, error: { exit: 3, code: "overloaded", message: expect.stringContaining("529") } });
+  });
+  it("reads a Retry-After given as an HTTP date", async () => {
+    const at = new Date(Date.now() + 3000).toUTCString();
+    const { fetch } = scriptedFetch([() => jsonResponse(529, { error: "overloaded" }, { "retry-after": at })]);
+    const result = await ask({ client: client(fetch), state, questions });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.retry_after_ms).toBeGreaterThanOrEqual(0);
+    expect(result.error.retry_after_ms).toBeLessThanOrEqual(3000);
+  });
+  it("refuses a 200 whose envelope carries no answers", async () => {
+    const { fetch } = scriptedFetch([() => jsonResponse(200, { model: "jev-1.13.0", usage: { input_tokens: 1, output_tokens: 1 } })]);
+    expect(await ask({ client: client(fetch), state, questions })).toMatchObject({ ok: false, error: { exit: 7, code: "unreadable_answer", field: "answers" } });
+  });
+  it("refuses a 200 that names no model, rather than dropping the document's model key", async () => {
+    const { fetch } = scriptedFetch([() => jsonResponse(200, { answers: NOUL_BODY.answers, usage: NOUL_BODY.usage })]);
+    expect(await ask({ client: client(fetch), state, questions })).toMatchObject({ ok: false, error: { exit: 7, code: "unreadable_answer", field: "model" } });
+  });
+  it("refuses a 200 whose usage is missing a count", async () => {
+    const { fetch } = scriptedFetch([() => jsonResponse(200, { model: "jev-1.13.0", answers: NOUL_BODY.answers, usage: { input_tokens: 307 } })]);
+    expect(await ask({ client: client(fetch), state, questions })).toMatchObject({ ok: false, error: { exit: 7, code: "unreadable_answer", field: "usage.output_tokens" } });
   });
   it("maps 401 and 403 to auth", async () => {
     for (const status of [401, 403]) {
