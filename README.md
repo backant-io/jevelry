@@ -102,6 +102,27 @@ You get one document back on stdout:
 
 This is the answer from our live test. Your code reads `verdict` and decides what to do, and the probabilities are in the document if you want to apply your own rule.
 
+## Use it with your coding agent
+
+You probably want your coding agent to write the jevel and wire it in, and you review the questions. jevelry ships as a skill for that. Run this inside Claude Code, Codex, pi, opencode or Cursor, or in your terminal:
+
+    npx jevelry install
+
+It installs the skill into every agent it finds on your machine and asks for your TypeSafe key, which you can skip with Enter and add later. If you prefer the skills installer, `npx skills add backant-io/jevelry --skill jevelry` does the same for the agents it supports.
+
+Then talk to your agent the way you would to a colleague who has read the guide:
+
+    Using the jevelry skill, find the places in this project where we parse an LLM answer
+    or a fragile regex to make a decision, and propose a jevel for each one.
+
+    Using the jevelry skill, write a jevel that decides which team a support ticket goes to
+    and whether it is urgent, run check on it, and wire the verdicts into src/inbox.ts.
+
+    Using the jevelry skill, ask the ticket-triage jevel about twenty tickets from
+    fixtures/, then run report and propose thresholds.
+
+The skill tells the agent to keep every jevel in `./jevels/` and to leave the questions and thresholds for you to read, because that is the part worth your time. The guide the agent reads is in `skills/jevelry/references/writing-jevels.md` and works for people too.
+
 ## Jevels
 
 A jevel is a folder with one `JEVEL.md` in it, the same way a skill for your coding agent is a folder with one `SKILL.md`. The frontmatter is what jevelry reads, the body is what you and your agents read:
@@ -179,7 +200,7 @@ Currently jevelry asks Jev questions and hands you the answers, and that is the 
 
 ## How do we know you can trust it
 
-111 tests run offline against recorded answers from TypeSafe's API reference. 4 tests run against the real API on demand with `npm run test:live`, and the last run answered with `jev-1.13.0` in 3.49 seconds for four calls. One of those tests reads the log afterwards and checks that your key stays out of it.
+111 tests run offline against recorded answers from TypeSafe's API reference. 5 tests run against the real API on demand with `npm run test:live`, and the last run answered with `jev-1.13.0` in 3.49 seconds for four calls. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## Use it from code
 
@@ -193,7 +214,8 @@ import { ask, loadJevel, discoveryDirs } from "jevelry";
 
 | Variable | What it does | Default |
 |---|---|---|
-| `TYPESAFE_API_KEY` | your key, read by the SDK | required |
+| `TYPESAFE_API_KEY` | your key; read from the environment, then the keychain, then ~/.jevelry/env | required |
+| ~/.jevelry/env | a second place for the key, written by `jevelry install` | none |
 | `TYPESAFE_BASE_URL` | the API root, read by the SDK | `https://api.typesafe.ai` |
 | `JEVELRY_MODEL` | the model when a jevel pins none | the SDK default, `jev-latest` |
 | `JEVELRY_HOME` | where the log lives | `~/.jevelry` |

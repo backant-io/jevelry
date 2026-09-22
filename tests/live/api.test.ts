@@ -93,7 +93,7 @@ live("the real TypeSafe API", () => {
     for (const answer of Object.values(doc.answers)) expect(["act", "mark", "fall_back"]).toContain(answer.verdict);
   });
 
-  it("logged both asks and never the key", () => {
+  it("logged every ask and never the key", () => {
     const r = run(["report", "--json"]);
     expect(r.status).toBe(0);
     const rows = JSON.parse(r.stdout) as Array<{ jevel: string; question: string; asks: number }>;
