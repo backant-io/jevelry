@@ -338,8 +338,15 @@ Scripts: `build` (tsup), `test` (vitest run, after build), `lint` (tsc --noEmit)
   the stdout document validated against `docs/protocol/ask.schema.json`.
 - Protocol pin: the three examples under `docs/protocol/` are produced by the code from the
   recorded responses and compared byte for byte.
-- Tests never reach the real API. There is no fake mode in the product; the seam is the SDK's own
-  `fetch` option and the base URL.
+- `npm test` never reaches the real API. There is no fake mode in the product; the seam is the
+  SDK's own `fetch` option and the base URL.
+- Live: `npm run test:live` is the one suite that reaches TypeSafe, on demand, with
+  `TYPESAFE_API_KEY` in the environment (read from the owner's keychain inside the command, never
+  printed). It lists the models, asks the reference noul and the shipped `wake-gate` jevel,
+  validates the documents against the schema, asserts bounds rather than exact probabilities (an
+  alias moves), and checks the log never holds the key. Without a key it skips itself with one
+  stderr sentence. It is the acceptance run, and the answer to "the recorded bodies are claims
+  about the API, not the API".
 
 ## 13. Non-goals
 
