@@ -1,6 +1,8 @@
 # The jevels that ship with jevelry
 
-Sixteen decisions in general shapes, each with the questions, the thresholds and one `example.json` you can ask it with straight away:
+A jevel is a folder with one `JEVEL.md` in it, and it does one job: it turns a decision your code has to make about some text or record into a few typed questions for Jev, with the thresholds that say how sure the answer has to be before your code acts on it. You send the state the jevel names, jevelry asks every question in one request, and your code gets a verdict per question, `act`, `mark` or `fall_back`, next to the probabilities. So you have a file you can read, check, version and tune from the report, and the prompt and the parser are gone.
+
+Sixteen ship with the package, in general shapes, each with the questions, the thresholds and one `example.json` you can ask it with straight away:
 
     npx jevelry show ticket-triage
     npx jevelry ask ticket-triage --state @jevels/ticket-triage/example.json
