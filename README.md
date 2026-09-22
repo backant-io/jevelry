@@ -39,68 +39,18 @@ jevelry is free and MIT. TypeSafe charges per input token, 0.042 dollars per mil
 
 ## Start simple
 
-Put your key in the environment and ask one of the two jevels that ship with the package:
+Put your key in the environment and ask one of the jevels that ship with the package:
 
     export TYPESAFE_API_KEY=...
     npx jevelry ask ticket-triage --state @ticket.json
 
-You get one document back on stdout:
+You get one JSON document back with an answer per question, and the part your code reads is the verdict:
 
-    {
-      "protocol": 1,
-      "log_id": "becfc166-7921-4fe3-a189-4c2c5b164bce",
-      "jevel": {
-        "name": "ticket-triage",
-        "version": 1
-      },
-      "model": "jev-1.13.0",
-      "state_hash": "sha256:b883d3e23a85340c82fbc76833692e80c5e08f898de8d1d059849d5e29ad418b",
-      "answers": {
-        "team": {
-          "type": "choice",
-          "choice": "billing",
-          "probabilities": {
-            "account": 0,
-            "technical": 0,
-            "billing": 1,
-            "other": 0
-          },
-          "confidence": 1,
-          "certainty": 1,
-          "verdict": "act"
-        },
-        "urgent": {
-          "type": "noul",
-          "noul": 0.98,
-          "yes": true,
-          "certainty": 0.98,
-          "verdict": "act"
-        },
-        "frustration": {
-          "type": "score",
-          "score": 0.73,
-          "legend": {
-            "0": "calm: neutral or friendly wording",
-            "1": "frustrated: annoyed, repeats the problem, mentions earlier attempts",
-            "2": "very angry: threatens to leave, insults, or writes in capitals"
-          },
-          "probabilities": {
-            "0": 0.27,
-            "1": 0.73,
-            "2": 0
-          },
-          "confidence": 0.59,
-          "certainty": 0.59,
-          "verdict": "mark"
-        }
-      },
-      "usage": {
-        "input_tokens": 588,
-        "output_tokens": 77
-      }
-    }
+    "team":        { "choice": "billing",  "confidence": 1.0,  "verdict": "act"  }
+    "urgent":      { "noul": 0.98,         "yes": true,        "verdict": "act"  }
+    "frustration": { "score": 0.73,        "confidence": 0.59, "verdict": "mark" }
 
-This is the answer from our live test. Your code reads `verdict` and decides what to do, and the probabilities are in the document if you want to apply your own rule.
+Your code branches on `verdict`, and the probabilities are in the document if you want your own rule. The whole document, the `jq` one-liner, the TypeScript call and the report walkthrough are in [docs/examples.md](docs/examples.md).
 
 ## Use it with your coding agent
 
@@ -153,7 +103,7 @@ Adding a use case is adding a folder. jevelry finds jevels in `--jevels <dir>`, 
     npx jevelry list
     npx jevelry show ticket-triage
 
-`check` refuses a jevel the API would refuse anyway (more than 255 options, a threshold outside 0 to 1, a question without instructions) and warns you about the cases Jev handles poorly: a yes/no question whose "yes" means no, a double negative, a model that is not pinned. Two jevels ship with the package, `ticket-triage` for a support queue and `duplicate-issue` for a bug tracker, so you have something to copy.
+`check` refuses a jevel the API would refuse anyway (more than 255 options, a threshold outside 0 to 1, a question without instructions) and warns you about the cases Jev handles poorly: a yes/no question whose "yes" means no, a double negative, a model that is not pinned. Sixteen jevels ship with the package, from a support queue and a bug tracker to pull requests, logs, alerts and meeting notes; the list is in [jevels/README.md](jevels/README.md), so you always have something to copy.
 
 ## Verdicts
 

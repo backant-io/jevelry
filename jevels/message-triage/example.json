@@ -1,0 +1,8 @@
+{
+  "message": {
+    "channel": "email",
+    "from": "ops@northwind.example",
+    "subject": "Invoice 2026-0841 rejected by our finance system",
+    "body": "We have been on your Business plan since 2024 and our finance system rejected invoice 2026-0841 because the VAT number on it is our old one. Our payment run goes out on Friday and it will skip this invoice unless we have a corrected copy before then. Could you send one today?"
+  }
+}

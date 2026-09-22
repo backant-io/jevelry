@@ -1,0 +1,20 @@
+{
+  "review": {
+    "pr": "Retry failed webhook deliveries three times",
+    "comments": [
+      {
+        "file": "src/webhooks/retry.ts",
+        "text": "The backoff multiplies the delay by the attempt count, so the third attempt waits 15 minutes while the issue asks for 25. Worth matching the issue here, or changing the issue."
+      },
+      {
+        "file": "src/webhooks/retry.ts",
+        "text": "A delivery that is retried keeps its original timestamp, so the dashboard shows the first attempt as the delivery time. Support reads that column every day and it will mislead them."
+      },
+      {
+        "file": "tests/webhooks/retry.test.ts",
+        "text": "Could you add a case where the third attempt fails as well? That is the path support will see most often."
+      }
+    ],
+    "summary": "Read the retry path, the worker loop and the new tests, and ran the suite locally. Two things to fix before merge, both small, and the shape of the change looks right to me."
+  }
+}

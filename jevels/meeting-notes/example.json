@@ -1,0 +1,7 @@
+{
+  "notes": {
+    "title": "Pricing page rework, weekly sync",
+    "attendees": ["Ana", "Ben", "Chris"],
+    "body": "Ben wanted three tiers on the pricing page and Chris wanted two with an add-on. We went through the support tickets from the last quarter and agreed on two tiers plus an add-on, so that is settled. Ana writes the copy by Thursday. Ben updates the checkout flow for the add-on. Chris takes the question of what happens to customers on the old middle tier to the finance review next week, because the refund handling stayed open here."
+  }
+}

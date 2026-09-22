@@ -1,0 +1,12 @@
+{
+  "change": {
+    "title": "Charge in minor units everywhere",
+    "description": "The billing API took amounts as decimal strings and now takes integer minor units. The request field amount changes type and the decimal form is rejected with a 400. A migration rewrites the stored amounts in the payments table.",
+    "files": [
+      "src/payments/charge.ts",
+      "src/payments/schema.ts",
+      "migrations/2026-09-22-amounts-to-minor-units.sql",
+      "tests/payments/charge.test.ts"
+    ]
+  }
+}

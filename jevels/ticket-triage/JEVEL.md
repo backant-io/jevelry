@@ -39,7 +39,7 @@ On every new support ticket, before a person reads it, to put it in the right qu
 
 ## State
 
-`ticket`: `{ "subject": "...", "message": "...", "customer_since": "2024-03" }`. Send the ticket and nothing else from your database; the questions only read the subject and the message.
+`ticket`: `{ "subject": "...", "message": "...", "customer_since": "2024-03" }`. Send the ticket only; the questions read the subject and the message.
 
 ## Verdicts
 
@@ -48,4 +48,4 @@ On every new support ticket, before a person reads it, to put it in the right qu
 
 ## Example
 
-`{ "ticket": { "subject": "Charged twice", "message": "I was charged twice for order A-104 and I need this fixed today, my accountant is waiting." } }` answers `team` = `billing`, `urgent` yes, `frustration` around level 1.
+`{ "ticket": { "subject": "Charged twice", "message": "I was charged twice for order A-104 and I need this fixed today, my accountant is waiting.", "customer_since": "2024-03" } }` answers `team` = `billing`, `urgent` yes, `frustration` around level 1.

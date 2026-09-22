@@ -1,0 +1,6 @@
+{
+  "issue": {
+    "title": "Retry failed webhook deliveries three times",
+    "body": "Today a webhook delivery that gets a 5xx is dropped and the customer never sees the event. Retry a failed delivery after 1, 5 and 25 minutes, and mark it failed after the third attempt. Scope is the outbound webhook worker in src/webhooks; inbound handling stays as it is. Done when a delivery that fails twice and succeeds on the third attempt is recorded as delivered, a delivery that fails three times is recorded as failed, and both cases are covered by tests."
+  }
+}

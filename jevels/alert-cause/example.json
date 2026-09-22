@@ -1,0 +1,21 @@
+{
+  "alert": {
+    "name": "checkout-api 5xx rate above 5%",
+    "service": "checkout-api",
+    "started_at": "2026-09-22T14:04:00Z",
+    "detail": "5xx responses rose from 0.2% to 7.1% within two minutes, and every failing response comes from the /charge endpoint."
+  },
+  "recent_changes": [
+    {
+      "at": "2026-09-22T13:58:00Z",
+      "kind": "deploy",
+      "what": "checkout-api v2.31.0, which rewrote the retry handling in the charge path"
+    },
+    {
+      "at": "2026-09-21T09:10:00Z",
+      "kind": "config",
+      "what": "raised the log level on the search service to debug"
+    }
+  ],
+  "open_incidents": []
+}

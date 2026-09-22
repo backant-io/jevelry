@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -210,7 +210,7 @@ export function buildProgram(): Command {
 
   program
     .command("show <jevel>")
-    .description("the resolved frontmatter as JSON, then the body")
+    .description("the resolved frontmatter as JSON, then the body, then the example state when the jevel ships one")
     .option("--jevels <dir>", "a jevels directory searched first (repeatable)", (d: string, all: string[]) => [...all, d], [] as string[])
     .action((name: string, opts: { jevels: string[] }) => {
       try {
@@ -218,6 +218,10 @@ export function buildProgram(): Command {
         for (const warning of warnings) say(`warning: ${warning}`);
         const { body, ...frontmatter } = jevel;
         process.stdout.write(`${JSON.stringify(frontmatter, null, 2)}\n---\n${body}`);
+        // The example state is the jevel's own fixture: it is what `check` cannot tell you, one
+        // state the body's Example section names the answers for, so `show` hands it over too.
+        const example = join(dirname(jevel.path), "example.json");
+        if (existsSync(example)) process.stdout.write(`--- example.json\n${readFileSync(example, "utf8")}`);
       } catch (error) {
         failCommand(error);
       }

@@ -4,7 +4,7 @@ You were probably about to write a prompt that says "answer with JSON" and hope 
 
 ## What a jevel is
 
-A jevel is a folder with one `JEVEL.md` in it. The frontmatter at the top is what jevelry reads, and the body under it is what you and your agents read when you come back to it in three months. The fastest way to start is to copy one of the two that ship with the package and change it:
+A jevel is a folder with one `JEVEL.md` in it. The frontmatter at the top is what jevelry reads, and the body under it is what you and your agents read when you come back to it in three months. The fastest way to start is to copy the nearest of the sixteen that ship with the package and change it:
 
     npx jevelry show ticket-triage
 

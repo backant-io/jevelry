@@ -1,0 +1,8 @@
+{
+  "comment": {
+    "author": "priya",
+    "text": "This divides by the item count before checking whether the list is empty, so an empty batch throws here. Please move the guard above the division before this goes in.",
+    "file": "src/billing/average.ts",
+    "snippet": "const average = total / items.length;"
+  }
+}
