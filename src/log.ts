@@ -51,11 +51,18 @@ export async function readLog(home: string): Promise<LogLine[]> {
   const lines: LogLine[] = [];
   text.split("\n").forEach((raw, index) => {
     if (raw.trim() === "") return;
+    let parsed: unknown;
     try {
-      lines.push(JSON.parse(raw) as LogLine);
+      parsed = JSON.parse(raw);
     } catch {
       process.stderr.write(`jevlery: skipped line ${index + 1} of ${LOG_FILE}: not JSON\n`);
+      return;
     }
+    if (typeof parsed !== "object" || parsed === null) {
+      process.stderr.write(`jevlery: skipped line ${index + 1} of ${LOG_FILE}: not a log line\n`);
+      return;
+    }
+    lines.push(parsed as LogLine);
   });
   return lines;
 }

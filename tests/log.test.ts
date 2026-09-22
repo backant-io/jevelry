@@ -1,7 +1,7 @@
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { type AskLine, appendLine, findAsk, jevleryHome, outcomeOf, readLog } from "../src/log.js";
 
 const ask: AskLine = {
@@ -41,7 +41,28 @@ describe("append and read", () => {
     const home = mkdtempSync(join(tmpdir(), "jevlery-"));
     expect(await readLog(home)).toEqual([]);
     writeFileSync(join(home, "log.jsonl"), `${JSON.stringify(ask)}\nnot json\n`);
-    expect(await readLog(home)).toHaveLength(1);
+    const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      expect(await readLog(home)).toHaveLength(1);
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(write).toHaveBeenCalledWith("jevlery: skipped line 2 of log.jsonl: not JSON\n");
+    } finally {
+      write.mockRestore();
+    }
+  });
+  it("skips a JSON line that is not an object, so findAsk cannot crash on it", async () => {
+    const home = mkdtempSync(join(tmpdir(), "jevlery-"));
+    writeFileSync(join(home, "log.jsonl"), `${JSON.stringify(ask)}\nnull\n`);
+    const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      const lines = await readLog(home);
+      expect(lines).toHaveLength(1);
+      expect(findAsk(lines, ask.id)?.model).toBe("jev-1.13.0");
+      expect(write).toHaveBeenCalledTimes(1);
+      expect(write).toHaveBeenCalledWith("jevlery: skipped line 2 of log.jsonl: not a log line\n");
+    } finally {
+      write.mockRestore();
+    }
   });
 });
 
