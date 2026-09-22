@@ -118,23 +118,23 @@
     }
   },
   {
-    "name": "an error rate above normal next to a question about next week's rota",
+    "name": "a database lag outside the person's area and a bare ping",
     "state": {
       "person": {
-        "name": "Ana",
-        "role": "on-call engineer",
-        "focus": "writing the postmortem for yesterday's outage"
+        "name": "Tom",
+        "role": "frontend engineer",
+        "focus": "building the new settings page"
       },
       "notifications": [
         {
           "from": "the monitoring",
-          "about": "search-api error rate 1.8%",
-          "text": "The error rate on search-api has sat between 1.5% and 2% for 30 minutes. It usually runs at 0.5%."
+          "about": "orders-db replica lag 40s",
+          "text": "Replication lag on the orders-db replica is 40 seconds."
         },
         {
-          "from": "Priya in chat",
+          "from": "Jonas in chat",
           "about": "Direct message",
-          "text": "When you have a minute, can we talk about the on-call rota for next week?"
+          "text": "ping"
         }
       ]
     },

@@ -30,8 +30,8 @@ questions:
     type: choice
     instructions:
       question: "How should `person` handle `notifications` as a batch?"
-      inspect: "`from`, `about` and `text` of every entry in `notifications`"
-      focus: "The notification that asks the most of the person decides the lane for the whole batch."
+      inspect: "`from`, `about` and `text` of every entry in `notifications`, and `person.role`"
+      focus: "The notification that asks the most of the person decides the lane for the whole batch. Hold each notification against `person.role`: an alert waits on the person when it is about work their role covers."
     criteria:
       act_now:
         what: "Something waits on the person now: a notification names something broken, a deadline today, or somebody blocked until the person answers"
