@@ -1,0 +1,46 @@
+[
+  {
+    "name": "duplicate charge with a deadline this afternoon",
+    "state": {
+      "ticket": {
+        "subject": "Charged twice for invoice 8841",
+        "message": "Invoice 8841 was charged twice on Tuesday. Could you refund the duplicate today? My accountant closes the books this afternoon.",
+        "customer_since": "2024-03"
+      }
+    },
+    "expect": { "team": "billing", "urgent": true, "frustration": 0 }
+  },
+  {
+    "name": "export returns a 500 and the reporter is in no hurry",
+    "state": {
+      "ticket": {
+        "subject": "CSV export fails in Safari",
+        "message": "The CSV export on the reports page returns a 500 in Safari 17. Chrome downloads the file fine. Have a look whenever you get to it.",
+        "customer_since": "2023-11"
+      }
+    },
+    "expect": { "team": "technical", "urgent": false, "frustration": 0 }
+  },
+  {
+    "name": "fourth mail about a team locked out since this morning",
+    "state": {
+      "ticket": {
+        "subject": "Password reset mail still missing",
+        "message": "Fourth time I am writing about this. The password reset mail for admin@northwind.example still has not arrived, and my whole team has been locked out of the dashboard since this morning.",
+        "customer_since": "2022-06"
+      }
+    },
+    "expect": { "team": "account", "urgent": true, "frustration": 1 }
+  },
+  {
+    "name": "a declined card and a locked admin panel in one message",
+    "state": {
+      "ticket": {
+        "subject": "Cannot get in",
+        "message": "I cannot get into the admin panel and the plan page says my card was declined. Which of the two do I fix first?",
+        "customer_since": "2025-01"
+      }
+    },
+    "expect": { "team": null }
+  }
+]

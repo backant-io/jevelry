@@ -1,0 +1,62 @@
+[
+  {
+    "name": "safari export report against an export bug and a dark mode bug",
+    "state": {
+      "issue": {
+        "title": "Export button does nothing on Safari",
+        "body": "Clicked Export on the reports page in Safari 17. The page stayed still and no file arrived. Expected a CSV download."
+      },
+      "candidates": [
+        {
+          "title": "CSV export finishes with no download in Safari 17",
+          "body": "The CSV export on /reports completes with no file on Safari 17.2. Chrome downloads it."
+        },
+        {
+          "title": "Dark mode labels unreadable on the settings page",
+          "body": "In dark mode the labels on the settings page are grey on grey."
+        }
+      ]
+    },
+    "expect": { "same_as[0]": true, "same_as[1]": false, "actionable": true }
+  },
+  {
+    "name": "a one line slowness report against two unrelated issues",
+    "state": {
+      "issue": {
+        "title": "App is slow",
+        "body": "Everything has been slow since the update."
+      },
+      "candidates": [
+        {
+          "title": "Invoice PDF misses the tax line",
+          "body": "The generated invoice PDF leaves the VAT line out for customers in the EU."
+        },
+        {
+          "title": "Add a dark theme to the mobile app",
+          "body": "Asking for a dark theme on iOS, the white background is hard on the eyes at night."
+        }
+      ]
+    },
+    "expect": { "same_as[0]": false, "same_as[1]": false, "actionable": false }
+  },
+  {
+    "name": "a login redirect against a session that drops mid-use",
+    "state": {
+      "issue": {
+        "title": "Login redirects back to the login page",
+        "body": "Submitted the password on Chrome 128 and the browser returned to the login form. Expected the dashboard."
+      },
+      "candidates": [
+        {
+          "title": "Session drops after a few minutes",
+          "body": "Users are sent back to the login form in the middle of a session on Chrome, roughly every five minutes."
+        },
+        {
+          "title": "Search returns an empty list for tags",
+          "body": "Searching by tag on the issues page returns nothing, while the same tag filter in the sidebar works."
+        }
+      ]
+    },
+    "expect": { "same_as[0]": null, "same_as[1]": false }
+  }
+]
