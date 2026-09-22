@@ -88,6 +88,54 @@ describe("parseJevel", () => {
     );
     expect(warnings.some((w) => w.includes("double negative"))).toBe(true);
   });
+  const structured = (question: string) =>
+    parseJevel(minimal(`name: t\nversion: 1\nmodel: jev-1.13.0\nquestions:\n  q: ${question}`), "t").warnings;
+  const differingFields = (warnings: string[]) =>
+    warnings.filter((w) => w.startsWith("questions.q.criteria: structured entries use different fields"));
+
+  it("warns when two choice options describe themselves with different fields", () => {
+    const warnings = differingFields(
+      structured(
+        `{ type: choice, instructions: "Which?", criteria: { a: { what: "A", not_for: "B" }, b: { what: "B" } } }`,
+      ),
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("(not_for,what vs what)");
+  });
+  it("is silent when every choice option carries the same fields", () => {
+    expect(
+      differingFields(
+        structured(
+          `{ type: choice, instructions: "Which?", criteria: { a: { what: "A", not_for: "B" }, b: { what: "B", not_for: "A" } } }`,
+        ),
+      ),
+    ).toEqual([]);
+  });
+  it("is silent when every entry is a plain string, and on an option described as null", () => {
+    expect(differingFields(structured(`{ type: choice, instructions: "Which?", criteria: { a: "A", b: "BB" } }`))).toEqual([]);
+    expect(
+      differingFields(
+        structured(`{ type: choice, instructions: "Which?", criteria: { a: { what: "A" }, b: null, c: { what: "C" } } }`),
+      ),
+    ).toEqual([]);
+  });
+  it("warns when a noul describes true and false with different fields", () => {
+    const warnings = differingFields(
+      structured(
+        `{ type: noul, instructions: "Is it?", criteria: { true: { what: "Yes", examples: ["y"] }, false: { what: "No" } } }`,
+      ),
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("(examples,what vs what)");
+  });
+  it("warns when one score level is a string among structured levels", () => {
+    const warnings = differingFields(
+      structured(`{ type: score, instructions: "How much?", criteria: [{ what: "Low" }, "middling", { what: "High" }] }`),
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("(what vs (string))");
+  });
+
   it("warns on a missing conventional heading and on an unpinned model", () => {
     const { warnings } = parseJevel(`---\nname: t\nversion: 1\nquestions:\n  q: { type: noul, instructions: "Is it?" }\n---\n## When to use\n`, "t");
     expect(warnings.filter((w) => w.includes("heading"))).toHaveLength(3);

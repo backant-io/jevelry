@@ -139,11 +139,37 @@ function questionOf(id: string, raw: unknown, jevelVerdict: Partial<Thresholds>)
   return question;
 }
 
+/** The criteria entries Jev sees side by side: one per option, per level, or the two noul sides. */
+function criteriaEntries(q: JevelQuestion): unknown[] {
+  if (q.type === "choice") return isRecord(q.criteria) ? Object.values(q.criteria) : [];
+  if (q.type === "score") return Array.isArray(q.criteria) ? q.criteria : [];
+  return isRecord(q.criteria) ? [q.criteria.true, q.criteria.false] : [];
+}
+
+/** How one entry reads: its field names, or that it carries no fields at all. `null` is skipped. */
+function fieldsOf(entry: unknown): string | null {
+  if (isRecord(entry)) return Object.keys(entry).sort().join(",");
+  if (typeof entry === "string") return "(string)";
+  return null;
+}
+
 function warningsOf(jevel: Jevel): string[] {
   const warnings: string[] = [];
   for (const [id, q] of Object.entries(jevel.questions)) {
     if (q.type === "noul" && isRecord(q.criteria) && typeof q.criteria.true === "string" && NEGATION_FIRST_WORD.test(q.criteria.true)) {
       warnings.push(`questions.${id}.criteria.true reads as a negation; a noul answers best when true means yes`);
+    }
+    // One structured entry among the others means Jev compares a labelled entry with an unlabelled
+    // one, and a field one entry carries alone reads as a property only that entry can have.
+    const fields = criteriaEntries(q).map(fieldsOf).filter((f): f is string => f !== null);
+    const first = fields[0];
+    if (first !== undefined && fields.some((f) => f !== "(string)")) {
+      const other = fields.find((f) => f !== first);
+      if (other !== undefined) {
+        warnings.push(
+          `questions.${id}.criteria: structured entries use different fields (${first} vs ${other}); Jev reads them side by side, so give every entry the same fields`,
+        );
+      }
     }
     const text = typeof q.instructions === "string" ? q.instructions : JSON.stringify(q.instructions);
     if (DOUBLE_NEGATIVE.test(text)) warnings.push(`questions.${id}.instructions may contain a double negative; ask it the direct way`);
