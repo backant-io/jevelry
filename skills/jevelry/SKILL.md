@@ -45,7 +45,7 @@ Jevels are found in `--jevels <dir>`, then `JEVELRY_JEVELS` (colon separated), t
 
 ## Write a jevel
 
-Read `references/writing-jevels.md` before you write one; it is the whole method. The short version: copy a shipped jevel (`npx jevelry show ticket-triage`), pick the question type from the shape of the decision (`choice` for one of a set, `score` for a level, `noul` for yes or no), write the exact condition and point it at the state with a backticked path, put the boundary cases and an `other` option in the criteria, name the state keys in `state.required`, set `act` and `mark` by what a wrong answer costs, and run `check` until it prints 0 warnings.
+Read `references/writing-jevels.md` before you write one; it is the whole method. The short version: copy a shipped jevel (`npx jevelry show ticket-triage`), the catalogue is `jevels/README.md`, pick the question type from the shape of the decision (`choice` for one of a set, `score` for a level, `noul` for yes or no), write the exact condition and point it at the state with a backticked path, put the boundary cases and an `other` option in the criteria, name the state keys in `state.required`, set `act` and `mark` by what a wrong answer costs, and run `check` until it prints 0 warnings.
 
 ## Wire the answer in
 
