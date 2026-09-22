@@ -1,0 +1,99 @@
+[
+  {
+    "name": "a deploy four minutes before a 5xx spike on orders-api",
+    "state": {
+      "alert": {
+        "name": "orders-api 5xx rate above 5%",
+        "service": "orders-api",
+        "started_at": "2026-09-22T10:41:00Z",
+        "detail": "5xx responses rose from 0.3% to 6.8% in two minutes, and every failing response comes from POST /orders."
+      },
+      "recent_changes": [
+        {
+          "at": "2026-09-22T10:37:00Z",
+          "when": "four minutes before the alert",
+          "kind": "deploy",
+          "what": "orders-api v6.4.0, which rewrote the validation on POST /orders"
+        },
+        {
+          "at": "2026-09-20T11:00:00Z",
+          "when": "two days before the alert",
+          "kind": "config",
+          "what": "raised the log level on the search service to debug"
+        }
+      ],
+      "open_incidents": []
+    },
+    "expect": {
+      "cause": "code_change",
+      "actionable": true,
+      "same_as_open_incident": false
+    }
+  },
+  {
+    "name": "the payment provider status page reports an outage and nothing shipped",
+    "state": {
+      "alert": {
+        "name": "payments-worker charge attempts failing",
+        "service": "payments-worker",
+        "started_at": "2026-09-22T09:12:00Z",
+        "detail": "Every charge attempt since 09:12 comes back as a 503 from the payment provider, whose status page reports degraded card processing. Our own endpoints answer normally."
+      },
+      "recent_changes": []
+    },
+    "expect": {
+      "cause": "external_dependency",
+      "actionable": true,
+      "same_as_open_incident": false
+    }
+  },
+  {
+    "name": "a monitor fired with a threshold and nothing else in the line",
+    "state": {
+      "alert": {
+        "name": "Monitor 412 triggered",
+        "service": "payments-web",
+        "started_at": "2026-09-22T03:40:00Z",
+        "detail": "The value on monitor 412 crossed the configured limit."
+      },
+      "recent_changes": [],
+      "open_incidents": []
+    },
+    "expect": {
+      "cause": "unknown",
+      "actionable": false,
+      "same_as_open_incident": false
+    }
+  },
+  {
+    "name": "a provider routing event and packet loss on our own path, with the incident open",
+    "state": {
+      "alert": {
+        "name": "checkout-web page loads timing out",
+        "service": "checkout-web",
+        "started_at": "2026-09-22T16:20:00Z",
+        "detail": "A third of page loads time out before the first byte, and the ones that answer are normal. Our own network monitor shows 4% packet loss between the load balancer and the origin in the same window. The CDN provider status page reports a routing event in the region that serves these loads."
+      },
+      "recent_changes": [
+        {
+          "at": "2026-09-21T09:10:00Z",
+          "when": "the day before the alert",
+          "kind": "config",
+          "what": "raised the log level on the search service to debug"
+        }
+      ],
+      "open_incidents": [
+        {
+          "name": "checkout-web page load timeouts",
+          "service": "checkout-web",
+          "started_at": "2026-09-22T16:08:00Z",
+          "detail": "Page loads on checkout-web timing out before the first byte, under investigation."
+        }
+      ]
+    },
+    "expect": {
+      "cause": null,
+      "same_as_open_incident": true
+    }
+  }
+]

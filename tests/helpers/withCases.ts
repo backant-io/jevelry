@@ -5,7 +5,17 @@ import { join } from "node:path";
  * The shipped jevels that carry a `cases.json`. The offline suite holds this list to the folders on
  * disk, and the live suite asks every case in it. Once every jevel has cases the constant goes away.
  */
-export const WITH_CASES = ["duplicate-issue", "ticket-triage"];
+export const WITH_CASES = [
+  "alert-cause",
+  "change-risk",
+  "checklist-compliance",
+  "duplicate-issue",
+  "escalation-route",
+  "issue-readiness",
+  "log-triage",
+  "meeting-notes",
+  "ticket-triage",
+];
 
 /** One realistic state, and what a correct answer to it looks like question by question. */
 export interface Case {

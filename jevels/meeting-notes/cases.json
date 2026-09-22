@@ -1,0 +1,77 @@
+[
+  {
+    "name": "a retro that agreed the standup time and handed out every action",
+    "state": {
+      "notes": {
+        "title": "Sprint 34 retro",
+        "attendees": [
+          "Ana",
+          "Ben",
+          "Chris"
+        ],
+        "body": "Everybody was happy to move the standup to 09:30 from Monday, and that is settled. Actions: Ana updates the calendar invite, Ben writes the new time into the team handbook, Chris tells the two people who were away today. We went through the three points on the list and closed each one, so there is nothing to carry into another round."
+      }
+    },
+    "expect": {
+      "decision_reached": true,
+      "owners_assigned": true,
+      "follow_up_needed": false,
+      "tone": 0
+    }
+  },
+  {
+    "name": "a deploy window left open, with one action nobody took",
+    "state": {
+      "notes": {
+        "title": "Deploy window, weekly sync",
+        "attendees": [
+          "Dana",
+          "Eli",
+          "Fay"
+        ],
+        "body": "Dana wants the deploy window on Tuesday morning and Eli wants it on Thursday night because of the support load. We looked at the ticket numbers for both days and read them differently. We are leaning towards Thursday and will confirm next week once Fay has the support figures. Actions: Fay brings the support figures on Monday, and somebody still has to tell the customers about the change, we will see who takes that."
+      }
+    },
+    "expect": {
+      "decision_reached": false,
+      "owners_assigned": false,
+      "follow_up_needed": true,
+      "tone": 1
+    }
+  },
+  {
+    "name": "a planning call that ended with the two of them apart on the date",
+    "state": {
+      "notes": {
+        "title": "Migration date, planning call",
+        "attendees": [
+          "Gus",
+          "Priya"
+        ],
+        "body": "Gus called the March date unworkable and said the team has been handed a plan it cannot deliver. Priya refused to sign off on April and said the commitment to the customer is already out. Neither of them moved, and the call ended with the two of them apart on the date. Actions: Gus writes his objection down for the steering group on Friday."
+      }
+    },
+    "expect": {
+      "decision_reached": false,
+      "owners_assigned": true,
+      "follow_up_needed": true,
+      "tone": 2
+    }
+  },
+  {
+    "name": "the second layout is being built and the notes call it nothing",
+    "state": {
+      "notes": {
+        "title": "Pricing page, quick sync",
+        "attendees": [
+          "Ana",
+          "Ben"
+        ],
+        "body": "We went through the two layouts. Ben is building the second one this week so the sales team can see it on Friday. Ana keeps the first one in the file. Nobody asked for another round on the first layout."
+      }
+    },
+    "expect": {
+      "decision_reached": null
+    }
+  }
+]
