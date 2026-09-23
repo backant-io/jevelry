@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { constants, tmpdir } from "node:os";
 import { join } from "node:path";
 import { UnreadableAnswer } from "./ask.js";
 import { decisionOf, mergeThresholds } from "./decision.js";
@@ -74,18 +74,20 @@ export function planCall(jevel: Jevel, answers: Answers | null): Call {
  * `JEVELRY_STATE` names, removed afterwards. The command's output goes to stderr, so a caller's stdout
  * stays one document.
  */
-export async function execute(command: string, state: unknown, meta: { decision: Decision; option: string | null; logId: string | null }): Promise<{ exit: number; ms: number }> {
+export async function execute(command: string, state: unknown, meta: { decision: Decision; option: string | null; logId: string | null }): Promise<{ exit: number; ms: number; signal?: string }> {
   const dir = mkdtempSync(join(tmpdir(), "jevelry-state-"));
   const file = join(dir, "state.json");
   const json = JSON.stringify(state);
   writeFileSync(file, json, { mode: 0o600 });
   const started = Date.now();
+  // A jevel command is arbitrary shell, so it gets the environment minus the TypeSafe key.
+  const { TYPESAFE_API_KEY: _key, ...env } = process.env;
   try {
-    const exit = await new Promise<number>((resolve, reject) => {
+    const { exit, signal } = await new Promise<{ exit: number; signal?: string }>((resolve, reject) => {
       const child = spawn("/bin/sh", ["-c", command], {
         cwd: process.cwd(),
         stdio: ["pipe", "pipe", "pipe"],
-        env: { ...process.env, JEVELRY_STATE: file, JEVELRY_DECISION: meta.decision, JEVELRY_OPTION: meta.option ?? "", JEVELRY_LOG_ID: meta.logId ?? "" },
+        env: { ...env, JEVELRY_STATE: file, JEVELRY_DECISION: meta.decision, JEVELRY_OPTION: meta.option ?? "", JEVELRY_LOG_ID: meta.logId ?? "" },
       });
       child.stdout.on("data", (chunk: Buffer) => process.stderr.write(chunk));
       child.stderr.on("data", (chunk: Buffer) => process.stderr.write(chunk));
@@ -93,9 +95,10 @@ export async function execute(command: string, state: unknown, meta: { decision:
       child.stdin.on("error", () => undefined);
       child.stdin.end(json);
       child.on("error", reject);
-      child.on("close", (code, signal) => resolve(code ?? (signal ? 128 : 1)));
+      // Killed by a signal: the shell's convention, 128 plus the signal number, and the name for the log.
+      child.on("close", (code, sig) => resolve(sig ? { exit: 128 + (constants.signals[sig] ?? 0), signal: sig } : { exit: code ?? 1 }));
     });
-    return { exit, ms: Date.now() - started };
+    return { exit, ms: Date.now() - started, ...(signal ? { signal } : {}) };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -56,7 +56,8 @@
         "decision": { "$ref": "#/definitions/decision" },
         "exit": { "type": ["integer", "null"] },
         "ms": { "type": ["integer", "null"], "minimum": 0 },
-        "confirmed": { "type": ["boolean", "null"] }
+        "confirmed": { "type": ["boolean", "null"] },
+        "signal": { "type": "string" }
       }
     },
     "answers": {

@@ -168,7 +168,7 @@ export function otherValues(a: Answer): string[] {
 function runLine(r: RunLine): string {
   const what = r.command ?? "a handler in the program";
   const confirmed = r.confirmed === null ? "" : r.confirmed ? ", confirmed" : ", not confirmed";
-  const result = r.exit !== null ? `exit ${r.exit} in ${r.ms} ms` : r.ms !== null ? `took ${r.ms} ms` : "did not run";
+  const result = r.exit !== null ? `exit ${r.exit}${r.signal ? ` (${r.signal})` : ""} in ${r.ms} ms` : r.ms !== null ? `took ${r.ms} ms` : "did not run";
   return `run: ${r.option ?? "fall_back"}: ${what}, ${result}${confirmed}`;
 }
 

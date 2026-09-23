@@ -200,7 +200,10 @@ export function buildProgram(): Command {
             say(`Jev picked ${call.option} at ${call.certainty.toFixed(2)}, which is a mark, so nothing ran; run again with --yes to run: ${call.command}`);
             exit = EXIT.not_confirmed;
           } else {
-            ({ exit: run.exit, ms: run.ms } = await execute(call.command, state, { decision: call.decision, option: call.option, logId }));
+            const done = await execute(call.command, state, { decision: call.decision, option: call.option, logId });
+            run.exit = done.exit;
+            run.ms = done.ms;
+            if (done.signal) run.signal = done.signal;
             exit = run.exit!;
           }
           if (logId !== null) await logRun(home(), logId, run, warn);

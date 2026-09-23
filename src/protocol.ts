@@ -100,4 +100,6 @@ export interface RunReport {
   ms: number | null;
   /** On mark: whether a person, `--yes` or `confirm` said yes. Null when nobody was asked. */
   confirmed: boolean | null;
+  /** Set only when a signal killed the command, for example `SIGTERM`; `exit` is then 128 plus its number. */
+  signal?: string;
 }

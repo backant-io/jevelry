@@ -59,6 +59,7 @@ plus the fields of its own type.
 | `exit` | integer or null | the command's exit code, null when it did not run |
 | `ms` | integer or null | how long the command ran |
 | `confirmed` | boolean or null | on `mark`, whether a person or `--yes` said yes; null when nobody was asked |
+| `signal` | string | only when a signal stopped the command, like `SIGTERM`, and `exit` is then 128 plus its number |
 
 The exit code of `jevelry run` is the command's own exit code when a command ran, 0 when nothing needed to run, and 9 (`not_confirmed`) when the call was a `mark` that nobody confirmed. When Jev cannot answer, the jevel's `fall_back` command runs first and the exit code is the error's code.
 

@@ -9,7 +9,7 @@ import { jevel } from "../src/decide.js";
 import { JevelError, parseJevel } from "../src/jevel.js";
 import { type RunLine, readLog } from "../src/log.js";
 import type { Answer } from "../src/protocol.js";
-import { planCall } from "../src/run.js";
+import { execute, planCall } from "../src/run.js";
 import { type TestServer, startServer } from "./fixtures/server.js";
 
 const FIXTURES = join(process.cwd(), "tests", "fixtures", "jevels");
@@ -247,5 +247,29 @@ describe("run() in a program", () => {
 
   it("throws at run for a jevel with no run, the way a typo throws at load", async () => {
     await expect(jevel("wake-gate", { jevels: [FIXTURES], client: client(), log: false }).run({})).rejects.toThrow(JevelError);
+  });
+});
+
+describe("the command's process", () => {
+  const meta = { decision: "act" as const, option: "flaky", logId: null };
+
+  it("leaves the TypeSafe key out of the command's environment, because a jevel command is arbitrary shell", async () => {
+    const before = process.env.TYPESAFE_API_KEY;
+    process.env.TYPESAFE_API_KEY = "parent-key";
+    try {
+      const file = join(out, "key");
+      const done = await execute(`printf "[%s]" "$TYPESAFE_API_KEY" > "${file}"`, {}, meta);
+      expect(done.exit).toBe(0);
+      expect(readFileSync(file, "utf8")).toBe("[]");
+      expect(process.env.TYPESAFE_API_KEY, "the parent keeps its key").toBe("parent-key");
+    } finally {
+      if (before === undefined) delete process.env.TYPESAFE_API_KEY;
+      else process.env.TYPESAFE_API_KEY = before;
+    }
+  });
+
+  it("names the signal that killed the command, with exit 128 plus its number", async () => {
+    expect(await execute("kill -TERM $$", {}, meta)).toMatchObject({ exit: 143, signal: "SIGTERM" });
+    expect(await execute("exit 4", {}, meta)).not.toHaveProperty("signal");
   });
 });

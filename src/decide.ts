@@ -174,17 +174,20 @@ export function jevel<N extends string>(
       let result: unknown;
       let exit: number | null = null;
       let ms: number | null = null;
+      let signal: string | undefined;
       if (confirmed !== false) {
         if (command !== null) {
-          ({ exit, ms } = await execute(command, state, { decision: call.decision, option: call.option, logId: decisions.logId }));
-          result = { exit, ms };
+          const done = await execute(command, state, { decision: call.decision, option: call.option, logId: decisions.logId });
+          ({ exit, ms } = done);
+          if (done.signal) signal = done.signal;
+          result = done;
         } else {
           const started = Date.now();
           result = call.decision === "fall_back" ? await handlers.fall_back!(decisions) : await handler!(call.args, decisions);
           ms = Date.now() - started;
         }
       }
-      if (decisions.logId !== null) await logRun(home, decisions.logId, { option: call.option, command, decision: call.decision, exit, ms, confirmed }, warn);
+      if (decisions.logId !== null) await logRun(home, decisions.logId, { option: call.option, command, decision: call.decision, exit, ms, confirmed, ...(signal ? { signal } : {}) }, warn);
       return { decisions, ran: { option: call.option, decision: call.decision, confirmed, result } } as never;
     },
   };
