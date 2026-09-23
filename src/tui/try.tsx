@@ -235,7 +235,7 @@ export function TryView(props: {
   const hints: Hint[] = mode === "edit"
     ? [["enter", "ask"], ["esc", "stop editing"], ["arrows", "move"]]
     : mode === "asking" ? []
-      : [[result ? "r" : "enter", result ? "ask again" : "ask"], ["e", "edit"], ["p", "other jevel"], ...(result ? [["j/k", "scroll"] as Hint] : []), ["esc", "home"]];
+      : [[result ? "r" : "enter", result ? "ask again" : "ask"], ["e", "edit"], ["p", "other jevel"], ...(result ? [["j/k", "scroll"] as Hint] : []), ["esc", "start"]];
   useChrome(hints, mode === "edit");
 
   // The title, a blank and the column headings; the footer belongs to the shell.
@@ -265,7 +265,7 @@ export function TryView(props: {
       { text: " ", color: theme.text },
       ...wrapLine(`questions: ${qs}`, right).map((text) => ({ text, color: theme.muted })),
       { text: " ", color: theme.text },
-      ...wrapLine("The ask is logged with its state, so you can open it later on Home and in History.", right).map((text) => ({ text, color: theme.muted })),
+      ...wrapLine("The ask is logged with its state, so you can open it later on the dashboard and in History.", right).map((text) => ({ text, color: theme.muted })),
     ];
   } else answer = [];
   const answerTop = Math.min(scroll, Math.max(0, answer.length - room));

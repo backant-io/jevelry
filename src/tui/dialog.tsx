@@ -73,15 +73,18 @@ export function fuzzyFilter<V>(items: SelectItem<V>[], query: string): SelectIte
     .map((x) => x.item);
 }
 
-/** A panel drawn over the screen: centred, a quarter down, on the panel tone, with the title left and esc right. */
+/**
+ * A panel drawn over the screen: centred, a quarter down, on the panel tone, with the title left and esc right.
+ * A backdrop in the background tone covers everything above the footer, so no screen shows through beside it.
+ */
 export function Dialog(props: { title: string; width: number; columns: number; rows: number; height?: number; children: ReactNode }): React.JSX.Element {
   const theme = useTheme();
   const width = Math.min(props.width, props.columns - 4);
   // A quarter down, or higher when the dialog (with its gutter) would otherwise run into the footer.
   const top = Math.max(0, Math.min(Math.floor(props.rows / 4) - 1, props.rows - 1 - (props.height ?? 0)));
-  // A gutter in the background tone around the panel, so the screen underneath stops short of the dialog's edge.
+  // The footer stays in sight: it lists the dialog's keys.
   return (
-    <Box position="absolute" top={top} left={Math.max(0, Math.floor((props.columns - width) / 2) - 2)} flexDirection="column" backgroundColor={theme.background} paddingX={2} paddingY={1}>
+    <Box position="absolute" top={0} left={0} width={props.columns} height={Math.max(0, props.rows - 1)} flexDirection="column" alignItems="center" paddingTop={top + 1} backgroundColor={theme.background}>
       <Box width={width} flexDirection="column" backgroundColor={theme.panel} paddingX={2} paddingY={1}>
         <Box justifyContent="space-between">
           <Text bold color={theme.text}>{props.title}</Text>
@@ -132,11 +135,14 @@ export function SelectDialog<V>(props: {
         const active = top + i === cursor;
         const hint = item.hint ?? "";
         const label = item.label.length > inner - hint.length - 3 ? `${item.label.slice(0, inner - hint.length - 4)}~` : item.label;
+        // The row's Box sets the background: a nested Text takes the nearest Box's background, never its parent Text's.
         return (
-          <Text key={`${i}:${item.label}`} backgroundColor={active ? theme.accent : theme.panel} bold={active}>
-            <Text color={active ? theme.background : theme.text}>{`${active ? "> " : "  "}${label.padEnd(inner - hint.length - 3)}`}</Text>
-            <Text color={active ? theme.background : theme.muted}>{`${hint} `}</Text>
-          </Text>
+          <Box key={`${i}:${item.label}`} backgroundColor={active ? theme.accent : theme.panel}>
+            <Text bold={active}>
+              <Text color={active ? theme.background : theme.text}>{`${active ? "> " : "  "}${label.padEnd(inner - hint.length - 3)}`}</Text>
+              <Text color={active ? theme.background : theme.muted}>{`${hint} `}</Text>
+            </Text>
+          </Box>
         );
       })}
       <Text color={theme.muted}>{below > 0 ? ` ↓ ${below} more` : top > 0 ? ` ↑ ${top} above` : " "}</Text>

@@ -380,12 +380,14 @@ export function HomeView(props: {
       {needs.map((n, i) => {
         const selected = i === at;
         return (
-          <Text key={n.key} wrap="truncate" {...(selected ? { backgroundColor: theme.element } : {})}>
-            <Text color={theme.accent}>{selected ? "> " : "  "}</Text>
-            <Text color={n.tone}>● </Text>
-            <Text color={theme.text}>{n.text}</Text>
-            <Text color={theme.accent}>{selected ? "  ⏎" : ""}</Text>
-          </Text>
+          <Box key={n.key} {...(selected ? { backgroundColor: theme.element } : {})}>
+            <Text wrap="truncate">
+              <Text color={theme.accent}>{selected ? "> " : "  "}</Text>
+              <Text color={n.tone}>● </Text>
+              <Text color={theme.text}>{n.text}</Text>
+              <Text color={theme.accent}>{selected ? "  ⏎" : ""}</Text>
+            </Text>
+          </Box>
         );
       })}
     </Panel>
@@ -415,15 +417,17 @@ export function HomeView(props: {
         const selected = firstJevel + jevelTop + i === at;
         const name = j.name.length > nameWidth ? `${j.name.slice(0, nameWidth - 1)}~` : j.name.padEnd(nameWidth);
         return (
-          <Text key={j.name} wrap="truncate" {...(selected ? { backgroundColor: theme.element } : {})}>
-            <Text color={theme.accent}>{selected ? "> " : "  "}</Text>
-            <Text color={theme.text}>{`${name} ${String(j.decisions).padStart(9)}  `}</Text>
-            <Text color={j.actOutcomes < 10 ? theme.muted : theme.text}>{rightOf(j.actRight, j.actOutcomes).padStart(12)}</Text>
-            <Text>{"  "}</Text>
-            {mixColumn ? <Text><MixBar act={j.mix.act} mark={j.mix.mark} fallBack={j.mix.fallBack} width={12} theme={theme} /><Text>{"  "}</Text></Text> : null}
-            <Text color={theme.accent}>{spark(j.trend, 14)}</Text>
-            <Text color={theme.muted}>{`  peak ${Math.max(0, ...j.trend)}/day`}</Text>
-          </Text>
+          <Box key={j.name} {...(selected ? { backgroundColor: theme.element } : {})}>
+            <Text wrap="truncate">
+              <Text color={theme.accent}>{selected ? "> " : "  "}</Text>
+              <Text color={theme.text}>{`${name} ${String(j.decisions).padStart(9)}  `}</Text>
+              <Text color={j.actOutcomes < 10 ? theme.muted : theme.text}>{rightOf(j.actRight, j.actOutcomes).padStart(12)}</Text>
+              <Text>{"  "}</Text>
+              {mixColumn ? <Text><MixBar act={j.mix.act} mark={j.mix.mark} fallBack={j.mix.fallBack} width={12} theme={theme} /><Text>{"  "}</Text></Text> : null}
+              <Text color={theme.accent}>{spark(j.trend, 14)}</Text>
+              <Text color={theme.muted}>{`  peak ${Math.max(0, ...j.trend)}/day`}</Text>
+            </Text>
+          </Box>
         );
       })}
       {jevelMore ? <Text color={theme.muted}>{`  ${[jevelTop > 0 ? `↑ ${jevelTop} above` : "", jevelBelow > 0 ? `↓ ${jevelBelow} more below` : ""].filter((x) => x !== "").join("   ")}`}</Text> : null}
@@ -438,13 +442,15 @@ export function HomeView(props: {
         const d = recordedDecision(r.answer);
         const fresh = props.fresh?.has(r.ask.id) ?? false;
         return (
-          <Text key={`${r.ask.id}\n${r.question}`} wrap="truncate" {...(selected ? { backgroundColor: theme.element } : {})}>
-            <Text color={theme.accent}>{selected ? "> " : fresh ? "● " : "  "}</Text>
-            <Text color={fresh ? theme.accent : theme.muted}>{`${time(r.ask.at)} `}</Text>
-            <Text color={theme.text}>{`${fit(jevelOf(r.ask), feedName)} ${fit(r.question, 14)} ${fit(answerWord(r.answer), 10)} `}</Text>
-            <Text color={decisionColor(theme, d)}>{`${d.padEnd(9)} `}</Text>
-            <Text color={theme.muted}>{r.outcomes.at(-1)?.outcome ?? "-"}</Text>
-          </Text>
+          <Box key={`${r.ask.id}\n${r.question}`} {...(selected ? { backgroundColor: theme.element } : {})}>
+            <Text wrap="truncate">
+              <Text color={theme.accent}>{selected ? "> " : fresh ? "● " : "  "}</Text>
+              <Text color={fresh ? theme.accent : theme.muted}>{`${time(r.ask.at)} `}</Text>
+              <Text color={theme.text}>{`${fit(jevelOf(r.ask), feedName)} ${fit(r.question, 14)} ${fit(answerWord(r.answer), 10)} `}</Text>
+              <Text color={decisionColor(theme, d)}>{`${d.padEnd(9)} `}</Text>
+              <Text color={theme.muted}>{r.outcomes.at(-1)?.outcome ?? "-"}</Text>
+            </Text>
+          </Box>
         );
       })}
     </Panel>
