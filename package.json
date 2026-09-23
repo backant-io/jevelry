@@ -1,7 +1,23 @@
 {
   "name": "jevelry",
   "version": "0.3.0",
-  "description": "A runtime for Jev, TypeSafe's System One model: jevels in, verdicts out",
+  "description": "The Jev framework for TypeSafe System One: let Jev make the small calls in your code and your coding agent, with a decision your code can act on",
+  "keywords": [
+    "jev",
+    "typesafe",
+    "typesafe-ai",
+    "system-one",
+    "decision-model",
+    "classification",
+    "structured-decisions",
+    "llm",
+    "confidence",
+    "agent-skill",
+    "claude-code",
+    "codex",
+    "cursor",
+    "opencode"
+  ],
   "type": "module",
   "bin": {
     "jevelry": "bin/jevelry.js"
@@ -30,6 +46,8 @@
     "docs/assets",
     "docs/examples.md",
     "LICENSE",
+    "AGENTS.md",
+    "llms.txt",
     "README.md"
   ],
   "repository": {

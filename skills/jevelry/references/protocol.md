@@ -9,7 +9,7 @@ The schema is `docs/protocol/ask.schema.json` in the package, with one example p
 
 | Field | Type | What it is |
 |---|---|---|
-| `protocol` | `1` | the version of this document; fields are added, never renamed or removed |
+| `protocol` | `2` | the version of this document; a new field keeps the version, a renamed or removed one raises it |
 | `log_id` | string or null | the id of the log line for this ask, and the id `outcome` takes; null with `--no-log` or when the log could not be written |
 | `jevel` | object or null | `{ "name": ..., "version": ... }`, null for a `--questions` ask |
 | `model` | string | the model that answered, for example `jev-1.13.0` |
@@ -17,7 +17,7 @@ The schema is `docs/protocol/ask.schema.json` in the package, with one example p
 | `answers` | object | question name to answer; a `repeat` question is named `<question>[0]`, `<question>[1]` and so on |
 | `usage` | object | `{ "input_tokens": ..., "output_tokens": ... }`, integers |
 
-Every answer carries `type`, `certainty` (0 to 1) and `verdict` (`act`, `mark` or `fall_back`),
+Every answer carries `type`, `certainty` (0 to 1) and `decision` (`act`, `mark` or `fall_back`),
 plus the fields of its own type.
 
 ### `noul`
@@ -35,7 +35,7 @@ plus the fields of its own type.
 | `choice` | string | the option with the highest probability |
 | `probabilities` | object | one number per option, by option name |
 | `confidence` | number 0 to 1 | how sure the model is of the option it picked |
-| `certainty` | number 0 to 1 | the confidence, repeated as the value the verdict was computed from |
+| `certainty` | number 0 to 1 | the confidence, repeated as the value the decision was computed from |
 
 ### `score`
 
@@ -45,11 +45,11 @@ plus the fields of its own type.
 | `legend` | object | the level index to its description, as the jevel wrote it |
 | `probabilities` | object | one number per level index |
 | `confidence` | number 0 to 1 | how sure the model is of the level |
-| `certainty` | number 0 to 1 | the confidence, repeated as the value the verdict was computed from |
+| `certainty` | number 0 to 1 | the confidence, repeated as the value the decision was computed from |
 
 ## The error document
 
-    { "protocol": 1, "error": { "exit": 3, "code": "rate_limited", "message": "TypeSafe answered 429 after the SDK's retries", "retry_after_ms": 1200 } }
+    { "protocol": 2, "error": { "exit": 3, "code": "rate_limited", "message": "TypeSafe answered 429 after the SDK's retries", "retry_after_ms": 1200 } }
 
 `error` carries `exit`, `code` and `message` always. `retry_after_ms` is there only when the
 server gave a delay. `field` is there only when jevelry itself knows the field at fault, so a

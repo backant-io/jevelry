@@ -6,19 +6,19 @@
   },
   "notifications": [
     {
-      "source": "pagerduty",
-      "subject": "checkout-api latency above 2s for 10 minutes",
-      "body": "The p95 latency on checkout-api crossed 2 seconds at 14:02 and is still above it."
+      "from": "the pager",
+      "about": "checkout-api latency above 2s for 10 minutes",
+      "text": "The p95 latency on checkout-api crossed 2 seconds at 14:02 and is still above it."
     },
     {
-      "source": "github",
-      "subject": "New comment on pull request 412",
-      "body": "Looks good to me, one small naming nit on line 30."
+      "from": "Jonas on GitHub",
+      "about": "New comment on pull request 412",
+      "text": "Looks good to me, one small naming nit on line 30."
     },
     {
-      "source": "newsletter",
-      "subject": "Weekly digest",
-      "body": "Five links about distributed systems and a conference announcement."
+      "from": "a newsletter",
+      "about": "Weekly digest",
+      "text": "Five links about distributed systems and a conference announcement."
     }
   ]
 }

@@ -16,7 +16,7 @@ import {
 import { checkBudgets } from "./budget.js";
 import { type Jevel, JevelError, checkState, expandQuestions, isEntry } from "./jevel.js";
 import { type Answer, type AskDocument, EXIT, type ErrorBody, type ErrorCode, PROTOCOL, type Usage } from "./protocol.js";
-import { DEFAULT_THRESHOLDS, type Thresholds, certaintyOf, verdictOf } from "./verdict.js";
+import { DEFAULT_THRESHOLDS, type Thresholds, certaintyOf, decisionOf } from "./decision.js";
 
 /** Keys sorted at every level, no whitespace: the same state hashes the same however a host built it. */
 export function canonicalJson(value: unknown): string {
@@ -69,7 +69,7 @@ export function shapeAnswer(name: string, raw: unknown, thresholds: Thresholds):
   if (raw.type === "noul") {
     const noul = probabilityOf(`${field}.noul`, raw.noul);
     const certainty = certaintyOf({ type: "noul", noul });
-    return { type: "noul", noul, yes: noul >= 0.5, certainty, verdict: verdictOf(certainty, thresholds) };
+    return { type: "noul", noul, yes: noul >= 0.5, certainty, decision: decisionOf(certainty, thresholds) };
   }
   if (raw.type === "choice") {
     if (typeof raw.choice !== "string" || !isRecord(raw.probabilities)) {
@@ -78,7 +78,7 @@ export function shapeAnswer(name: string, raw: unknown, thresholds: Thresholds):
     const probabilities = probabilitiesOf(field, raw.probabilities);
     const confidence = probabilityOf(`${field}.confidence`, raw.confidence);
     const certainty = certaintyOf({ type: "choice", confidence });
-    return { type: "choice", choice: raw.choice, probabilities, confidence, certainty, verdict: verdictOf(certainty, thresholds) };
+    return { type: "choice", choice: raw.choice, probabilities, confidence, certainty, decision: decisionOf(certainty, thresholds) };
   }
   if (raw.type === "score") {
     if (!isRecord(raw.legend) || !isRecord(raw.probabilities)) {
@@ -88,7 +88,7 @@ export function shapeAnswer(name: string, raw: unknown, thresholds: Thresholds):
     const probabilities = probabilitiesOf(field, raw.probabilities);
     const confidence = probabilityOf(`${field}.confidence`, raw.confidence);
     const certainty = certaintyOf({ type: "score", confidence });
-    return { type: "score", score, legend: raw.legend, probabilities, confidence, certainty, verdict: verdictOf(certainty, thresholds) };
+    return { type: "score", score, legend: raw.legend, probabilities, confidence, certainty, decision: decisionOf(certainty, thresholds) };
   }
   throw new UnreadableAnswer(field, `${field} has a type this build does not know: ${String(raw.type)}`);
 }

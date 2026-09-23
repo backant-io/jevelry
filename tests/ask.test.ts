@@ -77,10 +77,10 @@ describe("ask with a jevel", () => {
     expect(calls[0]?.body.model).toBe("jev-1.13.0");
     expect(Object.keys(calls[0]?.body.questions)).toEqual(["worth_a_turn", "depth", "same_as[0]", "same_as[1]"]);
     expect(result.document.jevel).toEqual({ name: "wake-gate", version: 1 });
-    expect(result.document.answers.worth_a_turn).toEqual({ type: "noul", noul: 0.08, yes: false, certainty: 0.92, verdict: "act" });
-    expect(result.document.answers.depth?.verdict).toBe("act");
-    expect(result.document.answers["same_as[0]"]?.verdict).toBe("act");
-    expect(result.document.answers["same_as[1]"]?.verdict).toBe("fall_back");
+    expect(result.document.answers.worth_a_turn).toEqual({ type: "noul", noul: 0.08, yes: false, certainty: 0.92, decision: "act" });
+    expect(result.document.answers.depth?.decision).toBe("act");
+    expect(result.document.answers["same_as[0]"]?.decision).toBe("act");
+    expect(result.document.answers["same_as[1]"]?.decision).toBe("fall_back");
   });
   it("lets --model override the jevel's pin", async () => {
     const { fetch, calls } = scriptedFetch([() => jsonResponse(200, { model: "jev-1.14.0", answers, usage: { input_tokens: 1, output_tokens: 1 } })]);

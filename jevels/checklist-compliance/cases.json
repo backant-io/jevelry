@@ -1,0 +1,78 @@
+[
+  {
+    "name": "a report that answers every step in order",
+    "state": {
+      "checklist": {
+        "name": "Release checklist",
+        "steps": [
+          "Run the full test suite on the release branch.",
+          "Tag the release and write the changelog entry.",
+          "Deploy to staging and check the smoke tests.",
+          "Post the release notes in the releases channel."
+        ]
+      },
+      "report": {
+        "by": "sam",
+        "text": "Ran the full suite on release/1.9.0 and it came back green. Tagged v1.9.0 and wrote the changelog entry for it. Deployed to staging and the smoke tests were green. Posted the release notes in the releases channel at 11:40."
+      }
+    },
+    "expect": { "followed": true, "deviation_kind": "none", "deviation_explained": true }
+  },
+  {
+    "name": "the payments tests in place of the full suite, with the reason given",
+    "state": {
+      "checklist": {
+        "name": "Release checklist",
+        "steps": [
+          "Run the full test suite on the release branch.",
+          "Tag the release and write the changelog entry.",
+          "Deploy to staging and check the smoke tests.",
+          "Post the release notes in the releases channel."
+        ]
+      },
+      "report": {
+        "by": "rita",
+        "text": "The CI runner was down all morning, so I ran the payments tests on my machine and left the rest of the suite for later. Tagged v1.9.1 and wrote the changelog entry. Deployed to staging and the smoke tests were green. Posted the release notes in the releases channel."
+      }
+    },
+    "expect": { "followed": false, "deviation_kind": "shortcut", "deviation_explained": true }
+  },
+  {
+    "name": "staging skipped, and the report says so and stops there",
+    "state": {
+      "checklist": {
+        "name": "Release checklist",
+        "steps": [
+          "Run the full test suite on the release branch.",
+          "Tag the release and write the changelog entry.",
+          "Deploy to staging and check the smoke tests.",
+          "Post the release notes in the releases channel."
+        ]
+      },
+      "report": {
+        "by": "tom",
+        "text": "Ran the full suite on release/1.9.2 and it was green. Tagged v1.9.2 and wrote the changelog entry. Skipped staging and deployed straight to production. Posted the release notes in the releases channel."
+      }
+    },
+    "expect": { "followed": false, "deviation_kind": "omission", "deviation_explained": false }
+  },
+  {
+    "name": "staging looked fine from the dashboard",
+    "state": {
+      "checklist": {
+        "name": "Release checklist",
+        "steps": [
+          "Run the full test suite on the release branch.",
+          "Tag the release and write the changelog entry.",
+          "Deploy to staging and check the smoke tests.",
+          "Post the release notes in the releases channel."
+        ]
+      },
+      "report": {
+        "by": "lena",
+        "text": "Ran the full suite on release/1.9.3, all green. Tagged v1.9.3 and the changelog entry is in. Went out to staging and it looked fine from the dashboard. Posted the release notes in the releases channel."
+      }
+    },
+    "expect": { "followed": null }
+  }
+]

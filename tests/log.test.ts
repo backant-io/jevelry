@@ -12,9 +12,9 @@ const ask: AskLine = {
   model: "jev-1.13.0",
   state_hash: "sha256:" + "0".repeat(64),
   answers: {
-    worth_a_turn: { type: "noul", noul: 0.08, yes: false, certainty: 0.92, verdict: "act" },
-    depth: { type: "score", score: 1.4, legend: { "0": "routine", "1": "judgment", "2": "hard" }, probabilities: { "0": 0.1, "1": 0.4, "2": 0.5 }, confidence: 0.4, certainty: 0.4, verdict: "fall_back" },
-    owner: { type: "choice", choice: "coo", probabilities: { coo: 0.9, cto: 0.1 }, confidence: 0.88, certainty: 0.88, verdict: "mark" },
+    worth_a_turn: { type: "noul", noul: 0.08, yes: false, certainty: 0.92, decision: "act" },
+    depth: { type: "score", score: 1.4, legend: { "0": "routine", "1": "judgment", "2": "hard" }, probabilities: { "0": 0.1, "1": 0.4, "2": 0.5 }, confidence: 0.4, certainty: 0.4, decision: "fall_back" },
+    owner: { type: "choice", choice: "coo", probabilities: { coo: 0.9, cto: 0.1 }, confidence: 0.88, certainty: 0.88, decision: "mark" },
   },
   usage: { input_tokens: 10, output_tokens: 2 },
   cwd: "/w",

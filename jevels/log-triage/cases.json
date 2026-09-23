@@ -1,0 +1,74 @@
+[
+  {
+    "name": "a profile file that is missing, and some requests rejected",
+    "state": {
+      "service": "image-resizer",
+      "lines": [
+        "2026-09-22T14:02:11Z ERROR open /etc/resizer/profiles.yaml: no such file or directory",
+        "2026-09-22T14:02:11Z ERROR falling back to the built-in profile set",
+        "2026-09-22T14:02:12Z WARN  requested profile thumb-2x is missing from the built-in set, request rejected with 400",
+        "2026-09-22T14:02:19Z WARN  requested profile thumb-2x is missing from the built-in set, request rejected with 400",
+        "2026-09-22T14:02:24Z INFO  GET /resize?profile=thumb 200 in 41ms",
+        "2026-09-22T14:02:31Z WARN  requested profile thumb-2x is missing from the built-in set, request rejected with 400"
+      ]
+    },
+    "expect": {
+      "kind": "misconfiguration",
+      "needs_a_person": true,
+      "severity": 1
+    }
+  },
+  {
+    "name": "a nightly invoice run with a retry that succeeded",
+    "state": {
+      "service": "billing-worker",
+      "lines": [
+        "2026-09-22T02:00:01Z INFO  nightly invoice run started for 1842 accounts",
+        "2026-09-22T02:00:04Z WARN  deprecated field client_id used, see the migration guide",
+        "2026-09-22T02:01:12Z WARN  charge attempt 1 for account 9931 timed out, retrying",
+        "2026-09-22T02:01:13Z INFO  charge attempt 2 for account 9931 succeeded in 240ms",
+        "2026-09-22T02:04:55Z INFO  nightly invoice run finished, 1842 invoices written"
+      ]
+    },
+    "expect": {
+      "kind": "noise",
+      "needs_a_person": false,
+      "severity": 0
+    }
+  },
+  {
+    "name": "the order store refusing every connection",
+    "state": {
+      "service": "orders-api",
+      "lines": [
+        "2026-09-22T11:14:02Z ERROR dial tcp 10.0.3.9:5432: connect: connection refused",
+        "2026-09-22T11:14:02Z ERROR POST /orders 503, the order store is unreachable",
+        "2026-09-22T11:14:05Z ERROR dial tcp 10.0.3.9:5432: connect: connection refused",
+        "2026-09-22T11:14:05Z ERROR GET /orders/8812 503, the order store is unreachable",
+        "2026-09-22T11:14:31Z ERROR dial tcp 10.0.3.9:5432: connect: connection refused",
+        "2026-09-22T11:14:31Z ERROR POST /orders 503, the order store is unreachable"
+      ]
+    },
+    "expect": {
+      "kind": "outage",
+      "needs_a_person": true,
+      "severity": 2
+    }
+  },
+  {
+    "name": "a user agent the parser gives up on, and a row written as unknown",
+    "state": {
+      "service": "analytics-collector",
+      "lines": [
+        "2026-09-22T09:14:02Z WARN  could not parse the user agent for session 4471, falling back to unknown",
+        "2026-09-22T09:14:07Z WARN  could not parse the user agent for session 4472, falling back to unknown",
+        "2026-09-22T09:14:11Z INFO  POST /collect 200 in 12ms",
+        "2026-09-22T09:14:19Z WARN  could not parse the user agent for session 4473, falling back to unknown",
+        "2026-09-22T09:14:20Z WARN  the analytics row for session 4473 was written with device unknown"
+      ]
+    },
+    "expect": {
+      "needs_a_person": null
+    }
+  }
+]

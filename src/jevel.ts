@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { EntryType, Question, Questions } from "@typesafe-ai/sdk";
 import { parse as parseYaml } from "yaml";
-import { mergeThresholds, type Thresholds } from "./verdict.js";
+import { mergeThresholds, type Thresholds } from "./decision.js";
 
 /** A defect in a jevel or in the state a host sent. `field` names the offending path. */
 export class JevelError extends Error {
@@ -23,7 +23,7 @@ export interface JevelQuestion {
   type: "noul" | "choice" | "score";
   instructions: EntryType;
   criteria?: unknown;
-  verdict?: Partial<Thresholds>;
+  thresholds?: Partial<Thresholds>;
   repeat?: Repeat;
 }
 
@@ -33,7 +33,7 @@ export interface Jevel {
   format: number;
   model?: string;
   state: { required: string[]; budget_tokens?: number };
-  verdict: Partial<Thresholds>;
+  thresholds: Partial<Thresholds>;
   questions: Record<string, JevelQuestion>;
   body: string;
   path: string;
@@ -49,7 +49,7 @@ export const ALIASES = ["jev-latest", "jev-preview"];
 
 const NAME = /^[a-z0-9-]+$/;
 const QUESTION_ID = /^[a-z0-9_]+$/;
-const HEADINGS = ["When to use", "State", "Verdicts", "Example"];
+const HEADINGS = ["When to use", "State", "Decisions", "Example"];
 const NEGATION_FIRST_WORD = /^\s*(not|no|never)\b/i;
 const DOUBLE_NEGATIVE = /\b(not|never|no)\b[^.?!]*\b(not|never|no)\b/i;
 /** The API's own limits: https://docs.typesafe.ai/api.md */
@@ -84,15 +84,21 @@ function thresholdsOf(value: unknown, field: string): Partial<Thresholds> {
   return out;
 }
 
+/** Pre-1.0 rename, no alias: a jevel written before 0.4 is refused with the fix named. */
+function refuseRenamedKey(raw: Record<string, unknown>, prefix: string): void {
+  if (raw.verdict !== undefined) throw new JevelError(`${prefix}verdict`, "verdict was renamed to thresholds in jevelry 0.4; rename the key");
+}
+
 function checkMarkUnderAct(layers: Array<Partial<Thresholds>>, field: string): void {
   const merged = mergeThresholds(...layers);
   if (merged.mark > merged.act) throw new JevelError(field, `${field}: mark (${merged.mark}) must not exceed act (${merged.act})`);
 }
 
-function questionOf(id: string, raw: unknown, jevelVerdict: Partial<Thresholds>): JevelQuestion {
+function questionOf(id: string, raw: unknown, jevelThresholds: Partial<Thresholds>): JevelQuestion {
   const field = `questions.${id}`;
   if (!QUESTION_ID.test(id)) throw new JevelError(field, `question id \`${id}\` must match [a-z0-9_]+`);
   if (!isRecord(raw)) throw new JevelError(field, `${field} must be an object`);
+  refuseRenamedKey(raw, `${field}.`);
   const type = raw.type;
   if (type !== "noul" && type !== "choice" && type !== "score") {
     throw new JevelError(`${field}.type`, `${field}.type must be noul, choice or score`);
@@ -122,8 +128,8 @@ function questionOf(id: string, raw: unknown, jevelVerdict: Partial<Thresholds>)
       throw new JevelError(`${field}.criteria`, `${field}.criteria for a noul holds only true and false`);
     }
   }
-  const verdict = thresholdsOf(raw.verdict, `${field}.verdict`);
-  checkMarkUnderAct([jevelVerdict, verdict], `${field}.verdict`);
+  const thresholds = thresholdsOf(raw.thresholds, `${field}.thresholds`);
+  checkMarkUnderAct([jevelThresholds, thresholds], `${field}.thresholds`);
   let repeat: Repeat | undefined;
   if (raw.repeat !== undefined) {
     const r = raw.repeat;
@@ -134,16 +140,49 @@ function questionOf(id: string, raw: unknown, jevelVerdict: Partial<Thresholds>)
   }
   const question: JevelQuestion = { type, instructions: raw.instructions as EntryType };
   if (criteria !== undefined) question.criteria = criteria;
-  if (raw.verdict !== undefined) question.verdict = verdict;
+  if (raw.thresholds !== undefined) question.thresholds = thresholds;
   if (repeat) question.repeat = repeat;
   return question;
+}
+
+/** The criteria entries Jev sees side by side: one per option, per level, or the two noul sides. */
+function criteriaEntries(q: JevelQuestion): unknown[] {
+  if (q.type === "choice") return isRecord(q.criteria) ? Object.values(q.criteria) : [];
+  if (q.type === "score") return Array.isArray(q.criteria) ? q.criteria : [];
+  return isRecord(q.criteria) ? [q.criteria.true, q.criteria.false] : [];
+}
+
+/** How one entry reads: its field names, or that it carries no fields at all. `null` is skipped. */
+function fieldsOf(entry: unknown): string | null {
+  if (isRecord(entry)) return Object.keys(entry).sort().join(",");
+  if (typeof entry === "string") return "(string)";
+  return null;
 }
 
 function warningsOf(jevel: Jevel): string[] {
   const warnings: string[] = [];
   for (const [id, q] of Object.entries(jevel.questions)) {
-    if (q.type === "noul" && isRecord(q.criteria) && typeof q.criteria.true === "string" && NEGATION_FIRST_WORD.test(q.criteria.true)) {
-      warnings.push(`questions.${id}.criteria.true reads as a negation; a noul answers best when true means yes`);
+    // A structured noul puts the yes side in `true.what`, so reading only the string form would
+    // leave this warning dead on every jevel written the way Jev reads best.
+    if (q.type === "noul" && isRecord(q.criteria)) {
+      const side = q.criteria.true;
+      const yes = isRecord(side) ? side.what : side;
+      if (typeof yes === "string" && NEGATION_FIRST_WORD.test(yes)) {
+        const at = isRecord(side) ? "criteria.true.what" : "criteria.true";
+        warnings.push(`questions.${id}.${at} reads as a negation; a noul answers best when true means yes`);
+      }
+    }
+    // One structured entry among the others means Jev compares a labelled entry with an unlabelled
+    // one, and a field one entry carries alone reads as a property only that entry can have.
+    const fields = criteriaEntries(q).map(fieldsOf).filter((f): f is string => f !== null);
+    const first = fields[0];
+    if (first !== undefined && fields.some((f) => f !== "(string)")) {
+      const other = fields.find((f) => f !== first);
+      if (other !== undefined) {
+        warnings.push(
+          `questions.${id}.criteria: structured entries use different fields (${first} vs ${other}); Jev reads them side by side, so give every entry the same fields`,
+        );
+      }
     }
     const text = typeof q.instructions === "string" ? q.instructions : JSON.stringify(q.instructions);
     if (DOUBLE_NEGATIVE.test(text)) warnings.push(`questions.${id}.instructions may contain a double negative; ask it the direct way`);
@@ -194,14 +233,15 @@ export function parseJevel(markdown: string, dirName: string, path = "<inline>")
       state.budget_tokens = raw.state.budget_tokens as number;
     }
   }
-  const verdict = thresholdsOf(raw.verdict, "verdict");
-  checkMarkUnderAct([verdict], "verdict");
+  refuseRenamedKey(raw, "");
+  const thresholds = thresholdsOf(raw.thresholds, "thresholds");
+  checkMarkUnderAct([thresholds], "thresholds");
   if (!isRecord(raw.questions) || Object.keys(raw.questions).length === 0) {
     throw new JevelError("questions", "questions must be a non-empty map");
   }
   const questions: Record<string, JevelQuestion> = {};
-  for (const [id, q] of Object.entries(raw.questions)) questions[id] = questionOf(id, q, verdict);
-  const jevel: Jevel = { name: raw.name, version: raw.version as number, format: 1, state, verdict, questions, body, path };
+  for (const [id, q] of Object.entries(raw.questions)) questions[id] = questionOf(id, q, thresholds);
+  const jevel: Jevel = { name: raw.name, version: raw.version as number, format: 1, state, thresholds, questions, body, path };
   if (typeof raw.model === "string") jevel.model = raw.model;
   return { jevel, warnings: warningsOf(jevel) };
 }
@@ -307,7 +347,7 @@ export function expandQuestions(jevel: Jevel, state: unknown): Expanded {
   const questions: Questions = {};
   const thresholds: Record<string, Thresholds> = {};
   for (const [id, q] of Object.entries(jevel.questions)) {
-    const merged = mergeThresholds(jevel.verdict, q.verdict);
+    const merged = mergeThresholds(jevel.thresholds, q.thresholds);
     if (!q.repeat) {
       questions[id] = toSdkQuestion(q, q.instructions, q.criteria);
       thresholds[id] = merged;

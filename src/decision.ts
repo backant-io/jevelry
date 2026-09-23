@@ -1,4 +1,4 @@
-import type { Verdict } from "./protocol.js";
+import type { Decision } from "./protocol.js";
 
 export interface Thresholds {
   act: number;
@@ -19,7 +19,7 @@ export function certaintyOf(
   return answer.confidence;
 }
 
-export function verdictOf(certainty: number, thresholds: Thresholds): Verdict {
+export function decisionOf(certainty: number, thresholds: Thresholds): Decision {
   if (certainty >= thresholds.act) return "act";
   if (certainty >= thresholds.mark) return "mark";
   return "fall_back";

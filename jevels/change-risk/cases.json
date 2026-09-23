@@ -1,0 +1,76 @@
+[
+  {
+    "name": "a migration drops a column the login response returns",
+    "state": {
+      "change": {
+        "title": "Drop the legacy session token from the login response",
+        "description": "The login response carried both session_token and session_id. session_token goes away and clients read session_id. A migration drops the session_token column from the sessions table.",
+        "files": [
+          "src/auth/login.ts",
+          "src/auth/session.ts",
+          "migrations/2026-09-18-drop-session-token.sql",
+          "docs/api/login.md"
+        ]
+      }
+    },
+    "expect": {
+      "risk": 2,
+      "breaking": true,
+      "needs_owner_approval": true
+    }
+  },
+  {
+    "name": "two typos in the onboarding copy",
+    "state": {
+      "change": {
+        "title": "Fix two typos in the onboarding copy",
+        "description": "Two spelling mistakes in the onboarding screens and one in the README. The wording around them stays as it is and the screens keep their behaviour.",
+        "files": [
+          "src/onboarding/copy.ts",
+          "README.md",
+          "tests/onboarding/copy.test.ts"
+        ]
+      }
+    },
+    "expect": {
+      "risk": 0,
+      "breaking": false,
+      "needs_owner_approval": false
+    }
+  },
+  {
+    "name": "the retry loop in the export worker, behind the same signature",
+    "state": {
+      "change": {
+        "title": "Back off exponentially in the export worker",
+        "description": "The export worker retried on a fixed one second delay and now backs off exponentially with a cap of thirty seconds. The retry function keeps its signature, every caller stays as it is, and a call that succeeds today still succeeds. The number of attempts stays at five.",
+        "files": [
+          "src/exports/worker.ts",
+          "src/exports/retry.ts",
+          "tests/exports/retry.test.ts"
+        ]
+      }
+    },
+    "expect": {
+      "risk": 1,
+      "breaking": false,
+      "needs_owner_approval": false
+    }
+  },
+  {
+    "name": "the default request timeout goes from ten seconds to thirty",
+    "state": {
+      "change": {
+        "title": "Raise the default request timeout to thirty seconds",
+        "description": "The HTTP client shipped a default timeout of ten seconds and now defaults to thirty. Callers that set their own timeout keep it. A slow call that used to give up after ten seconds holds the connection for thirty.",
+        "files": [
+          "src/http/client.ts",
+          "tests/http/client.test.ts"
+        ]
+      }
+    },
+    "expect": {
+      "breaking": null
+    }
+  }
+]

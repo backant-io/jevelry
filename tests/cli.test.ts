@@ -89,14 +89,14 @@ describe("ask", () => {
     const r = await run(["ask", "wake-gate", "--state", `@${file}`]);
     expect(r.stderr).toBe("");
     expect(r.status).toBe(0);
-    const doc = JSON.parse(r.stdout) as { log_id: string; answers: Record<string, { verdict: string }> };
+    const doc = JSON.parse(r.stdout) as { log_id: string; answers: Record<string, { decision: string }> };
     expect(validate(doc)).toBe(true);
     // The bytes, not only the schema: `out()` is a second stringify site, and section 3.8 lets a
     // host pin an example document byte for byte, so two spaces and one trailing newline are the
     // contract and a bare `JSON.stringify` here would be a silent protocol change.
     expect(r.stdout).toBe(`${JSON.stringify(doc, null, 2)}\n`);
     expect(doc.log_id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(doc.answers.worth_a_turn?.verdict).toBe("act");
+    expect(doc.answers.worth_a_turn?.decision).toBe("act");
     const log = readFileSync(join(home, ".jevelry", "log.jsonl"), "utf8").trim().split("\n");
     expect(log).toHaveLength(1);
     expect(JSON.parse(log[0] ?? "")).toMatchObject({ kind: "ask", id: doc.log_id, jevel: { name: "wake-gate", version: 1 } });
@@ -104,7 +104,7 @@ describe("ask", () => {
   it("reads the state from stdin with --state -", async () => {
     const r = await run(["ask", "wake-gate", "--state", "-"], { input: JSON.stringify(state) });
     expect(r.status).toBe(0);
-    expect(JSON.parse(r.stdout).protocol).toBe(1);
+    expect(JSON.parse(r.stdout).protocol).toBe(2);
   });
   it("keeps stdout one document when TYPESAFE_LOG_LEVEL is set, sending the SDK's own lines to stderr", async () => {
     // The SDK's default logger is `console`, whose debug and info go to stdout: unfixed, the request
@@ -112,7 +112,7 @@ describe("ask", () => {
     const r = await run(["ask", "wake-gate", "--state", JSON.stringify(state)], { env: { TYPESAFE_LOG_LEVEL: "debug" } });
     expect(r.status).toBe(0);
     const doc = JSON.parse(r.stdout) as { protocol: number };
-    expect(doc.protocol).toBe(1);
+    expect(doc.protocol).toBe(2);
     expect(r.stdout).toBe(`${JSON.stringify(doc, null, 2)}\n`);
     expect(r.stderr).toContain("jevelry: sdk:");
   });
@@ -125,7 +125,7 @@ describe("ask", () => {
     const before = server.requests.length;
     const r = await run(["ask", "wake-gate", "--state", JSON.stringify({ ...state, events: ["x".repeat(12001 * 3)] })]);
     expect(r.status).toBe(5);
-    expect(JSON.parse(r.stdout)).toMatchObject({ protocol: 1, error: { exit: 5, code: "over_budget" } });
+    expect(JSON.parse(r.stdout)).toMatchObject({ protocol: 2, error: { exit: 5, code: "over_budget" } });
     expect(server.requests.length).toBe(before);
   });
   it("exits 3 with retry_after_ms on 429 and 4 on a missing key", async () => {

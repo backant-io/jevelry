@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { AskLine, LogLine } from "../src/log.js";
 import { renderReport, report } from "../src/report.js";
 
-const askLine = (id: string, at: string, verdict: "act" | "mark" | "fall_back", certainty: number, name = "wake-gate"): AskLine => ({
+const askLine = (id: string, at: string, decision: "act" | "mark" | "fall_back", certainty: number, name = "wake-gate"): AskLine => ({
   kind: "ask",
   id,
   at,
@@ -10,8 +10,8 @@ const askLine = (id: string, at: string, verdict: "act" | "mark" | "fall_back", 
   model: "jev-1.13.0",
   state_hash: "sha256:" + "0".repeat(64),
   answers: {
-    worth_a_turn: { type: "noul", noul: 1 - certainty, yes: false, certainty, verdict },
-    "same_as[0]": { type: "noul", noul: 0.9, yes: true, certainty: 0.9, verdict: "act" },
+    worth_a_turn: { type: "noul", noul: 1 - certainty, yes: false, certainty, decision },
+    "same_as[0]": { type: "noul", noul: 0.9, yes: true, certainty: 0.9, decision: "act" },
   },
   usage: { input_tokens: 1, output_tokens: 1 },
   cwd: "/w",
@@ -41,7 +41,7 @@ describe("report", () => {
       jevel: "wake-gate",
       question: "worth_a_turn",
       asks: 3,
-      verdicts: { act: 2, mark: 1, fall_back: 0 },
+      decisions: { act: 2, mark: 1, fall_back: 0 },
       outcomes: 3,
       agreement_act: 0.5,
       agreement_mark: 1,
@@ -56,6 +56,12 @@ describe("report", () => {
     const recent = report(lines, { since: "2026-09-22T10:30:00.000Z" });
     expect(recent.find((r) => r.jevel === "wake-gate" && r.question === "worth_a_turn")?.asks).toBe(2);
     expect(recent.some((r) => r.jevel === "return-kind")).toBe(false);
+  });
+  it("still counts log lines written before protocol 2, which carry the old field name", () => {
+    const old = askLine("e", "2026-09-23T10:00:00.000Z", "mark", 0.8);
+    const { decision, ...rest } = old.answers.worth_a_turn as { decision: string };
+    old.answers = { worth_a_turn: { ...rest, verdict: decision } as unknown as AskLine["answers"][string] };
+    expect(report([old])[0]?.decisions).toEqual({ act: 0, mark: 1, fall_back: 0 });
   });
   it("renders a table and a sentence for an empty log", () => {
     const text = renderReport(report(lines));

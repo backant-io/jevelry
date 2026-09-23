@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { Ajv } from "ajv";
 import { describe, expect, it } from "vitest";
 import { expandQuestions, loadJevel } from "../../src/jevel.js";
+import { readCases } from "../helpers/withCases.js";
 
 const key = process.env.TYPESAFE_API_KEY;
 const haveKey = key !== undefined && key.trim() !== "";
@@ -30,9 +31,10 @@ const run = (args: string[]) =>
 
 interface Answer {
   type: string;
-  verdict: string;
+  decision: string;
   choice?: string;
   yes?: boolean;
+  score?: number;
 }
 
 live("every shipped jevel answers its own example", () => {
@@ -49,18 +51,39 @@ live("every shipped jevel answers its own example", () => {
       const { jevel } = loadJevel(name, [JEVELS]);
       const state: unknown = JSON.parse(readFileSync(join(JEVELS, name, "example.json"), "utf8"));
       expect(Object.keys(doc.answers).sort()).toEqual(Object.keys(expandQuestions(jevel, state).questions).sort());
-      for (const answer of Object.values(doc.answers)) expect(["act", "mark", "fall_back"]).toContain(answer.verdict);
-      // Two jevels the README and the examples page quote by value: those two documents are the
-      // ones a reader compares their own run against, so their answers are asserted, and every
-      // other jevel is asserted on shape alone.
-      if (name === "ticket-triage") {
-        expect(doc.answers.team?.choice).toBe("billing");
-        expect(doc.answers.urgent?.yes).toBe(true);
-      }
-      if (name === "duplicate-issue") {
-        expect(doc.answers["same_as[0]"]?.yes).toBe(true);
-        expect(doc.answers["same_as[1]"]?.yes).toBe(false);
-      }
+      for (const answer of Object.values(doc.answers)) expect(["act", "mark", "fall_back"]).toContain(answer.decision);
     });
+  }
+});
+
+// What the example.json test cannot tell you: whether the questions decide. One ask per case, and
+// every answer is held to the value a person would give the same state, so a criteria rewrite that
+// reads well and answers worse fails here rather than in somebody's queue.
+live("every shipped jevel decides each of its cases", () => {
+  for (const name of names) {
+    for (const c of readCases(name)) {
+      it(`${name}: ${c.name}`, () => {
+        const r = run(["ask", name, "--state", JSON.stringify(c.state)]);
+        expect(r.stderr).toBe("");
+        expect(r.status).toBe(0);
+        const doc = JSON.parse(r.stdout) as { answers: Record<string, Answer> };
+        expect(validate(doc), JSON.stringify(validate.errors)).toBe(true);
+        for (const [question, want] of Object.entries(c.expect)) {
+          const answer = doc.answers[question];
+          const where = `${name} case "${c.name}": ${question}`;
+          expect(answer, where).toBeDefined();
+          // A `null` says the case is one a colleague would ask a question back about, so the only
+          // wrong answer is a confident one: the host has to fall back or flag it for a person.
+          if (want === null) {
+            expect(answer?.decision, `${where} is meant to be unclear, so it must not reach act`).not.toBe("act");
+            continue;
+          }
+          expect(answer?.decision, `${where} is a clear case, so it must not fall back`).not.toBe("fall_back");
+          if (typeof want === "string") expect(answer?.choice, where).toBe(want);
+          else if (typeof want === "boolean") expect(answer?.yes, where).toBe(want);
+          else expect(Math.round(answer?.score ?? Number.NaN), `${where} (score ${String(answer?.score)})`).toBe(want);
+        }
+      });
+    }
   }
 });

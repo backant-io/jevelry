@@ -22,4 +22,4 @@ export { resolveKey, storeKey, KEY_ACCOUNT, KEY_SERVICE, KEY_VARIABLE } from "./
 export { appendLine, findAsk, jevelryHome, outcomeOf, readLog, LOG_FILE, type AskLine, type LogLine, type OutcomeLine } from "./log.js";
 export * from "./protocol.js";
 export { renderReport, report, type QuestionReport } from "./report.js";
-export { DEFAULT_THRESHOLDS, certaintyOf, mergeThresholds, verdictOf, type Thresholds } from "./verdict.js";
+export { DEFAULT_THRESHOLDS, certaintyOf, mergeThresholds, decisionOf, type Thresholds } from "./decision.js";

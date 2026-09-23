@@ -58,7 +58,7 @@ live("the real TypeSafe API", () => {
     const r = run(["ask", "ticket-triage", "--state", JSON.stringify(state)]);
     expect(r.stderr).toBe("");
     expect(r.status).toBe(0);
-    const doc = JSON.parse(r.stdout) as { answers: Record<string, { type: string; verdict: string; choice?: string; yes?: boolean; legend?: Record<string, unknown> }> };
+    const doc = JSON.parse(r.stdout) as { answers: Record<string, { type: string; decision: string; choice?: string; yes?: boolean; legend?: Record<string, unknown> }> };
     expect(validate(doc), JSON.stringify(validate.errors)).toBe(true);
     expect(Object.keys(doc.answers)).toEqual(["team", "urgent", "frustration"]);
     expect(doc.answers.team?.type).toBe("choice");
@@ -67,7 +67,7 @@ live("the real TypeSafe API", () => {
     expect(doc.answers.team?.choice).toBe("billing");
     expect(doc.answers.urgent?.yes).toBe(true);
     expect(Object.keys(doc.answers.frustration?.legend ?? {})).toEqual(["0", "1", "2"]);
-    for (const answer of Object.values(doc.answers)) expect(["act", "mark", "fall_back"]).toContain(answer.verdict);
+    for (const answer of Object.values(doc.answers)) expect(["act", "mark", "fall_back"]).toContain(answer.decision);
   });
 
   it("answers the shipped duplicate-issue jevel over its candidates", () => {
@@ -84,13 +84,13 @@ live("the real TypeSafe API", () => {
     const r = run(["ask", "duplicate-issue", "--state", JSON.stringify(state)]);
     expect(r.stderr).toBe("");
     expect(r.status).toBe(0);
-    const doc = JSON.parse(r.stdout) as { answers: Record<string, { type: string; verdict: string; yes?: boolean }> };
+    const doc = JSON.parse(r.stdout) as { answers: Record<string, { type: string; decision: string; yes?: boolean }> };
     expect(validate(doc), JSON.stringify(validate.errors)).toBe(true);
     expect(Object.keys(doc.answers)).toEqual(["same_as[0]", "same_as[1]", "actionable"]);
     expect(doc.answers["same_as[0]"]?.yes).toBe(true);
     expect(doc.answers["same_as[1]"]?.yes).toBe(false);
     expect(doc.answers.actionable?.yes).toBe(true);
-    for (const answer of Object.values(doc.answers)) expect(["act", "mark", "fall_back"]).toContain(answer.verdict);
+    for (const answer of Object.values(doc.answers)) expect(["act", "mark", "fall_back"]).toContain(answer.decision);
   });
 
   it("logged every ask and never the key", () => {

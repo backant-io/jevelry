@@ -1,0 +1,145 @@
+[
+  {
+    "name": "a latency alert that is still firing for the on-call engineer",
+    "state": {
+      "person": {
+        "name": "Ana",
+        "role": "on-call engineer",
+        "focus": "writing the postmortem for yesterday's outage"
+      },
+      "notifications": [
+        {
+          "from": "the pager",
+          "about": "checkout-api latency above 2s for 10 minutes",
+          "text": "The p95 latency on checkout-api crossed 2 seconds at 14:02 and is still above it."
+        },
+        {
+          "from": "Jonas on GitHub",
+          "about": "New comment on pull request 412",
+          "text": "Looks good to me, one small naming nit on line 30."
+        },
+        {
+          "from": "a newsletter",
+          "about": "Weekly digest",
+          "text": "Five links about distributed systems and a conference announcement."
+        }
+      ]
+    },
+    "expect": {
+      "worth_interrupting": true,
+      "handle": "act_now",
+      "depth": 1
+    }
+  },
+  {
+    "name": "a green build, an accepted invite and a digest",
+    "state": {
+      "person": {
+        "name": "Tom",
+        "role": "backend engineer",
+        "focus": "refactoring the billing worker"
+      },
+      "notifications": [
+        {
+          "from": "the CI",
+          "about": "Build passed on main",
+          "text": "All 412 tests passed on commit 8f3a2c1."
+        },
+        {
+          "from": "the calendar",
+          "about": "Invite accepted",
+          "text": "Lena accepted Thursday's planning meeting."
+        },
+        {
+          "from": "a newsletter",
+          "about": "Weekly digest",
+          "text": "Seven links about Postgres and a podcast episode."
+        }
+      ]
+    },
+    "expect": {
+      "worth_interrupting": false,
+      "handle": "ignore",
+      "depth": 0
+    }
+  },
+  {
+    "name": "a review request for this week and a question with no rush",
+    "state": {
+      "person": {
+        "name": "Tom",
+        "role": "backend engineer",
+        "focus": "refactoring the billing worker"
+      },
+      "notifications": [
+        {
+          "from": "Mia on GitHub",
+          "about": "Review requested on pull request 518",
+          "text": "Could you review the invoice export change sometime this week? It ships next Tuesday."
+        },
+        {
+          "from": "Sam in the design doc",
+          "about": "Comment on Queue design",
+          "text": "Why did we pick at-least-once delivery here? No rush, just curious for the doc."
+        }
+      ]
+    },
+    "expect": {
+      "worth_interrupting": false,
+      "handle": "batch_for_later",
+      "depth": 1
+    }
+  },
+  {
+    "name": "a manager waiting for a vendor choice by three today",
+    "state": {
+      "person": {
+        "name": "Lena",
+        "role": "engineering lead",
+        "focus": "quarterly planning"
+      },
+      "notifications": [
+        {
+          "from": "Karim, her manager, in chat",
+          "about": "Vendor for the SMS provider",
+          "text": "Procurement needs our pick by 15:00 today: Twilio at the higher price with the SLA, or Vonage at the lower price. Which one do we go with?"
+        },
+        {
+          "from": "the CI",
+          "about": "Build passed on main",
+          "text": "All tests passed on commit 2d91e04."
+        }
+      ]
+    },
+    "expect": {
+      "worth_interrupting": true,
+      "handle": "act_now",
+      "depth": 2
+    }
+  },
+  {
+    "name": "a database lag outside the person's area and a bare ping",
+    "state": {
+      "person": {
+        "name": "Tom",
+        "role": "frontend engineer",
+        "focus": "building the new settings page"
+      },
+      "notifications": [
+        {
+          "from": "the monitoring",
+          "about": "orders-db replica lag 40s",
+          "text": "Replication lag on the orders-db replica is 40 seconds."
+        },
+        {
+          "from": "Jonas in chat",
+          "about": "Direct message",
+          "text": "ping"
+        }
+      ]
+    },
+    "expect": {
+      "handle": null
+    }
+  }
+]

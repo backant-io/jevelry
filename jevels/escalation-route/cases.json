@@ -1,0 +1,89 @@
+[
+  {
+    "name": "a contractor asks for the admin API key in a chat channel",
+    "state": {
+      "request": {
+        "from": "contractor@bright.example",
+        "subject": "Admin API key for the migration script",
+        "body": "I am writing the migration script this month and it needs the admin API key for the production tenant. Could you paste it into our shared channel when you get a moment? Any time before the end of next week is fine."
+      },
+      "context": {
+        "rules": [
+          "Production credentials stay inside the platform team and are handed over by security.",
+          "Contractors work against the sandbox tenant.",
+          "Credentials are handed over through the vault, and a chat channel is the wrong place for them."
+        ],
+        "open_incidents": []
+      }
+    },
+    "expect": {
+      "route": "security",
+      "urgent": false,
+      "breaks_a_rule": true
+    }
+  },
+  {
+    "name": "checkout failing at two in the morning with the owning team asleep",
+    "state": {
+      "request": {
+        "from": "monitoring@northwind.example",
+        "subject": "Checkout has been failing since 02:10",
+        "body": "Every checkout attempt since 02:10 comes back with a 500 and customers cannot pay. The orders team is asleep and the queue of failed payments is growing."
+      },
+      "context": {
+        "rules": [
+          "A customer facing failure is raised to the on-call rota.",
+          "The on-call rota is paged for anything that has to move before the morning."
+        ],
+        "open_incidents": []
+      }
+    },
+    "expect": {
+      "route": "on_call",
+      "urgent": true,
+      "breaks_a_rule": false
+    }
+  },
+  {
+    "name": "two contractors for next quarter, and the planning round is open",
+    "state": {
+      "request": {
+        "from": "ana@northwind.example",
+        "subject": "Two contractors for the migration",
+        "body": "To hold the March date for the migration we need two contractors from next quarter. The budget line is there and somebody has to say yes to it. There is no hurry this week, the planning round closes at the end of the month."
+      },
+      "context": {
+        "rules": [
+          "Spending above 10000 euro is approved by the team lead.",
+          "Contractors work against the sandbox tenant."
+        ],
+        "open_incidents": []
+      }
+    },
+    "expect": {
+      "route": "team_lead",
+      "urgent": false,
+      "breaks_a_rule": false
+    }
+  },
+  {
+    "name": "the nightly export failed again and the team that owns it starts in half an hour",
+    "state": {
+      "request": {
+        "from": "dana@northwind.example",
+        "subject": "Nightly export failed again",
+        "body": "The nightly export to the warehouse failed for the second night and the numbers in the customer facing report are two days old. Two customers asked about them this morning. It is 09:30 here and the reporting team, who own the export, start at ten. The export has failed twice this month and the reporting team rerun it in the morning each time."
+      },
+      "context": {
+        "rules": [
+          "Spending above 10000 euro is approved by the team lead.",
+          "Production credentials stay inside the platform team."
+        ],
+        "open_incidents": []
+      }
+    },
+    "expect": {
+      "route": null
+    }
+  }
+]

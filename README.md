@@ -3,7 +3,7 @@
 <p align="center">
   <a href="#start">Start</a> ·
   <a href="#jevels">Jevels</a> ·
-  <a href="#verdicts">Verdicts</a> ·
+  <a href="#decisions">Decisions</a> ·
   <a href="#measure-it">Measure it</a> ·
   <a href="https://docs.typesafe.ai">Jev docs</a>
 </p>
@@ -15,11 +15,48 @@
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT">
 </p>
 
-You were probably asking a chat model to "return JSON" so your code could decide something: is this ticket urgent, which team gets it, is this bug report a duplicate of one you already have. Then you parse the text, the parse breaks on a Tuesday, you add a retry, and you still have no idea how sure the model actually was.
+<p align="center"><b>Let Jev make the small calls in your code and your coding agent, with a decision your code can act on.</b></p>
 
-You don't have to do that anymore. We have built jevelry, a runtime for Jev, the decision model from TypeSafe. You hand it your state and a jevel, and it hands your code a verdict with the probability and the confidence behind it, so you can branch on it the way you would on any other value.
+Your code and your coding agent make the same small calls every day: is this ticket urgent, which team should get it, is this bug a duplicate, did this test fail because of the code or because of the machine it ran on. Today each of those is usually a prompt that returns text you parse, and you don't learn how sure the model was.
 
-Think of Jev as a colleague you ask one quick question and who answers with a number, and the jevels are the questions you keep ready for it.
+jevelry asks each of those questions to Jev, the decision model from TypeSafe, with one command. A question lives in a small file called a jevel, and sixteen ready-made jevels ship with the package. Jev answers with how sure it is, and the jevel turns that into one of three decisions:
+
+| Decision | Meaning | What your code does |
+|---|---|---|
+| `act` | Jev is sure | uses the answer |
+| `mark` | Jev is fairly sure | uses the answer and flags it for a person |
+| `fall_back` | Jev is unsure | does what it did before jevelry |
+
+One ticket triage is about 1,280 input tokens at $0.042 per million, roughly $0.00005, so a dollar covers around 18,000 decisions.
+
+## Where it helps
+
+### In your app
+
+A support ticket comes in and needs a team and a priority:
+
+```sh
+npx jevelry ask ticket-triage --state '{"ticket": {"subject": "Charged twice", "message": "I was billed twice this month, please refund one today."}}'
+```
+
+On `act` your code routes the ticket to the team Jev picked, on `mark` it routes it and flags it for the queue owner, and on `fall_back` it leaves the ticket for a person, the same way it works today.
+
+### In your coding agent
+
+A test fails with `connect EPERM` because the sandbox blocked a network call. Left alone, your agent will probably start rewriting code that was fine. With the jevelry skill installed, it asks first:
+
+```sh
+npx jevelry ask review-comment-kind --state '{"comment": {"author": "ci-bot", "text": "FAIL tests/api.test.ts\nTypeError: fetch failed\n  cause: Error: connect EPERM 104.18.2.1:443"}}'
+```
+
+On `environment` the agent reports the sandbox problem and leaves your code alone, on `defect` it fixes the code, and on `fall_back` it reads the output closely itself before it touches anything. A burst of service logs goes to `log-triage` the same way.
+
+### Trusting it
+
+Every jevel ships with a `cases.json`, a few realistic states with the answer a person would give, and our live tests ask every one of them against the real API. The clear cases land on the right answer and the unclear ones, the kind a colleague would ask you a question back about, stay below `act`. Once it runs in your code, you tell jevelry what turned out to be true and the report shows you how often `act` was right for each question:
+
+    npx jevelry outcome <log_id> urgent yes
+    npx jevelry report --jevel ticket-triage
 
 ## What is underneath
 
@@ -31,11 +68,11 @@ Jev takes a state (a support ticket, a bug report, the form somebody just filled
 | `score` | how much, on your own levels | a value between the levels, a probability per level, a confidence |
 | `noul` | is this true | one probability, 0 to 1 |
 
-jevelry is everything around that call: it loads your jevel, checks the state before it costs you anything, asks all the questions in one request, turns every answer into a verdict, writes one JSON document to stdout and keeps a log so you can measure the answers later. The official `@typesafe-ai/sdk` underneath reads your key and talks to the API.
+jevelry is everything around that call: it loads your jevel, checks the state before it costs you anything, asks all the questions in one request, turns every answer into a decision, writes one JSON document to stdout and keeps a log so you can measure the answers later. The official `@typesafe-ai/sdk` underneath reads your key and talks to the API.
 
 ## Free
 
-jevelry is free and MIT. TypeSafe charges per input token, 0.042 dollars per million, and output tokens are free. The reference ask in our live test (one question about one sentence) costs 307 input tokens.
+jevelry is free and MIT. TypeSafe charges per input token, 0.042 dollars per million, and output tokens are free. The `ticket-triage` example, three questions about one support ticket, costs 1,280 input tokens.
 
 ## Start simple
 
@@ -44,13 +81,13 @@ Put your key in the environment and ask one of the jevels that ship with the pac
     export TYPESAFE_API_KEY=...
     npx jevelry ask ticket-triage --state @ticket.json
 
-You get one JSON document back with an answer per question, and the part your code reads is the verdict:
+You get one JSON document back with an answer per question, and the part your code reads is the decision:
 
-    "team":        { "choice": "billing",  "confidence": 1.0,  "verdict": "act"  }
-    "urgent":      { "noul": 0.98,         "yes": true,        "verdict": "act"  }
-    "frustration": { "score": 0.73,        "confidence": 0.59, "verdict": "mark" }
+    "team":        { "choice": "billing",  "confidence": 1.0,  "decision": "act"  }
+    "urgent":      { "noul": 0.98,         "yes": true,        "decision": "act"  }
+    "frustration": { "score": 0.24,        "confidence": 0.64, "decision": "mark" }
 
-Your code branches on `verdict`, and the probabilities are in the document if you want your own rule. The whole document, the `jq` one-liner, the TypeScript call and the report walkthrough are in [docs/examples.md](docs/examples.md).
+Your code branches on `decision`, and the probabilities are in the document if you want your own rule. The whole document, the `jq` one-liner, the TypeScript call and the report walkthrough are in [docs/examples.md](docs/examples.md).
 
 ## Use it with your coding agent
 
@@ -66,7 +103,7 @@ Then talk to your agent the way you would to a colleague who has read the guide:
     or a fragile regex to make a decision, and propose a jevel for each one.
 
     Using the jevelry skill, write a jevel that decides which team a support ticket goes to
-    and whether it is urgent, run check on it, and wire the verdicts into src/inbox.ts.
+    and whether it is urgent, run check on it, and wire the decisions into src/inbox.ts.
 
     Using the jevelry skill, ask the ticket-triage jevel about twenty tickets from
     fixtures/, then run report and propose thresholds.
@@ -80,22 +117,50 @@ A jevel is a folder with one `JEVEL.md` in it, the same way a skill for your cod
 ```yaml
 ---
 name: ticket-triage
-version: 1
+version: 2
 model: jev-1.13.0
 state:
   required: [ticket]
+  budget_tokens: 8000
 questions:
   team:
     type: choice
-    instructions: "Which team should handle `ticket`?"
+    instructions:
+      question: "Which team should handle `ticket`?"
+      focus: "Classify the one thing the customer asks for. A message that touches several topics belongs to the team that owns the request."
+      inspect: "`ticket.subject` and `ticket.message`"
     criteria:
-      billing: "Payments, invoices, refunds, subscription changes."
-      technical: "Bugs, outages, error messages, integrations, data that looks wrong."
-      account: "Login, password, permissions, closing or changing an account."
-      other: "Anything the three teams above do not cover, or a message with no request in it."
-    verdict: { act: 0.8, mark: 0.6 }
----
+      billing:
+        what: "A charge, an invoice, a refund, a price or a subscription change"
+        not_for: "A feature that fails, which belongs to technical, or a password, which belongs to account"
+        examples:
+          - "I was charged twice for invoice 8841"
+          - "Cancel my subscription and refund this month"
+          - "The invoice shows the wrong VAT number"
+      technical:
+        what: "A feature that fails, an error message, an integration that stopped working, or data on a page that looks wrong"
+        not_for: "A charge the customer disputes, which belongs to billing, or a password, which belongs to account"
+        examples:
+          - "The export button returns a 500"
+          - "Your webhook stopped firing yesterday"
+          - "The dashboard shows last week's numbers"
+      account:
+        what: "Logging in, a password, a seat, a permission, or opening, renaming or closing an account"
+        not_for: "A charge on the account, which belongs to billing, or a page that fails after login, which belongs to technical"
+        examples:
+          - "I cannot log in and the reset mail keeps missing"
+          - "Please remove Anna's admin rights"
+          - "Close my account at the end of the month"
+      other:
+        what: "A message that asks for none of the three above, or that asks for nothing at all"
+        not_for: "A message that names a charge, a broken feature or a login, each of which belongs to one of the three above"
+        examples:
+          - "Thanks, that worked"
+          - "Do you sponsor conferences?"
+    thresholds: { act: 0.8, mark: 0.6 }
 ```
+
+Every option carries the same three fields: what it covers, which neighbouring option it gets mixed up with, and a few examples in the words your customers use, because Jev reads the options next to each other. The rest of the file asks `urgent` as a yes/no question and `frustration` as a score whose levels each describe a situation, and the guide walks you through all three shapes.
 
 Adding a use case is adding a folder. jevelry finds jevels in `--jevels <dir>`, then `JEVELRY_JEVELS`, then `./jevels`, then `~/.jevelry/jevels`, and it checks them before you spend a token:
 
@@ -103,13 +168,13 @@ Adding a use case is adding a folder. jevelry finds jevels in `--jevels <dir>`, 
     npx jevelry list
     npx jevelry show ticket-triage
 
-`check` refuses a jevel the API would refuse anyway (more than 255 options, a threshold outside 0 to 1, a question without instructions) and warns you about the cases Jev handles poorly: a yes/no question whose "yes" means no, a double negative, a model that is not pinned. Sixteen jevels ship with the package, from a support queue and a bug tracker to pull requests, logs, alerts and meeting notes; the list is in [jevels/README.md](jevels/README.md), so you always have something to copy.
+`check` refuses a jevel the API would refuse anyway (more than 255 options, a threshold outside 0 to 1, a question with no instructions) and warns you about the cases Jev handles poorly: a yes/no question whose "yes" means no, a double negative, options that carry different fields, a model that is not pinned. Sixteen jevels ship with the package, from a support queue and a bug tracker to pull requests, logs, alerts and meeting notes, each with an `example.json` to ask it with and a `cases.json` of states it is tested on; the list is in [jevels/README.md](jevels/README.md), so you always have something to copy.
 
-## Verdicts
+## Decisions
 
-Every answer comes back with a `verdict`, and that is the part your code uses:
+Every answer comes back with a `decision`, and that is the part your code uses:
 
-| Verdict | Meaning | What your code usually does |
+| Decision | Meaning | What your code usually does |
 |---|---|---|
 | `act` | Jev is sure enough, by the thresholds you set in the jevel | act on the answer |
 | `mark` | a reasonable answer with less confidence behind it | act and flag it for a person |
@@ -119,13 +184,13 @@ The thresholds live in the jevel, per question, so a question that skips an expe
 
 ## Measure it
 
-Every ask is appended to `~/.jevelry/log.jsonl` with its answers, its verdicts and a hash of the state. When you later know what was actually true, you tell jevelry, and it tells you how often each question was right:
+Every ask is appended to `~/.jevelry/log.jsonl` with its answers, its decisions and a hash of the state. When you later know what was actually true, you tell jevelry, and it tells you how often each question was right:
 
     npx jevelry outcome becfc166-7921-4fe3-a189-4c2c5b164bce urgent yes
     npx jevelry report --jevel ticket-triage
 
     jevel          question     asks  act  mark  fall_back  outcomes  agree(act)  agree(mark)  certainty
-    ticket-triage  frustration  1     0    1     0          0         -           -            0.59
+    ticket-triage  frustration  1     0    1     0          0         -           -            0.64
     ticket-triage  team         1     1    0     0          0         -           -            1.00
     ticket-triage  urgent       1     1    0     0          1         100%        -            0.98
 
@@ -146,11 +211,11 @@ After a few hundred asks that table shows you which thresholds to move and which
 | 6 | the network or TypeSafe's servers |
 | 7 | TypeSafe answered a shape this build cannot read |
 
-Currently jevelry asks Jev questions and hands you the answers, and that is the whole of it - this is intentional because Jev is built to answer, and in our own experience a small tool that does one thing is the one you can put in front of your own code and forget about. We are working on an authoring loop so you can try questions against a pasted state before you write the jevel.
+Currently jevelry asks Jev questions and hands you the answers, and that is the whole of it - we built it that way because Jev is built to answer, and in our own experience a small tool that does one thing is the one you can put in front of your own code and forget about. We are working on an authoring loop so you can try questions against a pasted state before you write the jevel.
 
 ## How do we know you can trust it
 
-128 tests run offline against recorded answers from TypeSafe's API reference. 5 tests run against the real API on demand with `npm run test:live`, and the last run answered with `jev-1.13.0` in 3.49 seconds for four calls. One of those tests reads the log afterwards and checks that your key stays out of it.
+170 tests run offline against recorded answers from TypeSafe's API reference and against the sixteen jevels and their cases. 89 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, and five more cover the API itself. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## Use it from code
 

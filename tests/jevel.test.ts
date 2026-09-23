@@ -6,7 +6,7 @@ import { JevelError, discoveryDirs, findJevel, listJevels, loadJevel, parseJevel
 
 const FIXTURES = join(process.cwd(), "tests", "fixtures", "jevels");
 
-const minimal = (frontmatter: string, body = "## When to use\n\n## State\n\n## Verdicts\n\n## Example\n") =>
+const minimal = (frontmatter: string, body = "## When to use\n\n## State\n\n## Decisions\n\n## Example\n") =>
   `---\n${frontmatter}\n---\n${body}`;
 
 const good = minimal(`name: t
@@ -26,7 +26,7 @@ describe("parseJevel", () => {
     expect(jevel.format).toBe(1);
     expect(jevel.model).toBe("jev-1.13.0");
     expect(jevel.state).toEqual({ required: ["employee", "events", "candidates", "filing"], budget_tokens: 12000 });
-    expect(jevel.verdict).toEqual({ act: 0.9, mark: 0.7 });
+    expect(jevel.thresholds).toEqual({ act: 0.9, mark: 0.7 });
     expect(Object.keys(jevel.questions)).toEqual(["worth_a_turn", "depth", "same_as"]);
     expect(jevel.questions.same_as?.repeat).toEqual({ over: "candidates", as: "candidate" });
     expect(jevel.body).toContain("## When to use");
@@ -61,8 +61,17 @@ describe("parseJevel", () => {
     refuses(`name: t\nversion: 1\nquestions:\n  q: { type: score, instructions: x, criteria: [a,b,c,d,e,f,g,h,i,j,k] }`, "questions.q.criteria");
   });
   it("refuses a threshold outside [0, 1] and mark over act", () => {
-    refuses(`name: t\nversion: 1\nverdict: { act: 1.2 }\nquestions:\n  q: { type: noul, instructions: x }`, "verdict");
-    refuses(`name: t\nversion: 1\nquestions:\n  q: { type: noul, instructions: x, verdict: { act: 0.5, mark: 0.8 } }`, "questions.q.verdict");
+    refuses(`name: t\nversion: 1\nthresholds: { act: 1.2 }\nquestions:\n  q: { type: noul, instructions: x }`, "thresholds");
+    refuses(`name: t\nversion: 1\nquestions:\n  q: { type: noul, instructions: x, thresholds: { act: 0.5, mark: 0.8 } }`, "questions.q.thresholds");
+  });
+  it("refuses a jevel written with the old verdict key, at either level, and names the fix", () => {
+    const message = "verdict was renamed to thresholds in jevelry 0.4; rename the key";
+    for (const [frontmatter, field] of [
+      [`name: t\nversion: 1\nverdict: { act: 0.9 }\nquestions:\n  q: { type: noul, instructions: x }`, "verdict"],
+      [`name: t\nversion: 1\nquestions:\n  q: { type: noul, instructions: x, verdict: { act: 0.9 } }`, "questions.q.verdict"],
+    ]) {
+      expect(() => parseJevel(minimal(frontmatter as string), "t")).toThrowError(expect.objectContaining({ field, message }) as unknown as Error);
+    }
   });
   it("refuses a repeat without over and as", () => {
     refuses(`name: t\nversion: 1\nquestions:\n  q: { type: noul, instructions: x, repeat: { over: items } }`, "questions.q.repeat");
@@ -81,6 +90,17 @@ describe("parseJevel", () => {
     );
     expect(warnings.some((w) => w.includes("questions.q.criteria.true") && w.includes("negation"))).toBe(true);
   });
+  it("warns on a structured noul whose true.what reads as a negation", () => {
+    const noul = (what: string) =>
+      parseJevel(
+        minimal(
+          `name: t\nversion: 1\nmodel: jev-1.13.0\nquestions:\n  q: { type: noul, instructions: "Is it?", criteria: { true: { what: "${what}", examples: [] }, false: { what: "Urgent", examples: [] } } }`,
+        ),
+        "t",
+      ).warnings;
+    expect(noul("Not urgent").some((w) => w.includes("questions.q.criteria.true.what") && w.includes("negation"))).toBe(true);
+    expect(noul("The customer asks for an answer today").some((w) => w.includes("negation"))).toBe(false);
+  });
   it("warns on a double negative in instructions", () => {
     const { warnings } = parseJevel(
       minimal(`name: t\nversion: 1\nmodel: jev-1.13.0\nquestions:\n  q: { type: noul, instructions: "Is it not true that no refund was asked?" }`),
@@ -88,6 +108,54 @@ describe("parseJevel", () => {
     );
     expect(warnings.some((w) => w.includes("double negative"))).toBe(true);
   });
+  const structured = (question: string) =>
+    parseJevel(minimal(`name: t\nversion: 1\nmodel: jev-1.13.0\nquestions:\n  q: ${question}`), "t").warnings;
+  const differingFields = (warnings: string[]) =>
+    warnings.filter((w) => w.startsWith("questions.q.criteria: structured entries use different fields"));
+
+  it("warns when two choice options describe themselves with different fields", () => {
+    const warnings = differingFields(
+      structured(
+        `{ type: choice, instructions: "Which?", criteria: { a: { what: "A", not_for: "B" }, b: { what: "B" } } }`,
+      ),
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("(not_for,what vs what)");
+  });
+  it("is silent when every choice option carries the same fields", () => {
+    expect(
+      differingFields(
+        structured(
+          `{ type: choice, instructions: "Which?", criteria: { a: { what: "A", not_for: "B" }, b: { what: "B", not_for: "A" } } }`,
+        ),
+      ),
+    ).toEqual([]);
+  });
+  it("is silent when every entry is a plain string, and on an option described as null", () => {
+    expect(differingFields(structured(`{ type: choice, instructions: "Which?", criteria: { a: "A", b: "BB" } }`))).toEqual([]);
+    expect(
+      differingFields(
+        structured(`{ type: choice, instructions: "Which?", criteria: { a: { what: "A" }, b: null, c: { what: "C" } } }`),
+      ),
+    ).toEqual([]);
+  });
+  it("warns when a noul describes true and false with different fields", () => {
+    const warnings = differingFields(
+      structured(
+        `{ type: noul, instructions: "Is it?", criteria: { true: { what: "Yes", examples: ["y"] }, false: { what: "No" } } }`,
+      ),
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("(examples,what vs what)");
+  });
+  it("warns when one score level is a string among structured levels", () => {
+    const warnings = differingFields(
+      structured(`{ type: score, instructions: "How much?", criteria: [{ what: "Low" }, "middling", { what: "High" }] }`),
+    );
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("(what vs (string))");
+  });
+
   it("warns on a missing conventional heading and on an unpinned model", () => {
     const { warnings } = parseJevel(`---\nname: t\nversion: 1\nquestions:\n  q: { type: noul, instructions: "Is it?" }\n---\n## When to use\n`, "t");
     expect(warnings.filter((w) => w.includes("heading"))).toHaveLength(3);
@@ -123,8 +191,8 @@ describe("discovery", () => {
 describe("review rulings", () => {
   it("refuses a threshold that is not a finite number", () => {
     expect(() =>
-      parseJevel(minimal(`name: t\nversion: 1\nverdict: { act: .nan }\nquestions:\n  q: { type: noul, instructions: x }`), "t"),
-    ).toThrowError(expect.objectContaining({ field: "verdict" }) as unknown as Error);
+      parseJevel(minimal(`name: t\nversion: 1\nthresholds: { act: .nan }\nquestions:\n  q: { type: noul, instructions: x }`), "t"),
+    ).toThrowError(expect.objectContaining({ field: "thresholds" }) as unknown as Error);
   });
   it("resolves a relative discovery dir against the injected cwd, not the process cwd", () => {
     expect(discoveryDirs({ cli: ["rel"], cwd: "/w", home: "/h" })).toEqual(["/w/rel", "/w/jevels", "/h/jevels"]);

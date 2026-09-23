@@ -1,5 +1,5 @@
 {
-  "protocol": 1,
+  "protocol": 2,
   "log_id": null,
   "jevel": null,
   "model": "jev-1.13.0",
@@ -10,7 +10,7 @@
       "noul": 0.95,
       "yes": true,
       "certainty": 0.95,
-      "verdict": "act"
+      "decision": "act"
     }
   },
   "usage": {

@@ -1,0 +1,69 @@
+[
+  {
+    "name": "an invoice date asked and given",
+    "state": {
+      "question": {
+        "from": "dana@northwind.example",
+        "text": "Did the September invoice go out to Acme, and if it did, on which date?"
+      },
+      "reply": {
+        "from": "sam@billing.example",
+        "text": "It went out on 3 September as invoice 2026-0912, and Acme confirmed receipt the same afternoon."
+      }
+    },
+    "expect": {
+      "addresses_it": true,
+      "next": "close"
+    }
+  },
+  {
+    "name": "a date given and the amount promised for tomorrow",
+    "state": {
+      "question": {
+        "from": "dana@northwind.example",
+        "text": "When did the Acme refund go out, and how much was it?"
+      },
+      "reply": {
+        "from": "sam@billing.example",
+        "text": "It went out on 12 September. The amount I have to get from finance, I will send it tomorrow."
+      }
+    },
+    "expect": {
+      "addresses_it": false,
+      "next": "follow_up"
+    }
+  },
+  {
+    "name": "a fix confirmed as shipped and the bug back this morning",
+    "state": {
+      "question": {
+        "from": "lee@acme.example",
+        "text": "The fix for the CSV export 500 shipped on Tuesday. Can we close ticket 4471?"
+      },
+      "reply": {
+        "from": "ops@acme.example",
+        "text": "Please keep it open. The export fails again this morning with the same 500, for the same customer."
+      }
+    },
+    "expect": {
+      "addresses_it": true,
+      "next": "reopen"
+    }
+  },
+  {
+    "name": "a login fix that mostly works, and one logout that may be the VPN",
+    "state": {
+      "question": {
+        "from": "lee@acme.example",
+        "text": "The login fix shipped yesterday. Is it working for you now?"
+      },
+      "reply": {
+        "from": "dana@northwind.example",
+        "text": "Mostly. I got logged out once this morning, but that could have been my VPN."
+      }
+    },
+    "expect": {
+      "next": null
+    }
+  }
+]

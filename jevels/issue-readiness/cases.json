@@ -1,0 +1,42 @@
+[
+  {
+    "name": "invoice totals in the plan currency, written out end to end",
+    "state": {
+      "issue": {
+        "title": "Show the invoice total in the currency of the plan",
+        "body": "The invoice list shows every total in euro, and customers on a dollar plan read the wrong number. Show each total in the currency the plan is billed in, with the code beside the amount. Scope is the invoice list and the invoice detail page; the invoice PDF stays as it is. Done when a dollar plan shows USD 120.00 in both places, a euro plan reads as it does today, and tests cover both."
+      }
+    },
+    "expect": { "readiness": 2, "missing": "nothing" }
+  },
+  {
+    "name": "search feels slow, in two sentences",
+    "state": {
+      "issue": {
+        "title": "Search needs to be faster",
+        "body": "Search feels slow lately. Can we do something about it?"
+      }
+    },
+    "expect": { "readiness": 0, "missing": "several" }
+  },
+  {
+    "name": "a confirmation dialog with the steps and the scope and no done when line",
+    "state": {
+      "issue": {
+        "title": "Warn before a project is deleted",
+        "body": "Deleting a project takes effect straight away and two customers have deleted the wrong one. Put a confirmation dialog in front of the delete button that asks the person to type the project name, and delete only once the name matches. Scope is the project settings page in the web app; the API stays as it is."
+      }
+    },
+    "expect": { "readiness": 1, "missing": "acceptance" }
+  },
+  {
+    "name": "audit log entries that should outlive the project",
+    "state": {
+      "issue": {
+        "title": "Keep audit log entries when a project is deleted",
+        "body": "When a project is deleted the audit log entries for it disappear with it. Delete a project and open the audit log: the entries for that project should still be listed, marked with the name the project had."
+      }
+    },
+    "expect": { "missing": null }
+  }
+]
