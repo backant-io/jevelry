@@ -1,11 +1,11 @@
 ---
 name: jevelry
-description: "Jev (TypeSafe System One) decisions: use when you or the code you are working on need a judgment call about text or data, such as triage of a ticket, a message or a log, whether something is urgent, whether an issue is a duplicate, how high the severity is, whether a change is risky, or whether a failing test is caused by the code or by the environment, and you would otherwise ask an LLM to return JSON. jevelry asks Jev through a jevel file and hands back a verdict, act, mark or fall_back."
+description: "Jev (TypeSafe System One) decisions: use when you or the code you are working on need a judgment call about text or data, such as triage of a ticket, a message or a log, whether something is urgent, whether an issue is a duplicate, how high the severity is, whether a change is risky, or whether a failing test is caused by the code or by the environment, and you would otherwise ask an LLM to return JSON. jevelry asks Jev through a jevel file and hands back a decision, act, mark or fall_back."
 ---
 
 # jevelry
 
-You are probably about to write a prompt that asks a chat model to return JSON so the code can branch on it. With jevelry you write a jevel instead, a small file with typed questions, and the code branches on a verdict. This skill tells you how to install it, how to write a jevel, and how to wire the answer into the code you are working on.
+You are probably about to write a prompt that asks a chat model to return JSON so the code can branch on it. With jevelry you write a jevel instead, a small file with typed questions, and the code branches on a decision. This skill tells you how to install it, how to write a jevel, and how to wire the answer into the code you are working on.
 
 ## Install
 
@@ -26,7 +26,7 @@ Use a jevel when you or the code need one of these and the input is text or a re
 
 Keep arithmetic, counting, date comparison and anything a regex can find in the code, because Jev answers questions about meaning.
 
-Sixteen jevels ship with the package, and each one fits a moment you run into while you work. Ask it with the state in a file, then do what the verdict says:
+Sixteen jevels ship with the package, and each one fits a moment you run into while you work. Ask it with the state in a file, then do what the decision says:
 
 | Moment | Command | On `act` | On `mark` | On `fall_back` |
 |---|---|---|---|---|
@@ -83,21 +83,21 @@ Read `references/writing-jevels.md` before you write one; it is the whole method
 `ask` prints exactly one JSON document on stdout:
 
     {
-      "protocol": 1,
+      "protocol": 2,
       "log_id": "...",
-      "jevel": { "name": "ticket-triage", "version": 2 },
+      "jevel": { "name": "ticket-triage", "version": 3 },
       "model": "jev-1.13.0",
       "state_hash": "sha256:...",
       "answers": {
-        "team": { "type": "choice", "choice": "billing", "probabilities": { "other": 0, "technical": 0, "account": 0, "billing": 1 }, "confidence": 1, "certainty": 1, "verdict": "act" },
-        "urgent": { "type": "noul", "noul": 0.98, "yes": true, "certainty": 0.98, "verdict": "act" }
+        "team": { "type": "choice", "choice": "billing", "probabilities": { "other": 0, "technical": 0, "account": 0, "billing": 1 }, "confidence": 1, "certainty": 1, "decision": "act" },
+        "urgent": { "type": "noul", "noul": 0.98, "yes": true, "certainty": 0.98, "decision": "act" }
       },
       "usage": { "input_tokens": 1280, "output_tokens": 77 }
     }
 
-The values come from a live ask of `ticket-triage` on its `example.json`, trimmed to two of its three answers. The code reads `verdict` per answer and branches: `act` means use the answer, `mark` means use it and flag the case for a person, `fall_back` means do what the code did before the jevel existed. The raw probabilities are there when the code needs its own rule. Answers for a `repeat` question are named `same_as[0]`, `same_as[1]` and so on.
+The values come from a live ask of `ticket-triage` on its `example.json`, trimmed to two of its three answers. The code reads `decision` per answer and branches: `act` means use the answer, `mark` means use it and flag the case for a person, `fall_back` means do what the code did before the jevel existed. The raw probabilities are there when the code needs its own rule. Answers for a `repeat` question are named `same_as[0]`, `same_as[1]` and so on.
 
-On failure the document is `{ "protocol": 1, "error": { "exit": 3, "code": "rate_limited", "message": "...", "retry_after_ms": 1200 } }` and the exit code says what happened: 2 the jevel or state is wrong (the document names the field), 3 rate limited or overloaded, 4 the key is missing or refused, 5 over the token budget, 6 network, 7 an answer this build cannot read. 4 and 5 make no request. Branch on the exit code, show the message to a person.
+On failure the document is `{ "protocol": 2, "error": { "exit": 3, "code": "rate_limited", "message": "...", "retry_after_ms": 1200 } }` and the exit code says what happened: 2 the jevel or state is wrong (the document names the field), 3 rate limited or overloaded, 4 the key is missing or refused, 5 over the token budget, 6 network, 7 an answer this build cannot read. 4 and 5 make no request. Branch on the exit code, show the message to a person.
 
 From TypeScript or JavaScript the same functions are importable: `import { ask, loadJevel, discoveryDirs } from "jevelry"`. Every other language spawns the CLI and parses stdout.
 
@@ -105,6 +105,6 @@ From TypeScript or JavaScript the same functions are importable: `import { ask, 
 
 - Keep the key out of your output, your logs and every commit. The SDK reads `TYPESAFE_API_KEY`, and jevelry also looks in the keychain and in `~/.jevelry/env`.
 - Questions and thresholds stay in `./jevels/<name>/JEVEL.md`, in one place, so the person you work with reviews them before they merge. Say in your summary which jevel you wrote and what its thresholds are.
-- Run `check` before `ask`, and prove the jevel with its `cases.json` (an obvious yes, an obvious no, an unsure one) before you wire a verdict into anything.
+- Run `check` before `ask`, and prove the jevel with its `cases.json` (an obvious yes, an obvious no, an unsure one) before you wire a decision into anything.
 - Pin `model` to a concrete version and bump `version` when you change a question.
 - Reference: https://docs.typesafe.ai for Jev itself; `references/writing-jevels.md` and `references/protocol.md` in this skill for the file format and the document.

@@ -8,7 +8,7 @@ A jevel is a folder with one `JEVEL.md` in it. The frontmatter at the top is wha
 
     npx jevelry show ticket-triage
 
-Every jevel has a `name` that matches its folder, a `version` you bump when you change a question, a pinned `model`, a `state` block that names the keys your code will send, and a `questions` map. The body carries four headings, `When to use`, `State`, `Verdicts` and `Example`, and every shipped jevel also carries an `example.json` you can ask it with and a `cases.json` that proves its questions decide. `npx jevelry check <name>` tells you when something in the file is off.
+Every jevel has a `name` that matches its folder, a `version` you bump when you change a question, a pinned `model`, a `state` block that names the keys your code will send, and a `questions` map. The body carries four headings, `When to use`, `State`, `Decisions` and `Example`, and every shipped jevel also carries an `example.json` you can ask it with and a `cases.json` that proves its questions decide. `npx jevelry check <name>` tells you when something in the file is off.
 
 ## Questions
 
@@ -120,19 +120,19 @@ Name the keys your questions read in `state.required`, so a missing key is refus
 
 `budget_tokens` is your own ceiling under Jev's limits (32k tokens for the state plus the longest question, 64k for everything). When your code sends more than that, `ask` exits with code 5 before it costs you anything. The `ticket-triage` example costs 1,280 input tokens with its three questions, and the `duplicate-issue` example with two candidates costs 1,170, because every question sends its framing and its criteria along with the state.
 
-## Verdicts
+## Decisions
 
-Every answer comes back with a verdict, `act`, `mark` or `fall_back`, and the thresholds that decide it live on the question:
+Every answer comes back with a decision, `act`, `mark` or `fall_back`, and the thresholds that decide it live on the question:
 
-    verdict: { act: 0.85, mark: 0.7 }
+    thresholds: { act: 0.85, mark: 0.7 }
 
 A `choice` or `score` is judged on the confidence Jev reports, and a `noul` on how far its probability sits from 0.5, so a noul of 0.08 is as sure as one of 0.92. Above `act` your code acts on the answer, between `mark` and `act` it acts and flags the case for a person, and below `mark` it does what it did before the jevel existed.
 
-Set them by what a wrong answer costs. A question that only sorts a queue can act at 0.7. A question that skips a step a person would otherwise do should sit at 0.9, and you lower it later with the report in front of you. The runtime defaults are 0.9 and 0.7, and you can set jevel-wide defaults in a `verdict` block at the top and override them per question. The values in the shipped jevels are a starting point, and the report is what moves them.
+Set them by what a wrong answer costs. A question that only sorts a queue can act at 0.7. A question that skips a step a person would otherwise do should sit at 0.9, and you lower it later with the report in front of you. The runtime defaults are 0.9 and 0.7, and you can set jevel-wide defaults in a `thresholds` block at the top and override them per question. The values in the shipped jevels are a starting point, and the report is what moves them.
 
 ## Prove it
 
-Before you wire a verdict into anything, you prove that the questions decide, and you do that with a `cases.json` next to the `JEVEL.md`. It is a JSON array of cases, and each case has a `name`, a `state` your jevel accepts and an `expect` that says what a correct answer looks like for each question, by its answer name (a `repeat` question appears as `same_as[0]`). A string expects that choice, `true` or `false` expects that noul answer, and a whole number expects the score to round to that level, and in each of those the verdict must be `act` or `mark`. A `null` says the case is unclear, so the verdict must stay below `act`. A question you leave out of `expect` is asked and left alone. One case from `ticket-triage`:
+Before you wire a decision into anything, you prove that the questions decide, and you do that with a `cases.json` next to the `JEVEL.md`. It is a JSON array of cases, and each case has a `name`, a `state` your jevel accepts and an `expect` that says what a correct answer looks like for each question, by its answer name (a `repeat` question appears as `same_as[0]`). A string expects that choice, `true` or `false` expects that noul answer, and a whole number expects the score to round to that level, and in each of those the decision must be `act` or `mark`. A `null` says the case is unclear, so the decision must stay below `act`. A question you leave out of `expect` is asked and left alone. One case from `ticket-triage`:
 
     {
       "name": "fourth mail about a team locked out since this morning",
@@ -158,7 +158,7 @@ In your own project you ask each case the way the suite does and read the answer
 
     jq -c '.[]' jevels/<name>/cases.json | while read -r c; do
       printf '%s\n' "$c" | jq -r .name
-      npx jevelry ask <name> --state "$(printf '%s\n' "$c" | jq -c .state)" | jq -c '.answers | map_values({choice, yes, score, verdict})'
+      npx jevelry ask <name> --state "$(printf '%s\n' "$c" | jq -c .state)" | jq -c '.answers | map_values({choice, yes, score, decision})'
     done
 
 A clear case that Jev gets wrong, or gets right at `fall_back`, means the criteria or the state are wrong, and you rewrite them. Rewriting the question usually beats lowering the threshold. You move an expectation only when the expectation itself was the mistake, and you say so in the commit.
@@ -170,7 +170,7 @@ When you know later what was actually true, tell jevelry and read the report:
     npx jevelry outcome <log_id> urgent yes
     npx jevelry report --jevel <name>
 
-After a few hundred asks the report shows you, per question, how often `act` verdicts agreed with reality, and that is the number you move thresholds by. A question that agrees 95% of the time can probably act lower, and one that agrees 70% of the time goes up or gets rewritten, with a new case for the state it got wrong.
+After a few hundred asks the report shows you, per question, how often `act` decisions agreed with reality, and that is the number you move thresholds by. A question that agrees 95% of the time can probably act lower, and one that agrees 70% of the time goes up or gets rewritten, with a new case for the state it got wrong.
 
 Bump `version` each time you change a question or a threshold, so the log tells the asks apart. Keep `model` pinned to a concrete version like `jev-1.13.0`. An alias like `jev-latest` moves when TypeSafe ships a release, and thresholds you tuned on one version usually need a look on the next, so move the pin yourself once the cases pass on the new version and the report looks right.
 
@@ -181,6 +181,6 @@ Bump `version` each time you change a question or a threshold, so the log tells 
 - Every criteria entry in a question has the same fields: `{ what, not_for, examples }` for options, `{ what, signals }` for score levels that describe situations, `{ true: { what, examples }, false: { what, examples } }` for a noul.
 - Counting, dates and math happen in your code, and the state carries the result as words.
 - The state has only what the questions need, rendered for a reader, and `state.required` lists the keys.
-- Thresholds match what a wrong answer costs, and the body says what your code does with each verdict.
+- Thresholds match what a wrong answer costs, and the body says what your code does with each decision.
 - `model` is pinned, `version` is set, and `check` prints 0 warnings.
 - `cases.json` holds at least three realistic cases, one of them unclear, and every clear case lands on its expected answer at `act` or `mark` against the real API.

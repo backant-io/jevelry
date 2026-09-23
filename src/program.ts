@@ -104,7 +104,7 @@ function failCommand(error: unknown): never {
 /** The commander program, built but never parsed here: `cli.ts` is the entry that parses it. */
 export function buildProgram(): Command {
   const program = new Command("jevelry")
-    .description("A runtime for Jev, TypeSafe's System One model: jevels in, verdicts out")
+    .description("A runtime for Jev, TypeSafe's System One model: jevels in, decisions out")
     .version(pkg.version);
 
   program

@@ -1,6 +1,6 @@
 ---
 name: reply-check
-version: 2
+version: 3
 model: jev-1.13.0
 state:
   required: [question, reply]
@@ -24,7 +24,7 @@ questions:
           - "the reply gives the date and says the amount comes tomorrow"
           - "I will look into it"
           - "ok"
-    verdict: { act: 0.85, mark: 0.7 }
+    thresholds: { act: 0.85, mark: 0.7 }
   next:
     type: choice
     instructions:
@@ -56,7 +56,7 @@ questions:
         examples:
           - "ok"
           - "Seen."
-    verdict: { act: 0.8, mark: 0.6 }
+    thresholds: { act: 0.8, mark: 0.6 }
 ---
 # reply-check
 
@@ -68,7 +68,7 @@ After somebody replies to a question, a bug report or a request, to decide wheth
 
 `question`: `{ "from": "...", "text": "..." }`, the message that opened the thread. `reply`: the same shape, the message that answers it. Send the two messages and the parts of the thread they point at.
 
-## Verdicts
+## Decisions
 
 `addresses_it` yes with `act`: mark the thread answered. `mark`: mark it answered and keep it in the owner's list for a day. `fall_back`: leave the thread open.
 `next` with `act`: close it, schedule the follow-up, or reopen it, as the option says. `mark`: do that and tell the person who asked what you did. `fall_back`: leave the thread for a person to read.

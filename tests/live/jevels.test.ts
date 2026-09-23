@@ -31,7 +31,7 @@ const run = (args: string[]) =>
 
 interface Answer {
   type: string;
-  verdict: string;
+  decision: string;
   choice?: string;
   yes?: boolean;
   score?: number;
@@ -51,7 +51,7 @@ live("every shipped jevel answers its own example", () => {
       const { jevel } = loadJevel(name, [JEVELS]);
       const state: unknown = JSON.parse(readFileSync(join(JEVELS, name, "example.json"), "utf8"));
       expect(Object.keys(doc.answers).sort()).toEqual(Object.keys(expandQuestions(jevel, state).questions).sort());
-      for (const answer of Object.values(doc.answers)) expect(["act", "mark", "fall_back"]).toContain(answer.verdict);
+      for (const answer of Object.values(doc.answers)) expect(["act", "mark", "fall_back"]).toContain(answer.decision);
     });
   }
 });
@@ -75,10 +75,10 @@ live("every shipped jevel decides each of its cases", () => {
           // A `null` says the case is one a colleague would ask a question back about, so the only
           // wrong answer is a confident one: the host has to fall back or flag it for a person.
           if (want === null) {
-            expect(answer?.verdict, `${where} is meant to be unclear, so it must not reach act`).not.toBe("act");
+            expect(answer?.decision, `${where} is meant to be unclear, so it must not reach act`).not.toBe("act");
             continue;
           }
-          expect(answer?.verdict, `${where} is a clear case, so it must not fall back`).not.toBe("fall_back");
+          expect(answer?.decision, `${where} is a clear case, so it must not fall back`).not.toBe("fall_back");
           if (typeof want === "string") expect(answer?.choice, where).toBe(want);
           else if (typeof want === "boolean") expect(answer?.yes, where).toBe(want);
           else expect(Math.round(answer?.score ?? Number.NaN), `${where} (score ${String(answer?.score)})`).toBe(want);

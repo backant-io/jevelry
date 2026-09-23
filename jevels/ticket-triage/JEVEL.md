@@ -1,6 +1,6 @@
 ---
 name: ticket-triage
-version: 2
+version: 3
 model: jev-1.13.0
 state:
   required: [ticket]
@@ -40,7 +40,7 @@ questions:
         examples:
           - "Thanks, that worked"
           - "Do you sponsor conferences?"
-    verdict: { act: 0.8, mark: 0.6 }
+    thresholds: { act: 0.8, mark: 0.6 }
   urgent:
     type: noul
     instructions:
@@ -60,7 +60,7 @@ questions:
           - "Have a look whenever you get to it"
           - "Just so you know, the label is misspelled"
           - "How do I add a second seat?"
-    verdict: { act: 0.85, mark: 0.7 }
+    thresholds: { act: 0.85, mark: 0.7 }
   frustration:
     type: score
     instructions:
@@ -82,7 +82,7 @@ questions:
           - "cancel my account today"
           - "your support is a joke"
           - "ABSOLUTELY UNACCEPTABLE"
-    verdict: { act: 0.7, mark: 0.5 }
+    thresholds: { act: 0.7, mark: 0.5 }
 ---
 # ticket-triage
 
@@ -94,7 +94,7 @@ On every new support ticket, before a person reads it, to put it in the right qu
 
 `ticket`: `{ "subject": "...", "message": "...", "customer_since": "2024-03" }`. Send the ticket only; the questions read the subject and the message.
 
-## Verdicts
+## Decisions
 
 `team` with `act`: route the ticket. `mark`: route it and flag it for the queue owner. `fall_back`: leave it in the general queue.
 `urgent` yes with `act`: move it to the top of its queue. `frustration` at level 2 with `act`: a person answers before any automatic reply goes out.

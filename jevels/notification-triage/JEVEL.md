@@ -1,6 +1,6 @@
 ---
 name: notification-triage
-version: 2
+version: 3
 model: jev-1.13.0
 state:
   required: [person, notifications]
@@ -25,7 +25,7 @@ questions:
           - "weekly digest with five links"
           - "CI passed on main"
           - "a review request for later this week"
-    verdict: { act: 0.9, mark: 0.7 }
+    thresholds: { act: 0.9, mark: 0.7 }
   handle:
     type: choice
     instructions:
@@ -59,7 +59,7 @@ questions:
         examples:
           - "a disk at 71% next to a colleague asking if you have a second"
           - "an alert that fired and a second one saying it may have resolved"
-    verdict: { act: 0.8, mark: 0.6 }
+    thresholds: { act: 0.8, mark: 0.6 }
   depth:
     type: score
     instructions:
@@ -82,7 +82,7 @@ questions:
           - "vendor A or vendor B"
           - "ship today or hold until Monday"
           - "which of the two do we go with"
-    verdict: { act: 0.7, mark: 0.5 }
+    thresholds: { act: 0.7, mark: 0.5 }
 ---
 # notification-triage
 
@@ -94,7 +94,7 @@ On a batch of notifications collected for one person, before you push any of the
 
 `person`: `{ "name": "...", "role": "...", "focus": "what they are working on right now" }`. `notifications`: an array of `{ "from": "...", "about": "...", "text": "..." }` holding the ones that arrived since your last push. Render each one for a reader in your code: `from` is who or what sent it in plain words, `about` is its subject line, and `text` is the message in a sentence or two. Raw event records with ids and timestamps cost accuracy on every question. Group them in your code and send one batch per person.
 
-## Verdicts
+## Decisions
 
 `worth_interrupting` yes with `act`: push the batch to the phone. `mark`: push it and name the notification that caused it. `fall_back`: hold the batch for the next break.
 `handle` with `act`: put the batch in that lane. `mark`: put it in that lane and show the person which lane it went to. `fall_back`: leave the batch in the inbox.

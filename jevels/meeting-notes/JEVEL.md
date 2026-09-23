@@ -1,6 +1,6 @@
 ---
 name: meeting-notes
-version: 2
+version: 3
 model: jev-1.13.0
 state:
   required: [notes]
@@ -23,7 +23,7 @@ questions:
         examples:
           - "we are leaning towards the second option and will confirm next week"
           - "both plans are still on the table"
-    verdict: { act: 0.85, mark: 0.7 }
+    thresholds: { act: 0.85, mark: 0.7 }
   owners_assigned:
     type: noul
     instructions:
@@ -42,7 +42,7 @@ questions:
         examples:
           - "somebody needs to tell the customers"
           - "the pricing table still has to be updated, we will see who takes it"
-    verdict: { act: 0.85, mark: 0.7 }
+    thresholds: { act: 0.85, mark: 0.7 }
   follow_up_needed:
     type: noul
     instructions:
@@ -61,7 +61,7 @@ questions:
         examples:
           - "all four points are settled and the actions are out"
           - "nothing else came up"
-    verdict: { act: 0.8, mark: 0.6 }
+    thresholds: { act: 0.8, mark: 0.6 }
   tone:
     type: score
     instructions:
@@ -84,7 +84,7 @@ questions:
           - "Dan called the plan unworkable"
           - "Priya refused to sign off on the date"
           - "the meeting ended with the two of them apart on this"
-    verdict: { act: 0.7, mark: 0.5 }
+    thresholds: { act: 0.7, mark: 0.5 }
 ---
 # meeting-notes
 
@@ -96,7 +96,7 @@ On the notes after a meeting, to record what was decided, who owns what, and whe
 
 `notes`: `{ "title": "...", "attendees": ["..."], "body": "..." }`. `body` is the notes as somebody wrote them, in whatever order they were taken.
 
-## Verdicts
+## Decisions
 
 `decision_reached` yes with `act`: write the decision into the decision log. `owners_assigned` no with `act`: ask the chair who owns the actions before the notes go out. `follow_up_needed` yes with `act`: put the next meeting on the calendar. `tone` at level 2 with `act`: tell the chair, because a disagreement that stayed open comes back.
 Each of the four with `mark`: do the same and show the chair the answer. `fall_back`: file the notes as they are.

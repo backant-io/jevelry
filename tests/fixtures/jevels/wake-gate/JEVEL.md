@@ -5,7 +5,7 @@ model: jev-1.13.0
 state:
   required: [employee, events, candidates, filing]
   budget_tokens: 12000
-verdict:
+thresholds:
   act: 0.9
   mark: 0.7
 questions:
@@ -22,12 +22,12 @@ questions:
       - "routine: a known verb on a known object"
       - "judgment: a choice between reasonable options"
       - "hard: the answer depends on reading and weighing several records"
-    verdict: { act: 0.7 }
+    thresholds: { act: 0.7 }
   same_as:
     type: noul
     repeat: { over: candidates, as: candidate }
     instructions: "Does `candidate` describe the same incident as `filing`?"
-    verdict: { act: 0.85 }
+    thresholds: { act: 0.85 }
 ---
 # wake-gate
 
@@ -39,7 +39,7 @@ Before waking an employee on its own mail.
 
 `employee` (title, authority), `events` (kind, actor, subject, summary), `candidates` (may be empty) and `filing` are all required: `same_as` repeats over `candidates` and reads `filing`.
 
-## Verdicts
+## Decisions
 
 `worth_a_turn` no with `act`: skip the turn. Anything else: wake as before.
 `depth` has no mark band on purpose: `act` and `mark` both sit at 0.7, so the office either acts on the depth it reads or falls back to the path it took before.

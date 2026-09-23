@@ -1,6 +1,6 @@
 ---
 name: task-difficulty
-version: 2
+version: 3
 model: jev-1.13.0
 state:
   required: [task]
@@ -28,7 +28,7 @@ questions:
           - "nobody knows yet where the records go missing"
           - "done when security signs off"
           - "find out why it is slow"
-    verdict: { act: 0.7, mark: 0.55 }
+    thresholds: { act: 0.7, mark: 0.55 }
   needs_specialist:
     type: noul
     instructions:
@@ -47,7 +47,7 @@ questions:
         examples:
           - "add a --json flag to the export command"
           - "cache the product list in memory or in the Redis the team already runs"
-    verdict: { act: 0.85, mark: 0.7 }
+    thresholds: { act: 0.85, mark: 0.7 }
   well_specified:
     type: noul
     instructions:
@@ -67,7 +67,7 @@ questions:
           - "onboarding feels better"
           - "security is happy with it"
           - "done when done"
-    verdict: { act: 0.8, mark: 0.6 }
+    thresholds: { act: 0.8, mark: 0.6 }
 ---
 # task-difficulty
 
@@ -79,7 +79,7 @@ Before you route a task, to send the routine ones to a cheap model or a junior h
 
 `task`: `{ "title": "...", "description": "...", "acceptance": "..." }`. Send the task as it stands in your tracker, so the answers are about the task somebody will actually pick up.
 
-## Verdicts
+## Decisions
 
 `depth` at level 0 with `act`: route it to the cheap model. Level 2 with `act`: route it to the strong model or to a person. `mark`: route it as the level says and flag it for the person who owns the queue. `fall_back`: route it the way you routed tasks before this jevel.
 `needs_specialist` yes with `act`: put it in the specialist queue whatever the depth says. `well_specified` no with `act`: send it back to the author and ask for the missing piece before anybody starts.

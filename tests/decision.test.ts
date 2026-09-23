@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_THRESHOLDS, certaintyOf, mergeThresholds, verdictOf } from "../src/verdict.js";
+import { DEFAULT_THRESHOLDS, certaintyOf, mergeThresholds, decisionOf } from "../src/decision.js";
 
 describe("certaintyOf", () => {
   it("is the confidence for choice and score", () => {
@@ -13,19 +13,19 @@ describe("certaintyOf", () => {
   });
 });
 
-describe("verdictOf", () => {
+describe("decisionOf", () => {
   const t = { act: 0.9, mark: 0.7 };
   it("acts at or above act", () => {
-    expect(verdictOf(0.9, t)).toBe("act");
-    expect(verdictOf(0.97, t)).toBe("act");
+    expect(decisionOf(0.9, t)).toBe("act");
+    expect(decisionOf(0.97, t)).toBe("act");
   });
   it("marks between mark and act", () => {
-    expect(verdictOf(0.7, t)).toBe("mark");
-    expect(verdictOf(0.89, t)).toBe("mark");
+    expect(decisionOf(0.7, t)).toBe("mark");
+    expect(decisionOf(0.89, t)).toBe("mark");
   });
   it("falls back under mark", () => {
-    expect(verdictOf(0.69, t)).toBe("fall_back");
-    expect(verdictOf(0, t)).toBe("fall_back");
+    expect(decisionOf(0.69, t)).toBe("fall_back");
+    expect(decisionOf(0, t)).toBe("fall_back");
   });
 });
 

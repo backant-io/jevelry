@@ -17,9 +17,9 @@ describe("docs/protocol examples", () => {
   it("rejects a document without protocol", () => {
     expect(validate({ answers: {} })).toBe(false);
   });
-  it("rejects an answer with an unknown verdict", () => {
+  it("rejects an answer with an unknown decision", () => {
     const doc = JSON.parse(readFileSync("docs/protocol/example-noul.json", "utf8"));
-    doc.answers.is_urgent.verdict = "maybe";
+    doc.answers.is_urgent.decision = "maybe";
     expect(validate(doc)).toBe(false);
   });
 });

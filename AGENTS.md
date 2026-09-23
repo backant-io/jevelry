@@ -1,6 +1,6 @@
 # jevelry
 
-> jevelry asks Jev, the decision model from TypeSafe (System One), small typed questions about text or data with one command. Your code or your coding agent gets back a verdict, `act`, `mark` or `fall_back`, together with how sure Jev was.
+> jevelry asks Jev, the decision model from TypeSafe (System One), small typed questions about text or data with one command. Your code or your coding agent gets back a decision, `act`, `mark` or `fall_back`, together with how sure Jev was.
 
 ## Install
 
@@ -14,7 +14,7 @@ This installs the jevelry skill into every coding agent it finds and asks for yo
 
 The state is a JSON file with the keys the jevel names, and the answer is one JSON document on stdout with an answer per question.
 
-## Verdicts
+## Decisions
 
 - `act`: Jev is sure, so go ahead with the answer.
 - `mark`: Jev is fairly sure, so go ahead and flag it for a person to look at.
@@ -23,4 +23,4 @@ The state is a JSON file with the keys the jevel names, and the answer is one JS
 ## Links
 
 - [The sixteen jevels that ship with the package](https://github.com/backant-io/jevelry/blob/main/jevels/README.md): triage, urgency, duplicates, severity, risky changes, failing test causes and more, each with an `example.json` and a `cases.json`.
-- [The guide to writing your own jevel](https://github.com/backant-io/jevelry/blob/main/skills/jevelry/references/writing-jevels.md): questions, criteria, state, verdicts and the cases that prove it.
+- [The guide to writing your own jevel](https://github.com/backant-io/jevelry/blob/main/skills/jevelry/references/writing-jevels.md): questions, criteria, state, decisions and the cases that prove it.

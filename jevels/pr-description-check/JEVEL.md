@@ -1,6 +1,6 @@
 ---
 name: pr-description-check
-version: 2
+version: 3
 model: jev-1.13.0
 state:
   required: [pr]
@@ -23,7 +23,7 @@ questions:
         examples:
           - "Fixes stuff, see ticket"
           - "the body talks about the login page and the diff edits the billing worker"
-    verdict: { act: 0.85, mark: 0.7 }
+    thresholds: { act: 0.85, mark: 0.7 }
   mentions_tests:
     type: noul
     instructions:
@@ -42,7 +42,7 @@ questions:
         examples:
           - "a body that only describes the change"
           - "Fixes stuff, see ticket"
-    verdict: { act: 0.85, mark: 0.7 }
+    thresholds: { act: 0.85, mark: 0.7 }
   leaves_work_out:
     type: noul
     instructions:
@@ -61,7 +61,7 @@ questions:
         examples:
           - "the body renames a flag, and the diff edits the flag parser, the docs and the flag test"
           - "the body adds a cache, and the diff adds the cache file and its test"
-    verdict: { act: 0.85, mark: 0.7 }
+    thresholds: { act: 0.85, mark: 0.7 }
   risk_noted:
     type: noul
     instructions:
@@ -80,7 +80,7 @@ questions:
         examples:
           - "a body that describes the change and its tests only"
           - "Fixes stuff, see ticket"
-    verdict: { act: 0.8, mark: 0.6 }
+    thresholds: { act: 0.8, mark: 0.6 }
 ---
 # pr-description-check
 
@@ -92,7 +92,7 @@ On a pull request when it opens, to tell the author what the description leaves 
 
 `pr`: `{ "title": "...", "body": "...", "diff_summary": "..." }`. `diff_summary` is one entry per file with the path and the added and removed line counts, which your code builds from the diff, so the questions compare the description against the change while the whole patch stays at home.
 
-## Verdicts
+## Decisions
 
 `describes_the_change` no with `act`: comment on the pull request and ask the author to describe the change the diff shows. `mentions_tests` no with `act`: ask how it was tested. `leaves_work_out` yes with `act`: list the files the body passes over and ask the author to cover them. `risk_noted` no with `act`: ask what to watch after it ships.
 Each of the four with `mark`: post the same comment and address it to the reviewer as well. `fall_back`: leave the pull request alone.

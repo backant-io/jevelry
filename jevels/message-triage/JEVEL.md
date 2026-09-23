@@ -1,6 +1,6 @@
 ---
 name: message-triage
-version: 2
+version: 3
 model: jev-1.13.0
 state:
   required: [message]
@@ -15,7 +15,7 @@ questions:
     criteria:
       needs_reply:
         what: "Asks the recipient for an answer, an action or a piece of work"
-        not_for: "A status report or a verdict that closes a thread, which belongs to fyi"
+        not_for: "A status report or a decision that closes a thread, which belongs to fyi"
         examples:
           - "Can you review this by tomorrow?"
           - "The migration is yours: run it after the freeze"
@@ -45,7 +45,7 @@ questions:
         examples:
           - "Welcome aboard!"
           - "Thanks, all good."
-    verdict: { act: 0.8, mark: 0.6 }
+    thresholds: { act: 0.8, mark: 0.6 }
   urgency:
     type: score
     instructions:
@@ -67,7 +67,7 @@ questions:
           - "today"
           - "now"
           - "blocked until"
-    verdict: { act: 0.75, mark: 0.55 }
+    thresholds: { act: 0.75, mark: 0.55 }
   from_a_customer:
     type: noul
     instructions:
@@ -85,7 +85,7 @@ questions:
         examples:
           - "the CTO reporting metrics"
           - "the owner giving an instruction"
-    verdict: { act: 0.85, mark: 0.7 }
+    thresholds: { act: 0.85, mark: 0.7 }
 ---
 # message-triage
 
@@ -97,7 +97,7 @@ On every inbound message, in mail or chat, to sort what wants an answer from wha
 
 `message`: `{ "channel": "email", "from": "...", "to": "...", "subject": "...", "body": "..." }`. Send the message as it arrived, both addresses included, because `from_a_customer` holds the sender's domain against the recipient's. When `message.to` is missing, a colleague's message can read as a customer's.
 
-## Verdicts
+## Decisions
 
 `kind` with `act`: file the message in that lane. `mark`: file it and show the lane to the person who owns the inbox. `fall_back`: leave it in the unsorted list.
 `urgency` at level 2 with `act`: put the message at the top of the day's list. `from_a_customer` yes with `act`: apply your customer response time to it.

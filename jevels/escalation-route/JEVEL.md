@@ -1,6 +1,6 @@
 ---
 name: escalation-route
-version: 2
+version: 3
 model: jev-1.13.0
 state:
   required: [request, context]
@@ -48,7 +48,7 @@ questions:
           - "for your information, the migration finished last night"
           - "thanks, the fix worked"
           - "already sorted itself out, closing this off"
-    verdict: { act: 0.8, mark: 0.6 }
+    thresholds: { act: 0.8, mark: 0.6 }
   urgent:
     type: noul
     instructions:
@@ -68,7 +68,7 @@ questions:
           - "sometime next week would be fine"
           - "for the next quarter we will need two more people"
           - "there is no hurry, the report goes out at the end of the month"
-    verdict: { act: 0.85, mark: 0.7 }
+    thresholds: { act: 0.85, mark: 0.7 }
   breaks_a_rule:
     type: noul
     instructions:
@@ -87,7 +87,7 @@ questions:
         examples:
           - "asks for a bug fix, and the rules are about credentials"
           - "asks for an export through the route the rules name for it"
-    verdict: { act: 0.9, mark: 0.75 }
+    thresholds: { act: 0.9, mark: 0.75 }
 ---
 # escalation-route
 
@@ -99,7 +99,7 @@ When a request or an incident report lands in a shared inbox or a channel, to pu
 
 `request`: `{ "from": "...", "subject": "...", "body": "..." }`. `context`: what a reader would need to judge the request, such as `{ "rules": ["..."], "open_incidents": [...] }`. `rules` is a short list of the policies and limits the request could run into, one line each, because `breaks_a_rule` reads the rules there and answers no when every line leaves room for what the request asks for.
 
-## Verdicts
+## Decisions
 
 `route` with `act`: send it to that destination. `mark`: send it there and copy the shared inbox so a person sees the hop. `fall_back`: leave it in the shared inbox for triage by hand.
 `urgent` yes with `act`: page the destination and put the request at the top of its queue.

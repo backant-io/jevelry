@@ -1,14 +1,14 @@
-/** The stdout document of `jevelry ask`. Fields are added, never renamed or removed, while PROTOCOL is 1. */
-export const PROTOCOL = 1 as const;
+/** The stdout document of `jevelry ask`. Fields are added, never renamed or removed, while PROTOCOL is 2. */
+export const PROTOCOL = 2 as const;
 
-export type Verdict = "act" | "mark" | "fall_back";
+export type Decision = "act" | "mark" | "fall_back";
 
 export interface NoulAnswer {
   type: "noul";
   noul: number;
   yes: boolean;
   certainty: number;
-  verdict: Verdict;
+  decision: Decision;
 }
 
 export interface ChoiceAnswer {
@@ -17,7 +17,7 @@ export interface ChoiceAnswer {
   probabilities: Record<string, number>;
   confidence: number;
   certainty: number;
-  verdict: Verdict;
+  decision: Decision;
 }
 
 export interface ScoreAnswer {
@@ -27,7 +27,7 @@ export interface ScoreAnswer {
   probabilities: Record<string, number>;
   confidence: number;
   certainty: number;
-  verdict: Verdict;
+  decision: Decision;
 }
 
 export type Answer = NoulAnswer | ChoiceAnswer | ScoreAnswer;

@@ -1,6 +1,6 @@
 ---
 name: duplicate-issue
-version: 2
+version: 3
 model: jev-1.13.0
 state:
   required: [issue, candidates]
@@ -25,7 +25,7 @@ questions:
         examples:
           - "one is about the export button and the other is about dark mode colours"
           - "one reports a crash and the other asks how a setting works"
-    verdict: { act: 0.85, mark: 0.7 }
+    thresholds: { act: 0.85, mark: 0.7 }
   actionable:
     type: noul
     instructions:
@@ -43,7 +43,7 @@ questions:
         examples:
           - "Export is broken"
           - "This page has been buggy for a week, please fix"
-    verdict: { act: 0.8, mark: 0.6 }
+    thresholds: { act: 0.8, mark: 0.6 }
 ---
 # duplicate-issue
 
@@ -55,7 +55,7 @@ When a new issue lands in your tracker, to link it to an open one and to check t
 
 `issue`: `{ "title": "...", "body": "..." }`. `candidates`: an array of open issues in the same shape, filtered in your code first (same labels, last 90 days, at most a few dozen).
 
-## Verdicts
+## Decisions
 
 `same_as[i]` yes with `act`: link the new issue to candidate `i` and close it. `mark`: link it and ask the reporter to confirm. `actionable` no with `act`: ask for the steps before anyone picks it up.
 

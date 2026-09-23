@@ -19,11 +19,11 @@ The README shows you the part of an answer your code reads. This page shows you 
 What comes back on stdout, exactly as printed:
 
     {
-      "protocol": 1,
+      "protocol": 2,
       "log_id": "fe899f8e-356a-4301-b8ea-292cb341a8f6",
       "jevel": {
         "name": "ticket-triage",
-        "version": 2
+        "version": 3
       },
       "model": "jev-1.13.0",
       "state_hash": "sha256:b883d3e23a85340c82fbc76833692e80c5e08f898de8d1d059849d5e29ad418b",
@@ -39,14 +39,14 @@ What comes back on stdout, exactly as printed:
           },
           "confidence": 1,
           "certainty": 1,
-          "verdict": "act"
+          "decision": "act"
         },
         "urgent": {
           "type": "noul",
           "noul": 0.98,
           "yes": true,
           "certainty": 0.98,
-          "verdict": "act"
+          "decision": "act"
         },
         "frustration": {
           "type": "score",
@@ -84,7 +84,7 @@ What comes back on stdout, exactly as printed:
           },
           "confidence": 0.64,
           "certainty": 0.64,
-          "verdict": "mark"
+          "decision": "mark"
         }
       },
       "usage": {
@@ -93,13 +93,13 @@ What comes back on stdout, exactly as printed:
       }
     }
 
-Every answer carries the raw probabilities Jev returned, the `certainty` jevelry computed from them (the confidence for a choice or a score, the distance from 0.5 for a noul) and the `verdict` from the jevel's thresholds. `state_hash` is the hash of the state you sent, so you can tell later which state an answer belongs to. `log_id` is the line in `~/.jevelry/log.jsonl` you point `outcome` at.
+Every answer carries the raw probabilities Jev returned, the `certainty` jevelry computed from them (the confidence for a choice or a score, the distance from 0.5 for a noul) and the `decision` from the jevel's thresholds. `state_hash` is the hash of the state you sent, so you can tell later which state an answer belongs to. `log_id` is the line in `~/.jevelry/log.jsonl` you point `outcome` at.
 
 ## Reading it from your code
 
-In a shell, `jq` gets you the verdicts:
+In a shell, `jq` gets you the decisions:
 
-    npx jevelry ask ticket-triage --state @ticket.json | jq '.answers | map_values(.verdict)'
+    npx jevelry ask ticket-triage --state @ticket.json | jq '.answers | map_values(.decision)'
 
 In TypeScript you can skip the CLI:
 
@@ -108,7 +108,7 @@ In TypeScript you can skip the CLI:
 
     const { jevel } = loadJevel("ticket-triage", discoveryDirs({ cwd: process.cwd(), home: process.env.HOME ?? "" }));
     const result = await ask({ client: new TypeSafeClient(), state, jevel });
-    if (result.ok && result.document.answers.team?.verdict === "act") {
+    if (result.ok && result.document.answers.team?.decision === "act") {
       route(result.document.answers.team.choice);
     }
 
@@ -129,11 +129,11 @@ In TypeScript you can skip the CLI:
 The answers come back as `same_as[0]` and `same_as[1]`, one per candidate, plus `actionable` for the issue itself:
 
     {
-      "protocol": 1,
+      "protocol": 2,
       "log_id": "6ff713ca-cf4c-40b3-8ee6-2966a1ec0ce3",
       "jevel": {
         "name": "duplicate-issue",
-        "version": 2
+        "version": 3
       },
       "model": "jev-1.13.0",
       "state_hash": "sha256:519db415584243fda76eed700f344001ee400a3b4386aeb2916b484b62c2c4df",
@@ -143,21 +143,21 @@ The answers come back as `same_as[0]` and `same_as[1]`, one per candidate, plus 
           "noul": 0.98,
           "yes": true,
           "certainty": 0.98,
-          "verdict": "act"
+          "decision": "act"
         },
         "same_as[1]": {
           "type": "noul",
           "noul": 0.01,
           "yes": false,
           "certainty": 0.99,
-          "verdict": "act"
+          "decision": "act"
         },
         "actionable": {
           "type": "noul",
           "noul": 0.96,
           "yes": true,
           "certainty": 0.96,
-          "verdict": "act"
+          "decision": "act"
         }
       },
       "usage": {
@@ -178,14 +178,14 @@ When you find out whether the ticket above was really urgent, you record it agai
     ticket-triage  team         1     1    0     0          0         -           -            1.00
     ticket-triage  urgent       1     1    0     0          1         100%        -            0.98
 
-`agree(act)` is the share of `act` verdicts that matched reality, and that is the number you move a threshold by. A question that agrees 95% of the time at `act: 0.85` can probably come down; one that agrees 70% of the time goes up or gets rewritten.
+`agree(act)` is the share of `act` decisions that matched reality, and that is the number you move a threshold by. A question that agrees 95% of the time at `act: 0.85` can probably come down; one that agrees 70% of the time goes up or gets rewritten.
 
 ## When it fails
 
 A failure is one JSON document too, so the same parser handles it:
 
     {
-      "protocol": 1,
+      "protocol": 2,
       "error": {
         "exit": 3,
         "code": "rate_limited",

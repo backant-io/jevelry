@@ -1,6 +1,6 @@
 ---
 name: change-risk
-version: 2
+version: 3
 model: jev-1.13.0
 state:
   required: [change]
@@ -29,7 +29,7 @@ questions:
           - "paths under payments or auth"
           - "a request or response field that changes type"
           - "a public route added or removed"
-    verdict: { act: 0.75, mark: 0.55 }
+    thresholds: { act: 0.75, mark: 0.55 }
   breaking:
     type: noul
     instructions:
@@ -49,7 +49,7 @@ questions:
           - "a new optional field, with the old default kept"
           - "a rewrite behind the same function signature"
           - "a typo fixed in a label"
-    verdict: { act: 0.9, mark: 0.75 }
+    thresholds: { act: 0.9, mark: 0.75 }
   needs_owner_approval:
     type: noul
     instructions:
@@ -72,7 +72,7 @@ questions:
           - "src/reports/table.tsx"
           - "docs/guide.md"
           - "tests/reports/table.test.ts"
-    verdict: { act: 0.85, mark: 0.7 }
+    thresholds: { act: 0.85, mark: 0.7 }
 ---
 # change-risk
 
@@ -84,7 +84,7 @@ On a pull request before it merges, to decide how many eyes it needs and whether
 
 `change`: `{ "title": "...", "description": "...", "files": ["..."] }`. `files` is the list of paths the change touches, which your code reads from the diff; it carries most of the risk signal, so send all of it.
 
-## Verdicts
+## Decisions
 
 `risk` at level 2 with `act`: require a second reviewer and a release window. Level 0 with `act`: let it merge on one approval. `mark`: apply the level and flag the pull request for the release owner. `fall_back`: use the review rules you had before this jevel.
 `breaking` yes with `act`: hold the merge until the change carries a migration note. `needs_owner_approval` yes with `act`: request review from the owning team and hold the merge until it arrives.

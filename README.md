@@ -3,7 +3,7 @@
 <p align="center">
   <a href="#start">Start</a> ·
   <a href="#jevels">Jevels</a> ·
-  <a href="#verdicts">Verdicts</a> ·
+  <a href="#decisions">Decisions</a> ·
   <a href="#measure-it">Measure it</a> ·
   <a href="https://docs.typesafe.ai">Jev docs</a>
 </p>
@@ -15,13 +15,13 @@
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT">
 </p>
 
-<p align="center"><b>Small decisions for your code and your coding agent, answered by Jev with a verdict you can act on.</b></p>
+<p align="center"><b>Small decisions for your code and your coding agent, answered by Jev with a decision you can act on.</b></p>
 
 Your code and your coding agent make the same small calls every day: is this ticket urgent, which team should get it, is this bug a duplicate, did this test fail because of the code or because of the machine it ran on. Today each of those is usually a prompt that returns text you parse, and you don't learn how sure the model was.
 
-jevelry asks each of those questions to Jev, the decision model from TypeSafe, with one command. A question lives in a small file called a jevel, and sixteen ready-made jevels ship with the package. Jev answers with how sure it is, and the jevel turns that into one of three verdicts:
+jevelry asks each of those questions to Jev, the decision model from TypeSafe, with one command. A question lives in a small file called a jevel, and sixteen ready-made jevels ship with the package. Jev answers with how sure it is, and the jevel turns that into one of three decisions:
 
-| Verdict | Meaning | What your code does |
+| Decision | Meaning | What your code does |
 |---|---|---|
 | `act` | Jev is sure | uses the answer |
 | `mark` | Jev is fairly sure | uses the answer and flags it for a person |
@@ -68,7 +68,7 @@ Jev takes a state (a support ticket, a bug report, the form somebody just filled
 | `score` | how much, on your own levels | a value between the levels, a probability per level, a confidence |
 | `noul` | is this true | one probability, 0 to 1 |
 
-jevelry is everything around that call: it loads your jevel, checks the state before it costs you anything, asks all the questions in one request, turns every answer into a verdict, writes one JSON document to stdout and keeps a log so you can measure the answers later. The official `@typesafe-ai/sdk` underneath reads your key and talks to the API.
+jevelry is everything around that call: it loads your jevel, checks the state before it costs you anything, asks all the questions in one request, turns every answer into a decision, writes one JSON document to stdout and keeps a log so you can measure the answers later. The official `@typesafe-ai/sdk` underneath reads your key and talks to the API.
 
 ## Free
 
@@ -81,13 +81,13 @@ Put your key in the environment and ask one of the jevels that ship with the pac
     export TYPESAFE_API_KEY=...
     npx jevelry ask ticket-triage --state @ticket.json
 
-You get one JSON document back with an answer per question, and the part your code reads is the verdict:
+You get one JSON document back with an answer per question, and the part your code reads is the decision:
 
-    "team":        { "choice": "billing",  "confidence": 1.0,  "verdict": "act"  }
-    "urgent":      { "noul": 0.98,         "yes": true,        "verdict": "act"  }
-    "frustration": { "score": 0.24,        "confidence": 0.64, "verdict": "mark" }
+    "team":        { "choice": "billing",  "confidence": 1.0,  "decision": "act"  }
+    "urgent":      { "noul": 0.98,         "yes": true,        "decision": "act"  }
+    "frustration": { "score": 0.24,        "confidence": 0.64, "decision": "mark" }
 
-Your code branches on `verdict`, and the probabilities are in the document if you want your own rule. The whole document, the `jq` one-liner, the TypeScript call and the report walkthrough are in [docs/examples.md](docs/examples.md).
+Your code branches on `decision`, and the probabilities are in the document if you want your own rule. The whole document, the `jq` one-liner, the TypeScript call and the report walkthrough are in [docs/examples.md](docs/examples.md).
 
 ## Use it with your coding agent
 
@@ -103,7 +103,7 @@ Then talk to your agent the way you would to a colleague who has read the guide:
     or a fragile regex to make a decision, and propose a jevel for each one.
 
     Using the jevelry skill, write a jevel that decides which team a support ticket goes to
-    and whether it is urgent, run check on it, and wire the verdicts into src/inbox.ts.
+    and whether it is urgent, run check on it, and wire the decisions into src/inbox.ts.
 
     Using the jevelry skill, ask the ticket-triage jevel about twenty tickets from
     fixtures/, then run report and propose thresholds.
@@ -157,7 +157,7 @@ questions:
         examples:
           - "Thanks, that worked"
           - "Do you sponsor conferences?"
-    verdict: { act: 0.8, mark: 0.6 }
+    thresholds: { act: 0.8, mark: 0.6 }
 ```
 
 Every option carries the same three fields: what it covers, which neighbouring option it gets mixed up with, and a few examples in the words your customers use, because Jev reads the options next to each other. The rest of the file asks `urgent` as a yes/no question and `frustration` as a score whose levels each describe a situation, and the guide walks you through all three shapes.
@@ -170,11 +170,11 @@ Adding a use case is adding a folder. jevelry finds jevels in `--jevels <dir>`, 
 
 `check` refuses a jevel the API would refuse anyway (more than 255 options, a threshold outside 0 to 1, a question with no instructions) and warns you about the cases Jev handles poorly: a yes/no question whose "yes" means no, a double negative, options that carry different fields, a model that is not pinned. Sixteen jevels ship with the package, from a support queue and a bug tracker to pull requests, logs, alerts and meeting notes, each with an `example.json` to ask it with and a `cases.json` of states it is tested on; the list is in [jevels/README.md](jevels/README.md), so you always have something to copy.
 
-## Verdicts
+## Decisions
 
-Every answer comes back with a `verdict`, and that is the part your code uses:
+Every answer comes back with a `decision`, and that is the part your code uses:
 
-| Verdict | Meaning | What your code usually does |
+| Decision | Meaning | What your code usually does |
 |---|---|---|
 | `act` | Jev is sure enough, by the thresholds you set in the jevel | act on the answer |
 | `mark` | a reasonable answer with less confidence behind it | act and flag it for a person |
@@ -184,7 +184,7 @@ The thresholds live in the jevel, per question, so a question that skips an expe
 
 ## Measure it
 
-Every ask is appended to `~/.jevelry/log.jsonl` with its answers, its verdicts and a hash of the state. When you later know what was actually true, you tell jevelry, and it tells you how often each question was right:
+Every ask is appended to `~/.jevelry/log.jsonl` with its answers, its decisions and a hash of the state. When you later know what was actually true, you tell jevelry, and it tells you how often each question was right:
 
     npx jevelry outcome becfc166-7921-4fe3-a189-4c2c5b164bce urgent yes
     npx jevelry report --jevel ticket-triage

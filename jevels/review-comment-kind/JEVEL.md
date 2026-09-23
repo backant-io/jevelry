@@ -1,6 +1,6 @@
 ---
 name: review-comment-kind
-version: 2
+version: 3
 model: jev-1.13.0
 state:
   required: [comment]
@@ -58,7 +58,7 @@ questions:
         examples:
           - "hmm"
           - "not sure about this"
-    verdict: { act: 0.8, mark: 0.6 }
+    thresholds: { act: 0.8, mark: 0.6 }
   actionable:
     type: noul
     instructions:
@@ -78,7 +78,7 @@ questions:
           - "nice work"
           - "why a map here?"
           - "the sandbox denied the network call"
-    verdict: { act: 0.85, mark: 0.7 }
+    thresholds: { act: 0.85, mark: 0.7 }
   blocking:
     type: noul
     instructions:
@@ -97,7 +97,7 @@ questions:
           - "nit, up to you"
           - "nice work"
           - "follow-up ticket is fine"
-    verdict: { act: 0.9, mark: 0.75 }
+    thresholds: { act: 0.9, mark: 0.75 }
 ---
 # review-comment-kind
 
@@ -109,7 +109,7 @@ On each comment that arrives on a pull request, to sort the ones that hold the m
 
 `comment`: `{ "author": "...", "text": "...", "file": "...", "snippet": "..." }`. `text` is what the reviewer wrote, and `file` and `snippet` are optional fields carrying the line the comment hangs on; the answers are sharper when you send them.
 
-## Verdicts
+## Decisions
 
 `kind` with `act`: label the comment and route it, defects to the author's list, style to a cleanup pass and environment to whoever owns the CI and the sandbox. `mark`: label it and show the author the label. `fall_back`: leave the comment unlabelled.
 `actionable` yes with `act`: put the comment in the author's checklist for this pull request. `blocking` yes with `act`: hold the merge until the author marks the comment resolved.

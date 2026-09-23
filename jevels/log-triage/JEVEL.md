@@ -1,6 +1,6 @@
 ---
 name: log-triage
-version: 2
+version: 3
 model: jev-1.13.0
 state:
   required: [lines]
@@ -47,7 +47,7 @@ questions:
         examples:
           - "task 41 finished with status 3"
           - "closing"
-    verdict: { act: 0.8, mark: 0.6 }
+    thresholds: { act: 0.8, mark: 0.6 }
   needs_a_person:
     type: noul
     instructions:
@@ -67,7 +67,7 @@ questions:
         examples:
           - "retry succeeded, and the lines after it are 200s"
           - "INFO lines about a job that finished"
-    verdict: { act: 0.85, mark: 0.7 }
+    thresholds: { act: 0.85, mark: 0.7 }
   severity:
     type: score
     instructions:
@@ -90,7 +90,7 @@ questions:
           - "connection refused on every attempt"
           - "the process exited and the next lines are restart attempts"
           - "503 on every response in the burst"
-    verdict: { act: 0.75, mark: 0.55 }
+    thresholds: { act: 0.75, mark: 0.55 }
 ---
 # log-triage
 
@@ -102,7 +102,7 @@ On a burst of log lines your monitoring collected, to tell an outage from a misc
 
 `lines`: an array of log lines as strings, the burst your code grouped, in the order they were written and twenty at most, because a long burst costs accuracy on every question. `service` is an optional top-level key naming the service the lines come from; send it when you have it and the `kind` answer gets sharper.
 
-## Verdicts
+## Decisions
 
 `kind` with `act`: file the burst under that kind and route it, outages to the on-call and misconfigurations to the owning team. `mark`: file it and show the kind as a guess. `fall_back`: file the burst for a person to read.
 `needs_a_person` yes with `act`: raise it today. `severity` at level 2 with `act`: page the on-call.

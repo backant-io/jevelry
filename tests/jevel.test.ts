@@ -6,7 +6,7 @@ import { JevelError, discoveryDirs, findJevel, listJevels, loadJevel, parseJevel
 
 const FIXTURES = join(process.cwd(), "tests", "fixtures", "jevels");
 
-const minimal = (frontmatter: string, body = "## When to use\n\n## State\n\n## Verdicts\n\n## Example\n") =>
+const minimal = (frontmatter: string, body = "## When to use\n\n## State\n\n## Decisions\n\n## Example\n") =>
   `---\n${frontmatter}\n---\n${body}`;
 
 const good = minimal(`name: t
@@ -26,7 +26,7 @@ describe("parseJevel", () => {
     expect(jevel.format).toBe(1);
     expect(jevel.model).toBe("jev-1.13.0");
     expect(jevel.state).toEqual({ required: ["employee", "events", "candidates", "filing"], budget_tokens: 12000 });
-    expect(jevel.verdict).toEqual({ act: 0.9, mark: 0.7 });
+    expect(jevel.thresholds).toEqual({ act: 0.9, mark: 0.7 });
     expect(Object.keys(jevel.questions)).toEqual(["worth_a_turn", "depth", "same_as"]);
     expect(jevel.questions.same_as?.repeat).toEqual({ over: "candidates", as: "candidate" });
     expect(jevel.body).toContain("## When to use");
@@ -61,8 +61,17 @@ describe("parseJevel", () => {
     refuses(`name: t\nversion: 1\nquestions:\n  q: { type: score, instructions: x, criteria: [a,b,c,d,e,f,g,h,i,j,k] }`, "questions.q.criteria");
   });
   it("refuses a threshold outside [0, 1] and mark over act", () => {
-    refuses(`name: t\nversion: 1\nverdict: { act: 1.2 }\nquestions:\n  q: { type: noul, instructions: x }`, "verdict");
-    refuses(`name: t\nversion: 1\nquestions:\n  q: { type: noul, instructions: x, verdict: { act: 0.5, mark: 0.8 } }`, "questions.q.verdict");
+    refuses(`name: t\nversion: 1\nthresholds: { act: 1.2 }\nquestions:\n  q: { type: noul, instructions: x }`, "thresholds");
+    refuses(`name: t\nversion: 1\nquestions:\n  q: { type: noul, instructions: x, thresholds: { act: 0.5, mark: 0.8 } }`, "questions.q.thresholds");
+  });
+  it("refuses a jevel written with the old verdict key, at either level, and names the fix", () => {
+    const message = "verdict was renamed to thresholds in jevelry 0.4; rename the key";
+    for (const [frontmatter, field] of [
+      [`name: t\nversion: 1\nverdict: { act: 0.9 }\nquestions:\n  q: { type: noul, instructions: x }`, "verdict"],
+      [`name: t\nversion: 1\nquestions:\n  q: { type: noul, instructions: x, verdict: { act: 0.9 } }`, "questions.q.verdict"],
+    ]) {
+      expect(() => parseJevel(minimal(frontmatter as string), "t")).toThrowError(expect.objectContaining({ field, message }) as unknown as Error);
+    }
   });
   it("refuses a repeat without over and as", () => {
     refuses(`name: t\nversion: 1\nquestions:\n  q: { type: noul, instructions: x, repeat: { over: items } }`, "questions.q.repeat");
@@ -182,8 +191,8 @@ describe("discovery", () => {
 describe("review rulings", () => {
   it("refuses a threshold that is not a finite number", () => {
     expect(() =>
-      parseJevel(minimal(`name: t\nversion: 1\nverdict: { act: .nan }\nquestions:\n  q: { type: noul, instructions: x }`), "t"),
-    ).toThrowError(expect.objectContaining({ field: "verdict" }) as unknown as Error);
+      parseJevel(minimal(`name: t\nversion: 1\nthresholds: { act: .nan }\nquestions:\n  q: { type: noul, instructions: x }`), "t"),
+    ).toThrowError(expect.objectContaining({ field: "thresholds" }) as unknown as Error);
   });
   it("resolves a relative discovery dir against the injected cwd, not the process cwd", () => {
     expect(discoveryDirs({ cli: ["rel"], cwd: "/w", home: "/h" })).toEqual(["/w/rel", "/w/jevels", "/h/jevels"]);

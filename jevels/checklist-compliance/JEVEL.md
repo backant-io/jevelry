@@ -1,6 +1,6 @@
 ---
 name: checklist-compliance
-version: 2
+version: 3
 model: jev-1.13.0
 state:
   required: [checklist, report]
@@ -24,7 +24,7 @@ questions:
           - "the report stops after the production deploy and the release notes step has no line"
           - "the report says staging was skipped"
           - "the step asks for the full suite and the report ran one test file"
-    verdict: { act: 0.85, mark: 0.7 }
+    thresholds: { act: 0.85, mark: 0.7 }
   deviation_kind:
     type: choice
     instructions:
@@ -62,7 +62,7 @@ questions:
         examples:
           - "the report ends after the production deploy and says nothing about the release notes"
           - "no line in the report touches the changelog step"
-    verdict: { act: 0.8, mark: 0.6 }
+    thresholds: { act: 0.8, mark: 0.6 }
   deviation_explained:
     type: noul
     instructions:
@@ -80,7 +80,7 @@ questions:
         examples:
           - "went straight to production, and the report says nothing about why"
           - "ran the payments tests only, with no word on the rest of the suite"
-    verdict: { act: 0.8, mark: 0.6 }
+    thresholds: { act: 0.8, mark: 0.6 }
 ---
 # checklist-compliance
 
@@ -92,7 +92,7 @@ When somebody reports work that claims to follow a checklist, to see which steps
 
 `checklist`: `{ "name": "...", "steps": ["..."] }`, the steps in the order they are meant to run. `report`: `{ "by": "...", "text": "..." }`, what the person wrote about the work. Send the checklist version the person was given, so the answers are about the same steps.
 
-## Verdicts
+## Decisions
 
 `followed` yes with `act`: accept the report and close the run. `mark`: accept it and keep it in the reviewer's list. `fall_back`: read the report by hand.
 `deviation_kind` = `omission` or `shortcut` with `act`: send the report back and name the step. `justified_improvement` with `act`: accept it and put the reason in the checklist's own notes for the next revision. `unclear` with `act`: ask the author what happened at the step the report passes over.

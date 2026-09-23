@@ -1,6 +1,6 @@
 ---
 name: alert-cause
-version: 2
+version: 3
 model: jev-1.13.0
 state:
   required: [alert, recent_changes]
@@ -47,7 +47,7 @@ questions:
         examples:
           - "a monitor says a threshold was crossed and says nothing more"
           - "the changes list is empty and the detail names no failing part"
-    verdict: { act: 0.75, mark: 0.55 }
+    thresholds: { act: 0.75, mark: 0.55 }
   actionable:
     type: noul
     instructions:
@@ -66,7 +66,7 @@ questions:
         examples:
           - "Monitor 412 triggered"
           - "value above the configured limit"
-    verdict: { act: 0.8, mark: 0.6 }
+    thresholds: { act: 0.8, mark: 0.6 }
   same_as_open_incident:
     type: noul
     instructions:
@@ -84,7 +84,7 @@ questions:
         examples:
           - "the state carries an empty list of open incidents"
           - "the open incident is about the search service and the alert is about the payment provider"
-    verdict: { act: 0.85, mark: 0.7 }
+    thresholds: { act: 0.85, mark: 0.7 }
 ---
 # alert-cause
 
@@ -96,7 +96,7 @@ When an alert fires, to give whoever opens it a first hypothesis and to tell it 
 
 `alert`: `{ "name": "...", "service": "...", "started_at": "...", "detail": "..." }`. `recent_changes`: an array of `{ "at": "...", "when": "...", "kind": "...", "what": "..." }`, narrowed in your code to the systems the alert touches and to the hours before `alert.started_at`. `when` is the gap between the change and the alert in words, such as `"six minutes before the alert"` or `"the day before the alert"`, and your code works it out from the two timestamps, because Jev reads a timestamp as text while it reads those words as the gap they name. `at` stays in the record for whoever opens the alert afterwards. `open_incidents` is optional and holds the incidents you have open in the same shape as the alert; leave it out or send an empty array when the board is clear, and `same_as_open_incident` answers no.
 
-## Verdicts
+## Decisions
 
 `cause` with `act`: put the hypothesis at the top of the alert and link the change it points at. `mark`: put it there and say it is a guess. `fall_back`: open the alert with the changes listed underneath it.
 `actionable` no with `act`: send the alert back to the team that owns the rule and ask for the service, the symptom and the start time.

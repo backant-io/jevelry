@@ -139,7 +139,7 @@ describe("cases.json", () => {
 
 describe("library surface", () => {
   it("exports what a host needs in process", () => {
-    for (const name of ["ask", "stateHash", "loadJevel", "expandQuestions", "verdictOf", "estimateTokens", "checkBudgets", "report", "readLog", "PROTOCOL", "EXIT"]) {
+    for (const name of ["ask", "stateHash", "loadJevel", "expandQuestions", "decisionOf", "estimateTokens", "checkBudgets", "report", "readLog", "PROTOCOL", "EXIT"]) {
       expect(lib, name).toHaveProperty(name);
     }
   });
