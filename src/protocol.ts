@@ -62,7 +62,8 @@ export type ErrorCode =
   | "auth"
   | "over_budget"
   | "transport"
-  | "unreadable_answer";
+  | "unreadable_answer"
+  | "not_confirmed";
 
 export interface ErrorBody {
   exit: number;
@@ -86,4 +87,19 @@ export const EXIT: Record<ErrorCode, number> = {
   over_budget: 5,
   transport: 6,
   unreadable_answer: 7,
+  /** `jevelry run`: Jev marked the call and nobody confirmed it, so nothing ran. */
+  not_confirmed: 9,
 };
+
+/** What `jevelry run` did with the dispatcher's decision. `exit` and `ms` are null when nothing ran. */
+export interface RunReport {
+  option: string | null;
+  command: string | null;
+  decision: Decision;
+  exit: number | null;
+  ms: number | null;
+  /** On mark: whether a person, `--yes` or `confirm` said yes. Null when nobody was asked. */
+  confirmed: boolean | null;
+  /** Set only when a signal killed the command, for example `SIGTERM`; `exit` is then 128 plus its number. */
+  signal?: string;
+}

@@ -14,6 +14,7 @@ const EXPECTED = [
   "checklist-compliance",
   "duplicate-issue",
   "escalation-route",
+  "failing-test",
   "issue-readiness",
   "log-triage",
   "meeting-notes",
@@ -28,7 +29,7 @@ const EXPECTED = [
 ];
 
 describe("shipped jevels", () => {
-  it("ships the sixteen the catalogue names, each with a JEVEL.md and an example.json", () => {
+  it("ships the seventeen the catalogue names, each with a JEVEL.md and an example.json", () => {
     expect(dirs).toEqual(EXPECTED);
     for (const name of dirs) {
       expect(existsSync(join(JEVELS, name, "JEVEL.md")), `${name}/JEVEL.md`).toBe(true);

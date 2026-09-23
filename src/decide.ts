@@ -5,6 +5,7 @@ import { type Jevel, JevelError, type JevelQuestion, checkState, discoveryDirs, 
 import { resolveKey } from "./key.js";
 import { jevelryHome, logAsk, logStateFromEnv } from "./log.js";
 import type { Answer, ChoiceAnswer, ErrorBody, FallBackAnswer, NoulAnswer, ScoreAnswer, Usage } from "./protocol.js";
+import { type Call, type RunArgs, dispatcherOf, execute, logRun, planCall } from "./run.js";
 
 /**
  * The SDK resolves its own `logLevel` from `TYPESAFE_LOG_LEVEL` and logs through `console` by
@@ -46,10 +47,40 @@ export interface DecisionsMeta {
 
 export type Decisions<Q = { [question: string]: DecisionAnswer }> = DecisionsMeta & Q;
 
+/** Code to run per option in place of the jevel's shell commands. `fall_back` gets the decisions only. */
+export interface RunHandlers<Q = { [question: string]: DecisionAnswer }> {
+  [option: string]: ((args: RunArgs, d: Decisions<Q>) => unknown) | undefined;
+  // `any` only so this fits the index signature above, whose first parameter is the arguments; it receives Decisions<Q>.
+  fall_back?: (d: any) => unknown;
+}
+
+export interface RunOptions {
+  /** Asked on mark; without it a mark runs nothing and `ran.confirmed` is false. */
+  confirm?: (option: string, certainty: number) => boolean | Promise<boolean>;
+  /** Run the jevel's own `run` commands for options that have no handler. Default false. */
+  shell?: boolean;
+}
+
+export interface Ran {
+  /** The picked option, null on fall_back. */
+  option: string | null;
+  decision: Answer["decision"];
+  /** On mark: whether `confirm` said yes. Null when nobody was asked. */
+  confirmed: boolean | null;
+  /**
+   * What the handler returned, `{ exit, ms }` for a shell command, undefined when nothing ran. When the
+   * program gets SIGINT, SIGTERM or SIGHUP while a command runs, the command gets it too, the state file is
+   * removed and `result` carries `signal`; `run` never ends the program, that is the host's call.
+   */
+  result: unknown;
+}
+
 export interface LoadedJevel<Q = { [question: string]: DecisionAnswer }> {
   readonly name: string;
   readonly version: number;
   decide(state: unknown): Promise<Decisions<Q>>;
+  /** decide, then call the handler (or with `shell`, the command) for the dispatcher's decision. */
+  run(state: unknown, handlers?: RunHandlers<Q>, options?: RunOptions): Promise<{ decisions: Decisions<Q>; ran: Ran | null }>;
 }
 
 /** Filled in by the file `jevelry types` writes: jevel name to its questions. Empty, every name gets the loose type. */
@@ -78,6 +109,13 @@ const withAnswer = (a: Answer): DecisionAnswer => {
   return { ...a, answer: Math.round(a.score) };
 };
 
+/** Every question `fall_back`, for an ask Jev could not answer. The state already passed expandQuestions. */
+export function fallenAnswers(jevel: Jevel, state: unknown): Record<string, FallBackAnswer> {
+  // Every name came out of expandQuestions, so its base name is a question of this jevel.
+  const typeOf = (q: string): Answer["type"] => jevel.questions[q.replace(/\[\d+\]$/, "")]!.type;
+  return Object.fromEntries(Object.keys(expandQuestions(jevel, state).questions).map((q) => [q, { type: typeOf(q), decision: "fall_back", answer: null, certainty: 0 }]));
+}
+
 /**
  * Load once at startup, decide where the code decides. A missing or broken jevel throws `JevelError`
  * here; `decide` throws only for a state the jevel refuses, and returns every question `fall_back`
@@ -89,45 +127,86 @@ export function jevel<N extends string>(
 ): LoadedJevel<N extends keyof JevelTypes ? JevelTypes[N] : { [question: string]: DecisionAnswer }> {
   const home = options.home ?? jevelryHome(process.env, homedir());
   const env = process.env.JEVELRY_JEVELS;
+  const warn = (m: string): void => { process.emitWarning(m); };
   const { jevel: loaded } = loadJevel(name, discoveryDirs({ cli: options.jevels ?? [], ...(env ? { env } : {}), cwd: process.cwd(), home }));
   // The answers sit beside these four keys on one object, so a question with one of their names would be overwritten.
   for (const id of Object.keys(loaded.questions)) {
     if (META.includes(id)) throw new JevelError(`questions.${id}`, `a question named ${id} collides with the ${id} field of decide(); rename it`);
   }
   let client = options.client;
-  return {
-    name: loaded.name,
-    version: loaded.version,
-    async decide(state: unknown) {
-      // The caller's own bugs: thrown, because no amount of retrying Jev fixes them.
-      if (!isEntry(state)) throw new JevelError("state", "state must be a string, a JSON object or an array");
-      checkState(loaded, state);
-      const names = Object.keys(expandQuestions(loaded, state).questions);
-      let result: Awaited<ReturnType<typeof ask>>;
+  /**
+   * `plan` runs on Jev's answers before anything is logged; when it throws, the ask is logged and
+   * returned as a failure like any other, so the log never holds a clean decision nobody could act on.
+   */
+  const decideWith = async (state: unknown, plan?: (answers: Record<string, Answer>) => void): Promise<Decisions> => {
+    // The caller's own bugs: thrown, because no amount of retrying Jev fixes them.
+    if (!isEntry(state)) throw new JevelError("state", "state must be a string, a JSON object or an array");
+    checkState(loaded, state);
+    expandQuestions(loaded, state);
+    let result: Awaited<ReturnType<typeof ask>>;
+    try {
+      client ??= defaultClient(home);
+      result = await ask({ client, state: state as EntryType, jevel: loaded, ...(options.model ? { model: options.model } : {}) });
+    } catch (error) {
+      result = { ok: false, error: errorBody(error) };
+    }
+    if (result.ok && plan) {
       try {
-        client ??= defaultClient(home);
-        result = await ask({ client, state: state as EntryType, jevel: loaded, ...(options.model ? { model: options.model } : {}) });
+        plan(result.document.answers);
       } catch (error) {
         result = { ok: false, error: errorBody(error) };
       }
-      const jevelRef = { name: loaded.name, version: loaded.version };
-      const warn = (m: string): void => { process.emitWarning(m); };
-      const logged = (options.logState ?? logStateFromEnv(process.env)) ? { state } : {};
-      if (result.ok) {
-        const { model, state_hash, answers, usage } = result.document;
-        const logId = options.log === false ? null : await logAsk(home, { jevel: jevelRef, model, state_hash, ...logged, answers, usage }, warn);
-        const decided = Object.fromEntries(Object.entries(answers).map(([q, a]) => [q, withAnswer(a)]));
-        return { logId, error: null, model, usage, ...decided } as never;
+    }
+    const jevelRef = { name: loaded.name, version: loaded.version };
+    const logged = (options.logState ?? logStateFromEnv(process.env)) ? { state } : {};
+    if (result.ok) {
+      const { model, state_hash, answers, usage } = result.document;
+      const logId = options.log === false ? null : await logAsk(home, { jevel: jevelRef, model, state_hash, ...logged, answers, usage }, warn);
+      const decided = Object.fromEntries(Object.entries(answers).map(([q, a]) => [q, withAnswer(a)]));
+      return { logId, error: null, model, usage, ...decided } as never;
+    }
+    const error = result.error;
+    const fallen = fallenAnswers(loaded, state);
+    // Logged per question like an answer, so `report` counts every decision point that fired, the failed ones as fall_back.
+    const logId = options.log === false
+      ? null
+      : await logAsk(home, { jevel: jevelRef, model: null, state_hash: stateHash(state), ...logged, answers: fallen, usage: null, error }, warn);
+    return { logId, error, model: null, usage: null, ...fallen } as never;
+  };
+  const decide = (state: unknown): Promise<Decisions> => decideWith(state);
+  return {
+    name: loaded.name,
+    version: loaded.version,
+    decide: decide as never,
+    async run(state: unknown, handlers: RunHandlers = {}, runOptions: RunOptions = {}) {
+      dispatcherOf(loaded);
+      let planned: Call | null = null;
+      const decisions = await decideWith(state, (answers) => { planned = planCall(loaded, answers); });
+      const call = decisions.error ? planCall(loaded, null) : planned!;
+      const key = call.decision === "fall_back" ? "fall_back" : call.option!;
+      const handler = Object.hasOwn(handlers, key) ? handlers[key] : undefined;
+      const command = runOptions.shell === true && !handler ? call.command : null;
+      if (!handler && command === null) return { decisions, ran: null } as never;
+      let confirmed: boolean | null = null;
+      if (call.decision === "mark") confirmed = runOptions.confirm ? (await runOptions.confirm(call.option!, call.certainty)) === true : false;
+      let result: unknown;
+      let exit: number | null = null;
+      let ms: number | null = null;
+      let signal: string | undefined;
+      if (confirmed !== false) {
+        if (command !== null) {
+          const done = await execute(command, state, { decision: call.decision, option: call.option, logId: decisions.logId });
+          ({ exit, ms } = done);
+          if (done.signal) signal = done.signal;
+          result = { exit: done.exit, ms: done.ms, ...(signal ? { signal } : {}) };
+        } else {
+          const started = Date.now();
+          result = call.decision === "fall_back" ? await handlers.fall_back!(decisions) : await handler!(call.args, decisions);
+          ms = Date.now() - started;
+        }
       }
-      const error = result.error;
-      // Every name came out of expandQuestions, so its base name is a question of this jevel.
-      const typeOf = (q: string): Answer["type"] => loaded.questions[q.replace(/\[\d+\]$/, "")]!.type;
-      const fallen: Record<string, FallBackAnswer> = Object.fromEntries(names.map((q) => [q, { type: typeOf(q), decision: "fall_back", answer: null, certainty: 0 }]));
-      // Logged per question like an answer, so `report` counts every decision point that fired, the failed ones as fall_back.
-      const logId = options.log === false
-        ? null
-        : await logAsk(home, { jevel: jevelRef, model: null, state_hash: stateHash(state), ...logged, answers: fallen, usage: null, error }, warn);
-      return { logId, error, model: null, usage: null, ...fallen } as never;
+      if (decisions.logId !== null) await logRun(home, decisions.logId, { option: call.option, command, decision: call.decision, exit, ms, confirmed, ...(signal ? { signal } : {}) }, warn);
+      return { decisions, ran: { option: call.option, decision: call.decision, confirmed, result } } as never;
     },
   };
 }

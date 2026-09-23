@@ -47,6 +47,22 @@ plus the fields of its own type.
 | `confidence` | number 0 to 1 | how sure the model is of the level |
 | `certainty` | number 0 to 1 | the confidence, repeated as the value the decision was computed from |
 
+## `jevelry run`
+
+`jevelry run` prints the same documents with one more field, `run`, which is null when nothing needed to run:
+
+| Field | Type | What it is |
+|---|---|---|
+| `option` | string or null | the option Jev picked, null on `fall_back` |
+| `command` | string or null | the command with its arguments filled in, or the jevel's `fall_back` command |
+| `decision` | string | `act`, `mark` or `fall_back` for the whole call, from the least sure answer behind it |
+| `exit` | integer or null | the command's exit code, null when it did not run |
+| `ms` | integer or null | how long the command ran |
+| `confirmed` | boolean or null | on `mark`, whether a person or `--yes` said yes; null when nobody was asked |
+| `signal` | string | only when a signal stopped the command, like `SIGTERM`, and `exit` is then 128 plus its number |
+
+The exit code of `jevelry run` is the command's own exit code when a command ran, 0 when nothing needed to run, and 9 (`not_confirmed`) when the call was a `mark` that nobody confirmed. When Jev cannot answer, the jevel's `fall_back` command runs first and the exit code is the error's code. A command can exit with any number, 3 and 9 included, so when `run` is set, read `run.exit` for the command's own code. When jevelry itself gets SIGINT, SIGTERM or SIGHUP while the command runs, it passes the signal on, removes the state file, logs the run, prints the document and exits with 128 plus the signal number.
+
 ## The error document
 
     { "protocol": 2, "error": { "exit": 3, "code": "rate_limited", "message": "TypeSafe answered 429 after the SDK's retries", "retry_after_ms": 1200 } }
@@ -64,5 +80,6 @@ server gave a delay. `field` is there only when jevelry itself knows the field a
 | `over_budget` | 5 | the estimate is over a limit; no request was made |
 | `transport` | 6 | the network, a timeout, or anything no other code covers |
 | `unreadable_answer` | 7 | TypeSafe answered a shape this build cannot read |
+| `not_confirmed` | 9 | `jevelry run` only: the call was a `mark` and nobody confirmed it, so the command stayed put |
 
 Exit 0 is an answer and exit 1 is a usage error from the command line, which prints no document.

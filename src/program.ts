@@ -1,16 +1,18 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { constants, homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Questions, TypeSafeClient } from "@typesafe-ai/sdk";
 import { Command } from "commander";
-import { ask, errorBody } from "./ask.js";
+import { createInterface } from "node:readline/promises";
+import { ask, errorBody, stateHash } from "./ask.js";
 import { installSkill, knownAgents, promptForKey, unknownAgents, whereToPutTheKey } from "./install.js";
-import { JevelError, discoveryDirs, listJevels, loadJevel } from "./jevel.js";
-import { defaultClient, renderTypes } from "./decide.js";
+import { JevelError, checkState, discoveryDirs, expandQuestions, isEntry, listJevels, loadJevel } from "./jevel.js";
+import { defaultClient, fallenAnswers, renderTypes } from "./decide.js";
 import { resolveKey, storeKey } from "./key.js";
 import { jevelryHome, logAsk, logStateFromEnv, readLog, recordOutcome } from "./log.js";
-import { type AskDocument, type ErrorBody, type ErrorDocument, PROTOCOL } from "./protocol.js";
+import { type AskDocument, EXIT, type ErrorBody, type ErrorDocument, PROTOCOL, type RunReport } from "./protocol.js";
+import { type Call, dispatcherOf, execute, logRun, planCall } from "./run.js";
 import { renderReport, report } from "./report.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -80,6 +82,22 @@ function failCommand(error: unknown): never {
   process.exit(body.exit);
 }
 
+/** A mark runs only when a person says y on a terminal; anywhere else it waits for --yes. */
+async function confirmOnTty(call: Call, path: string): Promise<boolean> {
+  if (!process.stdin.isTTY) return false;
+  const rl = createInterface({ input: process.stdin, output: process.stderr });
+  try {
+    const reply = await rl.question(`Jev picked ${call.option} at ${call.certainty.toFixed(2)}. Run: ${call.command} (from ${path})? [y/N] `);
+    return /^y(es)?$/i.test(reply.trim());
+  } catch {
+    // Ctrl-C or Ctrl-D at the prompt: a no, so the document still prints and the exit is 9.
+    process.stderr.write("\n");
+    return false;
+  } finally {
+    rl.close();
+  }
+}
+
 /** The commander program, built but never parsed here: `cli.ts` is the entry that parses it. */
 export function buildProgram(): Command {
   const program = new Command("jevelry")
@@ -129,6 +147,91 @@ export function buildProgram(): Command {
         document.log_id = await logAsk(home(), { jevel: j, model, state_hash, ...logged, answers, usage }, (m) => say(`warning: ${m}`));
       }
       out(document);
+    });
+
+  program
+    .command("run <jevel>")
+    .description("ask a jevel whose options are commands, then run the command for Jev's decision")
+    .requiredOption("--state <source>", "@file, - for stdin, or inline JSON")
+    .option("--yes", "run a mark without asking")
+    .option("--dry-run", "print what would run and run nothing")
+    .option("--model <id>", "model id, overriding the jevel's pin and JEVELRY_MODEL")
+    .option("--jevels <dir>", "a jevels directory searched first (repeatable)", (d: string, all: string[]) => [...all, d], [] as string[])
+    .option("--log-state", "write the state itself into the log line, not only its hash (or JEVELRY_LOG_STATE=1)")
+    .action(async (name: string, opts: { state: string; yes?: boolean; dryRun?: boolean; model?: string; jevels: string[]; logState?: boolean }) => {
+      let jevel!: ReturnType<typeof loadJevel>["jevel"];
+      let state: unknown;
+      try {
+        const loaded = loadJevel(name, dirs(opts.jevels));
+        jevel = loaded.jevel;
+        for (const warning of loaded.warnings) say(`warning: ${warning}`);
+        dispatcherOf(jevel);
+        state = readSource(opts.state, "state");
+        // The host's own mistakes stop here, before fall_back: fall_back is for when Jev cannot answer.
+        if (!isEntry(state)) throw new JevelError("state", "state must be a string, a JSON object or an array");
+        checkState(jevel, state);
+        expandQuestions(jevel, state);
+      } catch (error) {
+        failAsk(errorBody(error));
+      }
+      let result: Awaited<ReturnType<typeof ask>>;
+      try {
+        result = await ask({ client: defaultClient(home()), state: state as never, jevel, ...(opts.model ? { model: opts.model } : {}) });
+      } catch (error) {
+        result = { ok: false, error: errorBody(error) };
+      }
+      // Planned before the ask is logged: an answer no command can be planned from is a failure like
+      // any other, logged as one, and the jevel's fall_back runs.
+      let call: Call | undefined;
+      if (result.ok) {
+        try {
+          call = planCall(jevel, result.document.answers);
+        } catch (error) {
+          result = { ok: false, error: errorBody(error) };
+        }
+      }
+      call ??= planCall(jevel, null);
+      const warn = (m: string): void => say(`warning: ${m}`);
+      const logged = opts.logState === true || logStateFromEnv(process.env) ? { state } : {};
+      const ref = { name: jevel.name, version: jevel.version };
+      const logId = result.ok
+        ? await logAsk(home(), { jevel: ref, model: result.document.model, state_hash: result.document.state_hash, ...logged, answers: result.document.answers, usage: result.document.usage }, warn)
+        : await logAsk(home(), { jevel: ref, model: null, state_hash: stateHash(state), ...logged, answers: fallenAnswers(jevel, state), usage: null, error: result.error }, warn);
+      // A ./jevels folder in the project comes first in discovery, so the path says whose commands these are.
+      const from = `${call.option ?? "fall_back"} from ${jevel.path}: ${call.command}`;
+      let run: RunReport | null = null;
+      let exit = 0;
+      let killed: number | null = null;
+      if (call.command !== null) {
+        run = { option: call.option, command: call.command, decision: call.decision, exit: null, ms: null, confirmed: null };
+        if (opts.dryRun) {
+          say(`${call.decision}: would run ${from}`);
+        } else {
+          if (call.decision === "mark") run.confirmed = opts.yes === true || (await confirmOnTty(call, jevel.path));
+          if (run.confirmed === false) {
+            say(`Jev picked ${call.option} at ${call.certainty.toFixed(2)}, which is a mark, so nothing ran; run again with --yes to run: ${call.command}`);
+            exit = EXIT.not_confirmed;
+          } else {
+            say(`running ${from}`);
+            const done = await execute(call.command, state, { decision: call.decision, option: call.option, logId });
+            run.exit = done.exit;
+            run.ms = done.ms;
+            if (done.signal) run.signal = done.signal;
+            // jevelry itself got the signal: the command was stopped with it, and jevelry exits the way a killed process would.
+            exit = done.exit;
+            if (done.interrupted) killed = 128 + (constants.signals[done.interrupted] ?? 0);
+          }
+          if (logId !== null) await logRun(home(), logId, run, warn);
+        }
+      }
+      if (!result.ok) {
+        out({ protocol: PROTOCOL, error: result.error, run });
+        say(result.error.message);
+        process.exitCode = killed ?? result.error.exit;
+        return;
+      }
+      out({ ...result.document, log_id: logId, run });
+      process.exitCode = killed ?? exit;
     });
 
   program

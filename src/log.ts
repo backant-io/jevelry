@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { JevelError } from "./jevel.js";
-import type { Answer, ErrorBody, FallBackAnswer, Usage } from "./protocol.js";
+import type { Answer, ErrorBody, FallBackAnswer, RunReport, Usage } from "./protocol.js";
 
 export const LOG_FILE = "log.jsonl";
 
@@ -39,7 +39,14 @@ export interface OutcomeLine {
   at: string;
 }
 
-export type LogLine = AskLine | OutcomeLine;
+/** What ran after an ask, under the ask's id. A library handler logs `command: null`. */
+export interface RunLine extends RunReport {
+  kind: "run";
+  id: string;
+  at: string;
+}
+
+export type LogLine = AskLine | OutcomeLine | RunLine;
 
 /** Append-only. The state is written only when state logging is on; the key is never written anywhere. */
 export async function appendLine(home: string, line: LogLine): Promise<void> {
@@ -109,7 +116,7 @@ export function findAsk(lines: LogLine[], id: string): AskLine | undefined {
 export function outcomeOf(ask: AskLine, question: string, given: string): { outcome: "agree" | "disagree"; value: string | null } {
   // Jev gave no answer on this line, so there is nothing an outcome could agree or disagree with.
   if (ask.error) throw new JevelError("log_id", `ask ${ask.id} got no answer from Jev (${ask.error.code}), so it takes no outcome`);
-  const answer = ask.answers[question] as Answer | undefined;
+  const answer = (Object.hasOwn(ask.answers, question) ? ask.answers[question] : undefined) as Answer | undefined;
   if (!answer) throw new JevelError("question", `no question named ${question} in ask ${ask.id}`);
   if (given === "agree" || given === "disagree") return { outcome: given, value: null };
   let agrees: boolean;
@@ -117,10 +124,10 @@ export function outcomeOf(ask: AskLine, question: string, given: string): { outc
     if (given !== "yes" && given !== "no") throw new JevelError("value", `a noul outcome is yes or no, not ${given}`);
     agrees = (given === "yes") === answer.yes;
   } else if (answer.type === "choice") {
-    if (!(given in answer.probabilities)) throw new JevelError("value", `${given} names no option of ${question}`);
+    if (!Object.hasOwn(answer.probabilities, given)) throw new JevelError("value", `${given} names no option of ${question}`);
     agrees = given === answer.choice;
   } else {
-    if (!(given in answer.legend)) throw new JevelError("value", `${given} names no level of ${question}`);
+    if (!Object.hasOwn(answer.legend, given)) throw new JevelError("value", `${given} names no level of ${question}`);
     agrees = Number(given) === Math.round(answer.score);
   }
   return { outcome: agrees ? "agree" : "disagree", value: given };

@@ -25,6 +25,8 @@ export interface JevelQuestion {
   criteria?: unknown;
   thresholds?: Partial<Thresholds>;
   repeat?: Repeat;
+  /** Option name to a shell command, run when Jev picks that option. Only on a choice, on one question per jevel. */
+  run?: Record<string, string>;
 }
 
 export interface Jevel {
@@ -35,6 +37,8 @@ export interface Jevel {
   state: { required: string[]; budget_tokens?: number };
   thresholds: Partial<Thresholds>;
   questions: Record<string, JevelQuestion>;
+  /** A shell command run when the dispatcher's decision is fall_back or Jev could not answer. */
+  fall_back?: string;
   body: string;
   path: string;
 }
@@ -96,7 +100,8 @@ function checkMarkUnderAct(layers: Array<Partial<Thresholds>>, field: string): v
 
 function questionOf(id: string, raw: unknown, jevelThresholds: Partial<Thresholds>): JevelQuestion {
   const field = `questions.${id}`;
-  if (!QUESTION_ID.test(id)) throw new JevelError(field, `question id \`${id}\` must match [a-z0-9_]+`);
+  // `__proto__` would set a prototype, not a key, wherever answers are collected by name.
+  if (!QUESTION_ID.test(id) || id === "__proto__") throw new JevelError(field, `question id \`${id}\` must match [a-z0-9_]+`);
   if (!isRecord(raw)) throw new JevelError(field, `${field} must be an object`);
   refuseRenamedKey(raw, `${field}.`);
   const type = raw.type;
@@ -142,7 +147,53 @@ function questionOf(id: string, raw: unknown, jevelThresholds: Partial<Threshold
   if (criteria !== undefined) question.criteria = criteria;
   if (raw.thresholds !== undefined) question.thresholds = thresholds;
   if (repeat) question.repeat = repeat;
+  if (raw.run !== undefined) question.run = runOf(field, raw.run, question);
   return question;
+}
+
+function runOf(field: string, raw: unknown, q: JevelQuestion): Record<string, string> {
+  const at = `${field}.run`;
+  if (q.type !== "choice") throw new JevelError(at, `${at}: run belongs on a choice question, and this one is a ${q.type}`);
+  if (q.repeat) throw new JevelError(at, `${at}: run cannot sit on a repeat question, because it would pick one command per element`);
+  if (!isRecord(raw)) throw new JevelError(at, `${at} must map option names to commands`);
+  const options = Object.keys(q.criteria as Record<string, unknown>);
+  if (options.includes("fall_back")) throw new JevelError(`${field}.criteria.fall_back`, `${field} carries run, so no option may be named fall_back, the name of the command for an unsure call`);
+  for (const [option, command] of Object.entries(raw)) {
+    if (!options.includes(option)) throw new JevelError(`${at}.${option}`, `${at}.${option} names no option of this question; the options are ${options.join(", ")}`);
+    if (typeof command !== "string" || command.trim() === "") throw new JevelError(`${at}.${option}`, `${at}.${option} must be a command string`);
+  }
+  return raw as Record<string, string>;
+}
+
+/** `{{name}}` in a command: the only thing ever substituted, and only with a picked option or true/false. */
+export const PLACEHOLDER = /\{\{([^{}]*)\}\}/g;
+/** An option name that reaches a command line: nothing the shell reads as syntax. */
+export const SAFE_VALUE = /^[A-Za-z0-9._-]+$/;
+
+/** Every `{{x}}` names a choice or noul question whose values are safe on a command line. */
+function checkRun(jevel: Jevel): void {
+  const dispatchers = Object.entries(jevel.questions).filter(([, q]) => q.run);
+  if (dispatchers.length > 1) {
+    throw new JevelError(`questions.${dispatchers[1]![0]}.run`, `only one question may carry run, and ${dispatchers.map(([id]) => id).join(" and ")} both do`);
+  }
+  if (jevel.fall_back !== undefined && jevel.fall_back.match(PLACEHOLDER)) {
+    throw new JevelError("fall_back", "fall_back runs when Jev is unsure, so it takes no {{arguments}}");
+  }
+  for (const [id, q] of dispatchers) {
+    for (const [option, command] of Object.entries(q.run!)) {
+      const at = `questions.${id}.run.${option}`;
+      for (const [, name] of command.matchAll(PLACEHOLDER)) {
+        // Own properties only: `{{constructor}}` must never find Object.prototype.constructor.
+        const arg = Object.hasOwn(jevel.questions, name!) ? jevel.questions[name!] : undefined;
+        if (!arg || arg.type === "score") throw new JevelError(at, `${at}: {{${name}}} must name a choice or noul question of this jevel`);
+        if (arg.repeat) throw new JevelError(at, `${at}: {{${name}}} is a repeat question, which has one answer per element and cannot be one argument`);
+        if (arg.type === "choice") {
+          const bad = Object.keys(arg.criteria as Record<string, unknown>).find((o) => !SAFE_VALUE.test(o));
+          if (bad !== undefined) throw new JevelError(`questions.${name}.criteria.${bad}`, `questions.${name} is an argument of ${at}, so its option names may only use letters, digits, dot, underscore and hyphen, and \`${bad}\` does not`);
+        }
+      }
+    }
+  }
 }
 
 /** The criteria entries Jev sees side by side: one per option, per level, or the two noul sides. */
@@ -243,6 +294,11 @@ export function parseJevel(markdown: string, dirName: string, path = "<inline>")
   for (const [id, q] of Object.entries(raw.questions)) questions[id] = questionOf(id, q, thresholds);
   const jevel: Jevel = { name: raw.name, version: raw.version as number, format: 1, state, thresholds, questions, body, path };
   if (typeof raw.model === "string") jevel.model = raw.model;
+  if (raw.fall_back !== undefined) {
+    if (typeof raw.fall_back !== "string" || raw.fall_back.trim() === "") throw new JevelError("fall_back", "fall_back must be a command string");
+    jevel.fall_back = raw.fall_back;
+  }
+  checkRun(jevel);
   return { jevel, warnings: warningsOf(jevel) };
 }
 
@@ -290,7 +346,7 @@ export function checkState(jevel: Jevel, state: unknown): void {
     throw new JevelError("state.required", `this jevel requires the keys ${jevel.state.required.join(", ")}, so the state must be an object`);
   }
   for (const key of jevel.state.required) {
-    if (!(key in state)) throw new JevelError("state.required", `state is missing the required key \`${key}\``);
+    if (!Object.hasOwn(state, key)) throw new JevelError("state.required", `state is missing the required key \`${key}\``);
   }
 }
 
@@ -304,7 +360,7 @@ export function getPath(value: unknown, path: string): unknown {
       if (!Number.isInteger(index)) return undefined;
       current = current[index];
     } else if (isRecord(current)) {
-      current = current[step];
+      current = Object.hasOwn(current, step) ? current[step] : undefined;
     } else {
       return undefined;
     }

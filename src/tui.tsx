@@ -3,7 +3,7 @@ import { Box, Text, render, useApp, useInput, useStdout } from "ink";
 import { useEffect, useRef, useState } from "react";
 import { type Thresholds, mergeThresholds } from "./decision.js";
 import { loadJevel } from "./jevel.js";
-import { type AskLine, LOG_FILE, type LogLine, type OutcomeLine, readLog, recordOutcome } from "./log.js";
+import { type AskLine, LOG_FILE, type LogLine, type OutcomeLine, type RunLine, readLog, recordOutcome } from "./log.js";
 import type { Answer, FallBackAnswer } from "./protocol.js";
 import { recordedDecision, report } from "./report.js";
 
@@ -21,6 +21,8 @@ export interface Row {
   question: string;
   answer: Answer | FallBackAnswer;
   outcomes: OutcomeLine[];
+  /** What `jevelry run` or `run()` did after this ask, when it did anything. */
+  run?: RunLine;
 }
 
 const DECISIONS: Filters["decision"][] = ["all", "act", "mark", "fall_back"];
@@ -31,7 +33,9 @@ const baseName = (name: string): string => name.replace(/\[\d+\]$/, "");
 /** Newest ask first, one row per question, every outcome recorded for it attached. */
 export function rowsOf(lines: LogLine[], filters: Filters): Row[] {
   const outcomes = new Map<string, OutcomeLine[]>();
+  const runs = new Map<string, RunLine>();
   for (const line of lines) {
+    if (line.kind === "run") runs.set(line.id, line);
     if (line.kind !== "outcome") continue;
     const key = `${line.id}\n${line.question}`;
     outcomes.set(key, [...(outcomes.get(key) ?? []), line]);
@@ -43,7 +47,8 @@ export function rowsOf(lines: LogLine[], filters: Filters): Row[] {
     if (filters.jevel !== null && jevelOf(ask) !== filters.jevel) continue;
     if (filters.since !== null && ask.at < filters.since) continue;
     for (const [question, answer] of Object.entries(ask.answers)) {
-      const row = { ask, question, answer, outcomes: outcomes.get(`${ask.id}\n${question}`) ?? [] };
+      const run = runs.get(ask.id);
+      const row = { ask, question, answer, outcomes: outcomes.get(`${ask.id}\n${question}`) ?? [], ...(run ? { run } : {}) };
       if (filters.decision !== "all" && recordedDecision(answer) !== filters.decision) continue;
       if (filters.noOutcome && row.outcomes.length > 0) continue;
       rows.push(row);
@@ -160,6 +165,13 @@ export function otherValues(a: Answer): string[] {
   return Object.keys(a.legend).filter((l) => Number(l) !== Math.round(a.score));
 }
 
+function runLine(r: RunLine): string {
+  const what = r.command ?? "a handler in the program";
+  const confirmed = r.confirmed === null ? "" : r.confirmed ? ", confirmed" : ", not confirmed";
+  const result = r.exit !== null ? `exit ${r.exit}${r.signal ? ` (${r.signal})` : ""} in ${r.ms} ms` : r.ms !== null ? `took ${r.ms} ms` : "did not run";
+  return `run: ${r.option ?? "fall_back"}: ${what}, ${result}${confirmed}`;
+}
+
 export function detailLines(row: Row, thresholds: { thresholds: Thresholds; version: number } | null, note: string): string[] {
   const { ask, question, answer } = row;
   const out = [
@@ -177,6 +189,7 @@ export function detailLines(row: Row, thresholds: { thresholds: Thresholds; vers
   }
   out.push(`certainty: ${certainty}${bands}`, `decision: ${recordedDecision(answer)}`);
   if (ask.error) out.push(`error: ${ask.error.code} (exit ${ask.error.exit}): ${ask.error.message}`);
+  if (row.run) out.push(runLine(row.run));
   out.push("", "outcomes:");
   if (row.outcomes.length === 0) out.push("  none yet");
   for (const o of row.outcomes) out.push(`  ${time(o.at)} ${o.outcome}${o.value !== null ? ` ${o.value}` : ""}${o.note ? `  note: ${o.note}` : ""}`);
@@ -322,7 +335,8 @@ function thresholdsLookup(dirs: string[]): (row: Row) => { thresholds: Threshold
     }
     const j = cache.get(name);
     if (!j) return null;
-    return { thresholds: mergeThresholds(j.thresholds, j.questions[baseName(row.question)]?.thresholds), version: j.version };
+    const base = baseName(row.question);
+    return { thresholds: mergeThresholds(j.thresholds, Object.hasOwn(j.questions, base) ? j.questions[base]!.thresholds : undefined), version: j.version };
   };
 }
 

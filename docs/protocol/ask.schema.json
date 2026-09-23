@@ -45,6 +45,21 @@
         "decision": { "$ref": "#/definitions/decision" }
       }
     },
+    "run": {
+      "description": "jevelry run only: what ran for the dispatcher's decision, null when nothing needed to run",
+      "type": ["object", "null"],
+      "required": ["option", "command", "decision", "exit", "ms", "confirmed"],
+      "additionalProperties": false,
+      "properties": {
+        "option": { "type": ["string", "null"] },
+        "command": { "type": ["string", "null"] },
+        "decision": { "$ref": "#/definitions/decision" },
+        "exit": { "type": ["integer", "null"] },
+        "ms": { "type": ["integer", "null"], "minimum": 0 },
+        "confirmed": { "type": ["boolean", "null"] },
+        "signal": { "type": "string" }
+      }
+    },
     "answers": {
       "type": "object",
       "required": ["protocol", "log_id", "jevel", "model", "state_hash", "answers", "usage"],
@@ -71,7 +86,8 @@
           "required": ["input_tokens", "output_tokens"],
           "additionalProperties": false,
           "properties": { "input_tokens": { "type": "integer" }, "output_tokens": { "type": "integer" } }
-        }
+        },
+        "run": { "$ref": "#/definitions/run" }
       }
     },
     "error": {
@@ -85,13 +101,14 @@
           "required": ["exit", "code", "message"],
           "additionalProperties": false,
           "properties": {
-            "exit": { "enum": [2, 3, 4, 5, 6, 7] },
-            "code": { "enum": ["bad_input", "rate_limited", "overloaded", "auth", "over_budget", "transport", "unreadable_answer"] },
+            "exit": { "enum": [2, 3, 4, 5, 6, 7, 9] },
+            "code": { "enum": ["bad_input", "rate_limited", "overloaded", "auth", "over_budget", "transport", "unreadable_answer", "not_confirmed"] },
             "message": { "type": "string" },
             "retry_after_ms": { "type": "integer", "minimum": 0 },
             "field": { "type": "string" }
           }
-        }
+        },
+        "run": { "$ref": "#/definitions/run" }
       }
     }
   }

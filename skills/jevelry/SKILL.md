@@ -26,10 +26,11 @@ Use a jevel when you or the code need one of these and the input is text or a re
 
 Keep arithmetic, counting, date comparison and anything a regex can find in the code, because Jev answers questions about meaning.
 
-Sixteen jevels ship with the package, and each one fits a moment you run into while you work. Ask it with the state in a file, then do what the decision says:
+Seventeen jevels ship with the package, and each one fits a moment you run into while you work. Ask it with the state in a file, then do what the decision says:
 
 | Moment | Command | On `act` | On `mark` | On `fall_back` |
 |---|---|---|---|---|
+| a test failed and the next step is a rerun, a report to the CI owner or a fix | `npx jevelry run failing-test --state @test.json` | the shipped commands only print the next step for the `cause`: rerun with `retries`, report it to the CI owner, or fix the code; replace them with your own commands | it asks first, and `--yes` runs it | its `fall_back` command prints that you should read the output yourself |
 | a service or a job printed a burst of log lines | `npx jevelry ask log-triage --state @lines.json` | treat it as the `kind`: a bug means fix the code, a misconfiguration means fix the setting, an outage means wait and report it | do the same and say in your summary that it was a guess | read the lines yourself before you change anything |
 | a test failed, or a review comment or a failing check lands on your pull request | `npx jevelry ask review-comment-kind --state @comment.json` | `defect`: fix the code, `environment`: fix or report the CI or the sandbox and leave the code alone, `style`: fold it into a cleanup pass | do the same and name the kind you assumed | read the comment and the failing output closer yourself |
 | you are about to merge or hand over a change | `npx jevelry ask change-risk --state @change.json` | `risk` at level 2: ask the person for a second reviewer, and `breaking` yes: add a migration note | apply the level and point the person at it | follow the project's usual review rules |
@@ -60,6 +61,7 @@ Each jevel's body says what its state looks like and its `example.json` is a sta
 | `npx jevelry check <jevel>` | refuses a jevel the API would refuse and warns about questions Jev handles poorly |
 | `npx jevelry ask <jevel> --state @file` | asks every question in the jevel about the state, prints one JSON document |
 | `npx jevelry ask --questions '<json>' --state '<json>'` | a one-off ask with the API's question shape |
+| `npx jevelry run <jevel> --state @file [--yes] [--dry-run]` | asks the jevel and runs the command of the option Jev picked: `act` runs it, `mark` asks first, `fall_back` runs the jevel's `fall_back` |
 | `npx jevelry outcome <log_id> <question> <value>` | records what proved true (`agree`, `disagree`, an option, a level index, `yes`, `no`) |
 | `npx jevelry report [--jevel <name>] [--json]` | agreement per question from the log |
 | `npx jevelry tui [--jevel <name>]` | a terminal view of every logged decision, where a person marks whether Jev was right |
@@ -67,6 +69,10 @@ Each jevel's body says what its state looks like and its `example.json` is a sta
 | `npx jevelry models` | the model names the account may send |
 
 Jevels are found in `--jevels <dir>`, then `JEVELRY_JEVELS` (colon separated), then `./jevels`, then `~/.jevelry/jevels`. Keep the project's jevels in `./jevels/` so a person reviews them with the code.
+
+## Let Jev run the command
+
+Use `npx jevelry run <jevel> --state @file` when the next step after the decision is always one of a few commands, like rerunning a flaky test or filing an issue for the CI owner, and the jevel names those commands in a `run` block (`failing-test` is the one that ships). Run it with `--dry-run` first, so you see which command it picks and what it fills in. Leave `--yes` off while the person is around, because a `mark` then waits for their `y`, and exit 9 means the call was a `mark` and nobody confirmed it, so tell the person which command it wanted. `run` runs the commands of the first jevel it finds, and the project's `./jevels` folder comes before the jevels that ship, so a `jevels/failing-test/` in the repository replaces the shipped one; jevelry prints the jevel's path on stderr before it runs anything, and you check that path before you trust the command. When your own code acts on the answer, keep using `ask` or `decide`.
 
 ## Write a jevel
 

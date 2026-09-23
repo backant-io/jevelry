@@ -2,7 +2,7 @@
 
 A jevel is a folder with one `JEVEL.md` in it, and it does one job: it turns a decision your code has to make about some text or record into a few typed questions for Jev, with the thresholds that say how sure the answer has to be before your code acts on it. You send the state the jevel names, jevelry asks every question in one request, and your code gets a decision per question, `act`, `mark` or `fall_back`, next to the probabilities. So you have a file you can read, check, version and tune from the report, and the prompt and the parser are gone.
 
-Sixteen ship with the package, in general shapes, each with the questions, the thresholds, one `example.json` you can ask it with straight away and a `cases.json` of realistic states with the answer each one should get, which our live tests ask against the real API:
+Seventeen ship with the package, in general shapes, each with the questions, the thresholds, one `example.json` you can ask it with straight away and a `cases.json` of realistic states with the answer each one should get, which our live tests ask against the real API:
 
     npx jevelry show ticket-triage
     npx jevelry ask ticket-triage --state @jevels/ticket-triage/example.json
@@ -14,6 +14,7 @@ Sixteen ship with the package, in general shapes, each with the questions, the t
 | `checklist-compliance` | a report that claims to follow a checklist | `followed`, `deviation_kind`, `deviation_explained` | `checklist`, `report` |
 | `duplicate-issue` | a new issue in your tracker, against the open ones | `same_as` (one per candidate), `actionable` | `issue`, `candidates` |
 | `escalation-route` | a request or an incident lands in a shared inbox | `route`, `urgent`, `breaks_a_rule` | `request`, `context` |
+| `failing-test` | a test failed and the next step should run on its own, with `jevelry run` | `cause` (runs a command), `retries` | `test` |
 | `issue-readiness` | a new issue or proposal before it reaches a backlog | `readiness`, `missing` | `issue` |
 | `log-triage` | a burst of log lines, before a person reads them | `kind`, `needs_a_person`, `severity` | `lines`, optional `service` |
 | `meeting-notes` | notes after a meeting, for the decision log | `decision_reached`, `owners_assigned`, `follow_up_needed`, `tone` | `notes` |

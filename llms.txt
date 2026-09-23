@@ -43,7 +43,9 @@ When Jev cannot answer, every question comes back `fall_back` with the reason in
 
 `npx jevelry tui` shows every logged decision in your terminal, and pressing `a` or `d` on a `mark` tells jevelry whether Jev was right.
 
+`npx jevelry run <jevel> --state @file` asks a jevel whose options name commands, like `failing-test`, and runs the one Jev picks: `act` runs it, `mark` asks you first and `fall_back` runs the jevel's `fall_back` command.
+
 ## Links
 
-- [The sixteen jevels that ship with the package](https://github.com/backant-io/jevelry/blob/main/jevels/README.md): triage, urgency, duplicates, severity, risky changes, failing test causes and more, each with an `example.json` and a `cases.json`.
+- [The seventeen jevels that ship with the package](https://github.com/backant-io/jevelry/blob/main/jevels/README.md): triage, urgency, duplicates, severity, risky changes, failing test causes and more, each with an `example.json` and a `cases.json`.
 - [The guide to writing your own jevel](https://github.com/backant-io/jevelry/blob/main/skills/jevelry/references/writing-jevels.md): questions, criteria, state, decisions and the cases that prove it.
