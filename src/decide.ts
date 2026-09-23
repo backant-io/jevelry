@@ -4,7 +4,7 @@ import { ask, errorBody, stateHash } from "./ask.js";
 import { type Jevel, JevelError, type JevelQuestion, checkState, discoveryDirs, expandQuestions, isEntry, loadJevel } from "./jevel.js";
 import { resolveKey } from "./key.js";
 import { jevelryHome, logAsk } from "./log.js";
-import type { Answer, ChoiceAnswer, ErrorBody, NoulAnswer, ScoreAnswer, Usage } from "./protocol.js";
+import type { Answer, ChoiceAnswer, ErrorBody, FallBackAnswer, NoulAnswer, ScoreAnswer, Usage } from "./protocol.js";
 
 /**
  * The SDK resolves its own `logLevel` from `TYPESAFE_LOG_LEVEL` and logs through `console` by
@@ -25,14 +25,6 @@ export function defaultClient(home: string): TypeSafeClient {
   const toStderr = (m: string, ...a: unknown[]): void => { process.stderr.write(`jevelry: sdk: ${[m, ...a.map(render)].join(" ")}\n`); };
   const logger = { debug: toStderr, info: toStderr, warn: toStderr, error: toStderr };
   return new TypeSafeClient(model && model.trim() !== "" ? { timeout, defaultModel: model, logger } : { timeout, logger });
-}
-
-/** What Jev could not answer: the code takes its old path, so the type is all a caller needs. */
-export interface FallBackAnswer<T extends Answer["type"] = Answer["type"]> {
-  type: T;
-  decision: "fall_back";
-  answer: null;
-  certainty: 0;
 }
 
 export type ChoiceDecision<O extends string = string> = (Omit<ChoiceAnswer, "choice"> & { choice: O; answer: O }) | FallBackAnswer<"choice">;
@@ -123,10 +115,11 @@ export function jevel<N extends string>(
       const error = result.error;
       // Every name came out of expandQuestions, so its base name is a question of this jevel.
       const typeOf = (q: string): Answer["type"] => loaded.questions[q.replace(/\[\d+\]$/, "")]!.type;
-      const fallen = Object.fromEntries(names.map((q) => [q, { type: typeOf(q), decision: "fall_back", answer: null, certainty: 0 }]));
+      const fallen: Record<string, FallBackAnswer> = Object.fromEntries(names.map((q) => [q, { type: typeOf(q), decision: "fall_back", answer: null, certainty: 0 }]));
+      // Logged per question like an answer, so `report` counts every decision point that fired, the failed ones as fall_back.
       const logId = options.log === false
         ? null
-        : await logAsk(home, { jevel: jevelRef, model: null, state_hash: stateHash(state), answers: {}, usage: null, error }, warn);
+        : await logAsk(home, { jevel: jevelRef, model: null, state_hash: stateHash(state), answers: fallen, usage: null, error }, warn);
       return { logId, error, model: null, usage: null, ...fallen } as never;
     },
   };

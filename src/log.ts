@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { JevelError } from "./jevel.js";
-import type { Answer, ErrorBody, Usage } from "./protocol.js";
+import type { Answer, ErrorBody, FallBackAnswer, Usage } from "./protocol.js";
 
 export const LOG_FILE = "log.jsonl";
 
@@ -19,10 +19,11 @@ export interface AskLine {
   /** null only on a line with `error`: Jev could not answer, so no model did. */
   model: string | null;
   state_hash: string;
-  answers: Record<string, Answer>;
+  /** On a line with `error`, every question is a FallBackAnswer. */
+  answers: Record<string, Answer | FallBackAnswer>;
   usage: Usage | null;
   cwd: string;
-  /** Set when a library `decide` got no answer; `answers` is then empty. The CLI logs only answers. */
+  /** Set when a library `decide` got no answer from Jev. The CLI logs only answers. */
   error?: ErrorBody;
 }
 
@@ -97,7 +98,9 @@ export function findAsk(lines: LogLine[], id: string): AskLine | undefined {
 
 /** Spec section 6: agree/disagree verbatim, else compared to the recorded answer of its type. */
 export function outcomeOf(ask: AskLine, question: string, given: string): { outcome: "agree" | "disagree"; value: string | null } {
-  const answer = ask.answers[question];
+  // Jev gave no answer on this line, so there is nothing an outcome could agree or disagree with.
+  if (ask.error) throw new JevelError("log_id", `ask ${ask.id} got no answer from Jev (${ask.error.code}), so it takes no outcome`);
+  const answer = ask.answers[question] as Answer | undefined;
   if (!answer) throw new JevelError("question", `no question named ${question} in ask ${ask.id}`);
   if (given === "agree" || given === "disagree") return { outcome: given, value: null };
   let agrees: boolean;

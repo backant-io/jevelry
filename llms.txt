@@ -26,7 +26,7 @@ import { jevel } from "jevelry";
 const triage = jevel("ticket-triage");
 
 const d = await triage.decide({ ticket });
-switch (d.team.decision) {
+switch (d.team?.decision) {
   case "act": route(ticket, d.team.answer); break;
   case "mark": route(ticket, d.team.answer); flagForQueueOwner(ticket); break;
   case "fall_back": leaveInGeneralQueue(ticket); break;

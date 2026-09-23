@@ -32,6 +32,14 @@ export interface ScoreAnswer {
 
 export type Answer = NoulAnswer | ChoiceAnswer | ScoreAnswer;
 
+/** What Jev could not answer: the code takes its old path, so the type is all a caller needs. */
+export interface FallBackAnswer<T extends Answer["type"] = Answer["type"]> {
+  type: T;
+  decision: "fall_back";
+  answer: null;
+  certainty: 0;
+}
+
 export interface Usage {
   input_tokens: number;
   output_tokens: number;

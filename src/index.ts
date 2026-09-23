@@ -30,7 +30,6 @@ export {
   type DecisionAnswer,
   type Decisions,
   type DecisionsMeta,
-  type FallBackAnswer,
   type JevelOptions,
   type JevelTypes,
   type LoadedJevel,

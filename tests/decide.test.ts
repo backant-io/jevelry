@@ -6,7 +6,8 @@ import { TypeSafeClient } from "@typesafe-ai/sdk";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { jevel } from "../src/decide.js";
 import { JevelError } from "../src/jevel.js";
-import { type AskLine, readLog } from "../src/log.js";
+import { type AskLine, outcomeOf, readLog } from "../src/log.js";
+import { report } from "../src/report.js";
 import { type TestServer, startServer } from "./fixtures/server.js";
 
 const FIXTURES = join(process.cwd(), "tests", "fixtures", "jevels");
@@ -66,7 +67,11 @@ describe("decide", () => {
       expect(d.depth?.type).toBe("score");
       const lines = (await readLog(home)) as AskLine[];
       expect(lines).toHaveLength(1);
-      expect(lines[0]).toMatchObject({ kind: "ask", id: d.logId, answers: {}, model: null, error: { code } });
+      expect(lines[0]).toMatchObject({ kind: "ask", id: d.logId, model: null, error: { code } });
+      // Every decision point that fired is tracked: the report counts this ask as fall_back for each question.
+      const rows = report(lines);
+      expect(rows.map((r) => [r.question, r.asks, r.decisions.fall_back])).toEqual([["depth", 1, 1], ["same_as", 2, 2], ["worth_a_turn", 1, 1]]);
+      expect(() => outcomeOf(lines[0]!, "worth_a_turn", "agree")).toThrow(JevelError);
     });
   }
 
@@ -136,6 +141,36 @@ describe("jevelry types", () => {
           paths: { jevelry: [join(process.cwd(), "dist", "index.d.ts")] },
         },
         files: ["use.ts", "jevels.d.ts"],
+      }),
+    );
+    const tsc = spawnSync("node", [join(process.cwd(), "node_modules", "typescript", "bin", "tsc"), "-p", join(dir, "tsconfig.json")], { encoding: "utf8" });
+    expect(tsc.stdout + tsc.stderr).toBe("");
+    expect(tsc.status).toBe(0);
+  });
+
+  it("compiles the README snippet without the types file under noUncheckedIndexedAccess, and every doc shows the same one", () => {
+    // Somebody pastes this block before they ever run `jevelry types`, so it has to hold in the strictest common setup.
+    const readme = readFileSync("README.md", "utf8");
+    const section = readme.slice(readme.indexOf("## In your program"));
+    const snippet = /```ts\n([\s\S]*?)```/.exec(section)?.[1] ?? "";
+    expect(snippet).toContain("decide(");
+    for (const doc of ["AGENTS.md", "llms.txt", join("skills", "jevelry", "SKILL.md")]) expect(readFileSync(doc, "utf8"), doc).toContain(snippet);
+    const dir = mkdtempSync(join(tmpdir(), "jevelry-snippet-"));
+    const [imports, ...rest] = snippet.split("\n\n");
+    writeFileSync(
+      join(dir, "use.ts"),
+      [imports, "declare const ticket: { subject: string; message: string };", "declare function route(t: unknown, team: unknown): void;", "declare function flagForQueueOwner(t: unknown): void;", "declare function leaveInGeneralQueue(t: unknown): void;", ...rest, "export {};"].join("\n"),
+    );
+    writeFileSync(join(dir, "package.json"), '{ "type": "module" }');
+    writeFileSync(
+      join(dir, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          target: "ES2022", module: "NodeNext", moduleResolution: "NodeNext", strict: true, noUncheckedIndexedAccess: true, noEmit: true, skipLibCheck: true, types: ["node"],
+          typeRoots: [join(process.cwd(), "node_modules", "@types")],
+          paths: { jevelry: [join(process.cwd(), "dist", "index.d.ts")] },
+        },
+        files: ["use.ts"],
       }),
     );
     const tsc = spawnSync("node", [join(process.cwd(), "node_modules", "typescript", "bin", "tsc"), "-p", join(dir, "tsconfig.json")], { encoding: "utf8" });
