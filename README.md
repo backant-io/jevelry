@@ -39,22 +39,6 @@ With jevelry you ask each of those questions to Jev with one command. A question
 | `mark` | Jev is fairly sure | uses the answer and flags it for a person |
 | `fall_back` | Jev is unsure | does what it did before jevelry |
 
-One ticket triage is about 1,280 input tokens at $0.042 per million, roughly $0.00005, so a dollar covers around 18,000 of them. jevelry itself is free and MIT, and TypeSafe charges only for input tokens.
-
-### Where it helps
-
-**In your app.** A support ticket comes in and needs a team and a priority. On `act` your code routes it to the team Jev picked, on `mark` it routes it and flags it for the queue owner, and on `fall_back` it leaves the ticket for a person, the same way it works today:
-
-```sh
-npx jevelry ask ticket-triage --state '{"ticket": {"subject": "Charged twice", "message": "I was billed twice this month, please refund one today."}}'
-```
-
-**In your coding agent.** A test fails with `connect EPERM` because the sandbox blocked a network call, and left alone your agent will probably start rewriting code that was fine. With the jevelry skill installed it asks first, and on `environment` it reports the sandbox problem and leaves your code alone:
-
-```sh
-npx jevelry ask review-comment-kind --state '{"comment": {"author": "ci-bot", "text": "FAIL tests/api.test.ts\nTypeError: fetch failed\n  cause: Error: connect EPERM 104.18.2.1:443"}}'
-```
-
 ## Features
 
 - **Interactive TUI**: Built with [Ink](https://github.com/vadimdemedes/ink) for a full-screen terminal experience
