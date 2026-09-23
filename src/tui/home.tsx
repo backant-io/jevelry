@@ -250,15 +250,13 @@ function legendLines(width: number): Array<Array<[word: "act" | "mark" | "fall_b
 const midnight = (now: Date): string => new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
 const rightOf = (n: number | null, of: number): string => (n === null ? "-" : `${Math.round(n * 100)}% of ${of}`);
 
+/** The dashboard: how Jev decided today, what needs you, every jevel and the live feed. */
 export function HomeView(props: {
   lines: LogLine[];
   now: Date;
-  version: string;
   width: number;
   /** Rows for this screen, the footer already taken off. */
   height: number;
-  /** The terminal's own rows, which decide the block logo. */
-  rows?: number;
   active?: boolean;
   /** Asks that arrived in the last few seconds, marked in the feed. */
   fresh?: ReadonlySet<string>;
@@ -268,6 +266,7 @@ export function HomeView(props: {
   onCursor: (update: (cursor: number) => number) => void;
   onOpen: (target: Target) => void;
   onTry: (jevel: string) => void;
+  onBack: () => void;
 }): React.JSX.Element {
   const theme = useTheme();
   const minute = Math.floor(props.now.getTime() / 60_000);
@@ -276,7 +275,6 @@ export function HomeView(props: {
   const jevelTopRef = useRef(0);
   const wide = props.width >= 100;
   const side = props.width >= 120;
-  const big = props.width >= 100 && (props.rows ?? props.height + 1) >= 30;
   const needs: Array<{ text: string; key: string; target: Target; tone: string }> = [];
   if (s.toReview > 0) needs.push({ text: `${plural(s.toReview, "marked decision")} to review`, key: "review", target: { kind: "review" }, tone: theme.mark });
   const worth = props.worth ?? [];
@@ -288,13 +286,13 @@ export function HomeView(props: {
     needs.push({ text: `${plural(s.failedToday.count, "ask")} failed today (${s.failedToday.topError})`, key: "failed", target: { kind: "history", filters: { failed: true, since: midnight(props.now) } }, tone: theme.error });
   }
 
-  // Rows: the logo, a blank, the Today and Needs you panels, a blank; the rest is the jevels table and the feed.
+  // Rows: the title, a blank, the Today and Needs you panels, a blank; the rest is the jevels table and the feed.
   const panelWidth = wide ? Math.floor((props.width - 4) / 2) : props.width - 2;
   const inner = panelWidth - 4;
   const legend = legendLines(inner);
   const todayHeight = 3 + legend.length;
   const needsHeight = 1 + Math.max(1, needs.length);
-  const topRows = (big ? 5 : 1) + 1 + (wide ? Math.max(todayHeight, needsHeight) : todayHeight + 1 + needsHeight) + 1;
+  const topRows = 1 + 1 + (wide ? Math.max(todayHeight, needsHeight) : todayHeight + 1 + needsHeight) + 1;
   const rest = Math.max(0, props.height - topRows);
   // The table's title and header, a "more" line, a blank, the feed's title and header, and at least three feed rows.
   const jevelRoom = Math.min(s.jevels.length, Math.max(1, rest - 9));
@@ -312,29 +310,38 @@ export function HomeView(props: {
   const hints: Hint[] = s.empty ? [["enter", "try ticket-triage"], ["t", "try"]] : [["j/k", "move"], ["enter", "open"]];
   useChrome(hints);
   useInput((input, key) => {
+    if (key.escape) { props.onBack(); return; }
     if (s.empty) { if (key.return) props.onTry("ticket-triage"); return; }
     const step = moves(input, key);
     if (step !== 0) props.onCursor((c) => Math.max(0, Math.min(Math.min(c, last) + step, last)));
     else if (key.return && items[at]) props.onOpen(items[at]);
   }, { isActive: props.active ?? true });
 
+  const title = (
+    <Text wrap="truncate">
+      <Text bold color={theme.accent}>Dashboard</Text>
+      <Text color={theme.muted}>{"   today's decisions, every jevel, the live feed"}</Text>
+    </Text>
+  );
   if (s.empty) {
     return (
-      <Box flexDirection="column" alignItems="center" justifyContent="center" height={props.height}>
-        <Logo big={big} version={props.version} center />
-        <Box marginTop={2} backgroundColor={theme.panel} paddingX={3} paddingY={1} flexDirection="column" alignItems="center">
-          <Text bold color={theme.text}>No decisions yet.</Text>
-          <Text>
-            <Text color={theme.text}>Try ticket-triage with a sample ticket </Text>
-            <Text color={theme.accent} bold>⏎</Text>
-          </Text>
-        </Box>
-        <Box marginTop={1} flexDirection="column" alignItems="center">
-          <Text color={theme.muted}>Every ask from your code or your agent shows up here as it happens.</Text>
-          <Text color={theme.muted}>Each one ends in a decision:</Text>
-          {WORD_LINES.map(([word, text]) => (
-            <Text key={word}><Text color={decisionColor(theme, word)} bold>{word}</Text><Text color={theme.muted}>{text}</Text></Text>
-          ))}
+      <Box flexDirection="column" paddingX={1} height={props.height}>
+        {title}
+        <Box flexDirection="column" alignItems="center" justifyContent="center" flexGrow={1}>
+          <Box backgroundColor={theme.panel} paddingX={3} paddingY={1} flexDirection="column" alignItems="center">
+            <Text bold color={theme.text}>No decisions yet.</Text>
+            <Text>
+              <Text color={theme.text}>Try ticket-triage with a sample ticket </Text>
+              <Text color={theme.accent} bold>⏎</Text>
+            </Text>
+          </Box>
+          <Box marginTop={1} flexDirection="column" alignItems="center">
+            <Text color={theme.muted}>Every ask from your code or your agent shows up here as it happens.</Text>
+            <Text color={theme.muted}>Each one ends in a decision:</Text>
+            {WORD_LINES.map(([word, text]) => (
+              <Text key={word}><Text color={decisionColor(theme, word)} bold>{word}</Text><Text color={theme.muted}>{text}</Text></Text>
+            ))}
+          </Box>
         </Box>
       </Box>
     );
@@ -373,12 +380,14 @@ export function HomeView(props: {
       {needs.map((n, i) => {
         const selected = i === at;
         return (
-          <Text key={n.key} wrap="truncate" {...(selected ? { backgroundColor: theme.element } : {})}>
-            <Text color={theme.accent}>{selected ? "> " : "  "}</Text>
-            <Text color={n.tone}>● </Text>
-            <Text color={theme.text}>{n.text}</Text>
-            <Text color={theme.accent}>{selected ? "  ⏎" : ""}</Text>
-          </Text>
+          <Box key={n.key} {...(selected ? { backgroundColor: theme.element } : {})}>
+            <Text wrap="truncate">
+              <Text color={theme.accent}>{selected ? "> " : "  "}</Text>
+              <Text color={n.tone}>● </Text>
+              <Text color={theme.text}>{n.text}</Text>
+              <Text color={theme.accent}>{selected ? "  ⏎" : ""}</Text>
+            </Text>
+          </Box>
         );
       })}
     </Panel>
@@ -408,15 +417,17 @@ export function HomeView(props: {
         const selected = firstJevel + jevelTop + i === at;
         const name = j.name.length > nameWidth ? `${j.name.slice(0, nameWidth - 1)}~` : j.name.padEnd(nameWidth);
         return (
-          <Text key={j.name} wrap="truncate" {...(selected ? { backgroundColor: theme.element } : {})}>
-            <Text color={theme.accent}>{selected ? "> " : "  "}</Text>
-            <Text color={theme.text}>{`${name} ${String(j.decisions).padStart(9)}  `}</Text>
-            <Text color={j.actOutcomes < 10 ? theme.muted : theme.text}>{rightOf(j.actRight, j.actOutcomes).padStart(12)}</Text>
-            <Text>{"  "}</Text>
-            {mixColumn ? <Text><MixBar act={j.mix.act} mark={j.mix.mark} fallBack={j.mix.fallBack} width={12} theme={theme} /><Text>{"  "}</Text></Text> : null}
-            <Text color={theme.accent}>{spark(j.trend, 14)}</Text>
-            <Text color={theme.muted}>{`  peak ${Math.max(0, ...j.trend)}/day`}</Text>
-          </Text>
+          <Box key={j.name} {...(selected ? { backgroundColor: theme.element } : {})}>
+            <Text wrap="truncate">
+              <Text color={theme.accent}>{selected ? "> " : "  "}</Text>
+              <Text color={theme.text}>{`${name} ${String(j.decisions).padStart(9)}  `}</Text>
+              <Text color={j.actOutcomes < 10 ? theme.muted : theme.text}>{rightOf(j.actRight, j.actOutcomes).padStart(12)}</Text>
+              <Text>{"  "}</Text>
+              {mixColumn ? <Text><MixBar act={j.mix.act} mark={j.mix.mark} fallBack={j.mix.fallBack} width={12} theme={theme} /><Text>{"  "}</Text></Text> : null}
+              <Text color={theme.accent}>{spark(j.trend, 14)}</Text>
+              <Text color={theme.muted}>{`  peak ${Math.max(0, ...j.trend)}/day`}</Text>
+            </Text>
+          </Box>
         );
       })}
       {jevelMore ? <Text color={theme.muted}>{`  ${[jevelTop > 0 ? `↑ ${jevelTop} above` : "", jevelBelow > 0 ? `↓ ${jevelBelow} more below` : ""].filter((x) => x !== "").join("   ")}`}</Text> : null}
@@ -431,13 +442,15 @@ export function HomeView(props: {
         const d = recordedDecision(r.answer);
         const fresh = props.fresh?.has(r.ask.id) ?? false;
         return (
-          <Text key={`${r.ask.id}\n${r.question}`} wrap="truncate" {...(selected ? { backgroundColor: theme.element } : {})}>
-            <Text color={theme.accent}>{selected ? "> " : fresh ? "● " : "  "}</Text>
-            <Text color={fresh ? theme.accent : theme.muted}>{`${time(r.ask.at)} `}</Text>
-            <Text color={theme.text}>{`${fit(jevelOf(r.ask), feedName)} ${fit(r.question, 14)} ${fit(answerWord(r.answer), 10)} `}</Text>
-            <Text color={decisionColor(theme, d)}>{`${d.padEnd(9)} `}</Text>
-            <Text color={theme.muted}>{r.outcomes.at(-1)?.outcome ?? "-"}</Text>
-          </Text>
+          <Box key={`${r.ask.id}\n${r.question}`} {...(selected ? { backgroundColor: theme.element } : {})}>
+            <Text wrap="truncate">
+              <Text color={theme.accent}>{selected ? "> " : fresh ? "● " : "  "}</Text>
+              <Text color={fresh ? theme.accent : theme.muted}>{`${time(r.ask.at)} `}</Text>
+              <Text color={theme.text}>{`${fit(jevelOf(r.ask), feedName)} ${fit(r.question, 14)} ${fit(answerWord(r.answer), 10)} `}</Text>
+              <Text color={decisionColor(theme, d)}>{`${d.padEnd(9)} `}</Text>
+              <Text color={theme.muted}>{r.outcomes.at(-1)?.outcome ?? "-"}</Text>
+            </Text>
+          </Box>
         );
       })}
     </Panel>
@@ -467,7 +480,7 @@ export function HomeView(props: {
   );
   return (
     <Box flexDirection="column" paddingX={1} height={props.height}>
-      <Logo big={big} version={props.version} center={wide} />
+      {title}
       <Text> </Text>
       {wide ? (
         <Box gap={2}>{today}{needsYou}</Box>
@@ -476,6 +489,87 @@ export function HomeView(props: {
       )}
       <Text> </Text>
       {side ? <Box gap={2}>{lower}{sideColumn}</Box> : lower}
+    </Box>
+  );
+}
+
+/** A hint cut back to its last whole comma part that fits, then to the width. */
+const shorten = (hint: string, width: number): string => {
+  let h = hint;
+  while (h.length > width && h.includes(", ")) h = h.slice(0, h.lastIndexOf(", "));
+  return h.length > width ? `${h.slice(0, Math.max(0, width - 1))}~` : h;
+};
+
+/** Where jevelry opens: the logo and what you can do from here, with one line on today. */
+export function StartView(props: {
+  lines: LogLine[];
+  now: Date;
+  version: string;
+  width: number;
+  /** Rows for this screen, the footer already taken off. */
+  height: number;
+  active?: boolean;
+  cursor: number;
+  onCursor: (update: (cursor: number) => number) => void;
+  onTry: (jevel: string) => void;
+  onPick: () => void;
+  onGo: (screen: "dashboard" | "review" | "history") => void;
+}): React.JSX.Element {
+  const theme = useTheme();
+  const minute = Math.floor(props.now.getTime() / 60_000);
+  const s = useMemo(() => homeStats(props.lines, props.now), [props.lines, minute]);
+  const rows: Array<{ key: string; label: string; hint: string; open: () => void }> = [
+    s.empty
+      ? { key: "t", label: "Try ticket-triage with a sample ticket", hint: "ask Jev live with an example", open: () => props.onTry("ticket-triage") }
+      : { key: "t", label: "Try a jevel", hint: "ask Jev live with an example", open: props.onPick },
+    s.toReview > 0
+      ? { key: "v", label: `Review ${plural(s.toReview, "marked decision")}`, hint: "say whether Jev was right", open: () => props.onGo("review") }
+      : { key: "v", label: "Review decisions", hint: "nothing marked right now", open: () => props.onGo("review") },
+    { key: "d", label: "Dashboard", hint: "today's decisions, every jevel, the live feed", open: () => props.onGo("dashboard") },
+    { key: "y", label: "History", hint: "every decision, newest first", open: () => props.onGo("history") },
+  ];
+  const at = Math.min(props.cursor, rows.length - 1);
+  useChrome([["j/k", "move"], ["enter", "open"]]);
+  // t, v, d and y are the shell's own keys, so each row's key works here and on every other screen.
+  useInput((input, key) => {
+    const step = moves(input, key);
+    if (step !== 0) props.onCursor((c) => Math.max(0, Math.min(Math.min(c, rows.length - 1) + step, rows.length - 1)));
+    else if (key.return) rows[at]!.open();
+  }, { isActive: props.active ?? true });
+
+  const labelWidth = Math.max(...rows.map((r) => r.label.length));
+  // The marker, the key column, the label and a gap; the hints get the rest of a line that stays inside the screen.
+  const hintWidth = Math.max(0, Math.min(Math.max(...rows.map((r) => r.hint.length)), props.width - 2 - (2 + 3 + labelWidth + 2)));
+  const t = s.today;
+  const today = [plural(t.decisions, "decision"), `act ${pct(t.act, t.decisions)}`, ...(s.toReview > 0 ? [`${s.toReview} to review`] : [])].join(" · ");
+  const keys: Hint[] = [["ctrl+p", "Commands"], ["?", "Help"], ["q", "Quit"]];
+  return (
+    <Box flexDirection="column" alignItems="center" justifyContent="center" height={props.height}>
+      <Logo big={props.width >= 60 && props.height >= 18} version={props.version} center />
+      <Box marginTop={2} flexDirection="column">
+        {rows.map((r, i) => {
+          const selected = i === at;
+          return (
+            <Text key={r.key} wrap="truncate">
+              <Text color={theme.accent}>{selected ? "> " : "  "}</Text>
+              <Text color={selected ? theme.accent : theme.text} bold>{r.key.padEnd(3)}</Text>
+              <Text color={selected ? theme.accent : theme.text} bold={selected}>{r.label.padEnd(labelWidth + 2)}</Text>
+              <Text color={theme.muted}>{shorten(r.hint, hintWidth).padEnd(hintWidth)}</Text>
+            </Text>
+          );
+        })}
+        <Text> </Text>
+        <Text wrap="truncate">
+          <Text>{"  "}</Text>
+          {keys.map(([key, label], i) => (
+            <Text key={key}>
+              <Text color={theme.text} bold>{key}</Text>
+              <Text color={theme.muted}>{`  ${label}${i < keys.length - 1 ? "     " : ""}`}</Text>
+            </Text>
+          ))}
+        </Text>
+      </Box>
+      {t.decisions > 0 ? <Box marginTop={1}><Text color={theme.muted} wrap="truncate">{`Today: ${today}`}</Text></Box> : null}
     </Box>
   );
 }

@@ -57,7 +57,7 @@ npx jevelry ask review-comment-kind --state '{"comment": {"author": "ci-bot", "t
 - **Seventeen jevels ship with the package**: support tickets, messages, issues, pull requests, logs, alerts, failing tests and meeting notes, each with an example state and tested cases.
 - **Typed decisions in your code**: `jevel("ticket-triage").decide({ ticket })` gives you every question with its `decision` and its `answer`.
 - **Commands Jev picks**: `jevelry run` runs the command a jevel names for the option Jev picked, and asks you first on a `mark`.
-- **A full-screen view**: `jevelry tui` has Home, Review, a Jevel screen per jevel with threshold tuning, Try and History.
+- **A full-screen view**: `jevelry tui` opens on a start screen and has a dashboard, Review, a Jevel screen per jevel with threshold tuning, Try and History.
 - **Every decision in one log**: each ask goes into `~/.jevelry/log.jsonl`, and `jevelry report` shows you how often each question was right.
 - **Cases proven live**: every shipped jevel has a `cases.json`, and our live tests ask every case against the real API.
 - **A skill for your coding agent**: `jevelry install` puts the skill into Claude Code, Codex, Cursor, opencode and pi.
@@ -110,7 +110,7 @@ node bin/jevelry.js --help
 jevelry tui
 ```
 
-It opens on Home, which shows you how Jev decided today, what needs you and how each of your jevels is doing. When your log is still empty, Home offers you a sample ticket: press enter to open it in Try and enter again to ask Jev about it live, and you see your first answer in a few seconds. If you have no key yet, Try tells you how to add one.
+It opens on the start screen with what you can do from there: try a jevel, review the decisions Jev marked, open the dashboard or go through your history. Press `d` for the dashboard, which shows you how Jev decided today, what needs you and how each of your jevels is doing. When your log is still empty, the first row on the start screen offers you a sample ticket: press enter to open it in Try and enter again to ask Jev about it live, and you see your first answer in a few seconds. If you have no key yet, Try tells you how to add one.
 
 ### Ask from the command line
 
@@ -179,7 +179,7 @@ The skill keeps every jevel in `./jevels/` and leaves the questions and threshol
 | `jevelry run <jevel>` | asks a jevel whose options name commands, then runs the command for Jev's decision |
 | `jevelry outcome <log_id> <question> <value>` | records what proved true: `agree`, `disagree`, an option, a level index, `yes` or `no` |
 | `jevelry report` | agreement per jevel and question, from the log |
-| `jevelry tui` | the full-screen view: Home, Review, Jevel, Try and History |
+| `jevelry tui` | the full-screen view: the start screen, the dashboard, Review, Jevel, Try and History |
 | `jevelry list` | every jevel jevelry can find, with its folder; the first folder wins |
 | `jevelry show <jevel>` | the resolved frontmatter as JSON, then the body, then `example.json` when the jevel has one |
 | `jevelry check <jevel>` | refuses a defective jevel with exit 2 and warns about questions Jev handles poorly |
@@ -231,6 +231,7 @@ The skill keeps every jevel in `./jevels/` and leaves the questions and threshol
 
 | Flag | What it does |
 |---|---|
+| `--dashboard` | opens on the dashboard |
 | `--jevel <name>` | opens History filtered to this jevel |
 | `--since <iso>` | opens History filtered to asks since this time |
 | `--jevels <dir>` | a jevels folder searched first; repeatable |
@@ -266,7 +267,8 @@ The footer shows the keys of the screen you are on, and `?` lists them all.
 
 | Key | Action |
 |---|---|
-| `h` | Home |
+| `h` | the start screen |
+| `d` | the dashboard |
 | `v` | Review |
 | `y` | History |
 | `t` | pick a jevel to try |
@@ -276,13 +278,23 @@ The footer shows the keys of the screen you are on, and `?` lists them all.
 
 `ctrl+p` works on every screen, also while you type. The other global keys pause while a screen takes typed text.
 
-### Home
+### Start screen
+
+| Key | Action |
+|---|---|
+| `j` `k` or `↑` `↓` | move |
+| `enter` | open the selected row |
+| `t` `v` `d` `y` | open that row directly |
+| `t` or `enter` on an empty log | try `ticket-triage` with a sample ticket |
+
+### Dashboard
 
 | Key | Action |
 |---|---|
 | `j` `k` or `↑` `↓` | move |
 | `enter` | open the entry: the review queue, a jevel, a decision or the failed asks |
 | `enter` on an empty log | try `ticket-triage` with a sample ticket |
+| `esc` | the start screen |
 
 ### Review
 
@@ -294,7 +306,7 @@ The footer shows the keys of the screen you are on, and `?` lists them all.
 | `n` | write a note for the next `c` or `w` |
 | `m` | switch between marked decisions and act decisions |
 | `j` `k` or `↑` `↓` | scroll what Jev saw |
-| `esc` | Home |
+| `esc` | the start screen |
 
 `c`, `w` and `s` count once a card has been up for 450 ms, and a held key records once.
 
@@ -307,7 +319,7 @@ The footer shows the keys of the screen you are on, and `?` lists them all.
 | writing a note | `esc` | drop the note |
 | all reviewed | `m` | switch between marked and act decisions |
 | all reviewed | `s` | show the skipped ones again |
-| all reviewed | `esc` | Home |
+| all reviewed | `esc` | the start screen |
 
 ### Jevel
 
@@ -316,7 +328,7 @@ The footer shows the keys of the screen you are on, and `?` lists them all.
 | `j` `k` or `↑` `↓` | move between questions |
 | `enter` | the question's decisions, in History |
 | `T` | set the proposed act threshold in the jevel file, when there is one |
-| `esc` | Home |
+| `esc` | the start screen |
 
 ### Try
 
@@ -327,7 +339,7 @@ The footer shows the keys of the screen you are on, and `?` lists them all.
 | `e` | edit the state |
 | `p` | pick another jevel |
 | `j` `k` or `↑` `↓` | scroll the answer |
-| `esc` | Home |
+| `esc` | the start screen |
 
 While you edit the state, typing and pasting go into the text, the arrows, `home` and `end` move, `tab` adds two spaces, `enter` asks and `esc` stops editing.
 
@@ -548,7 +560,7 @@ npm run test:live -- tests/live/jevels.test.ts
 
 ## How do we know you can trust it
 
-357 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
+364 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## License
 

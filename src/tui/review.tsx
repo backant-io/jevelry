@@ -447,7 +447,7 @@ function ReviewEnd(props: {
   onBack: () => void;
 }): React.JSX.Element {
   const theme = useTheme();
-  const keys: Hint[] = [["m", props.mode === "mark" ? "review acts" : "review marks"], ...(props.skipped > 0 ? [["s", "show skipped"] as Hint] : []), ["esc", "home"]];
+  const keys: Hint[] = [["m", props.mode === "mark" ? "review acts" : "review marks"], ...(props.skipped > 0 ? [["s", "show skipped"] as Hint] : []), ["esc", "start"]];
   useChrome(keys);
   useInput((input, key) => {
     if (input === "m") props.onToggle();

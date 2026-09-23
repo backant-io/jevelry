@@ -119,7 +119,7 @@ export function JevelView(props: {
   const [at, setAt] = useState(() => Math.max(0, views.findIndex((v) => v.name === props.focus)));
   const cursor = Math.min(at, Math.max(views.length - 1, 0));
   const current = views[cursor];
-  useChrome([["j/k", "move"], ["enter", "its decisions"], ...(current?.proposal ? [["T", "set threshold"] as [string, string]] : []), ["esc", "home"]]);
+  useChrome([["j/k", "move"], ["enter", "its decisions"], ...(current?.proposal ? [["T", "set threshold"] as [string, string]] : []), ["esc", "start"]]);
   useInput((input, key) => {
     const step = moves(input, key);
     if (step !== 0) setAt((a) => Math.max(0, Math.min(Math.min(a, views.length - 1) + step, views.length - 1)));
@@ -157,13 +157,15 @@ export function JevelView(props: {
         const decisions = t ? t.act + t.mark + t.fallBack : 0;
         return (
           <Box key={v.name} flexDirection="column" height={BLOCK}>
-            <Text wrap="truncate" {...(selected ? { backgroundColor: theme.element } : {})}>
-              <Text color={theme.accent}>{selected ? "> " : "  "}</Text>
-              <Text color={theme.text} bold>{v.name}</Text>
-              <Text color={theme.muted}>{`  ${v.type ?? "not in the file"}`}</Text>
-              <Text color={theme.muted}>{v.thresholds ? `  act ≥ ${th(v.thresholds.act)}  mark ≥ ${th(v.thresholds.mark)}` : ""}</Text>
-              <Text color={theme.muted}>{`  ${plural(decisions, "decision")}`}</Text>
-            </Text>
+            <Box {...(selected ? { backgroundColor: theme.element } : {})}>
+              <Text wrap="truncate">
+                <Text color={theme.accent}>{selected ? "> " : "  "}</Text>
+                <Text color={theme.text} bold>{v.name}</Text>
+                <Text color={theme.muted}>{`  ${v.type ?? "not in the file"}`}</Text>
+                <Text color={theme.muted}>{v.thresholds ? `  act ≥ ${th(v.thresholds.act)}  mark ≥ ${th(v.thresholds.mark)}` : ""}</Text>
+                <Text color={theme.muted}>{`  ${plural(decisions, "decision")}`}</Text>
+              </Text>
+            </Box>
             <Box paddingLeft={2}><MixLine t={t} width={Math.min(30, inner - 36)} theme={theme} /></Box>
             <Text wrap="truncate">
               <Text>{"  "}</Text>

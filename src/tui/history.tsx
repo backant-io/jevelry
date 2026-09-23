@@ -188,13 +188,15 @@ export function DecisionsView(props: {
         const selected = top + i === at;
         const bg = selected ? theme.element : theme.background;
         return (
-          <Text key={`${row.ask.id}\n${row.question}`} wrap="truncate" backgroundColor={bg}>
-            <Text color={theme.accent}>{selected ? "> " : "  "}</Text>
-            <Text color={theme.muted}>{`${c[0]} `}</Text>
-            <Text color={theme.text}>{`${c[1]} ${c[2]} ${c[3]} ${c[4]} `}</Text>
-            <Text color={decisionColor(theme, d)}>{`${c[5]} `}</Text>
-            <Text color={row.outcomes.length > 0 ? theme.text : theme.muted}>{c[6]}</Text>
-          </Text>
+          <Box key={`${row.ask.id}\n${row.question}`} backgroundColor={bg}>
+            <Text wrap="truncate">
+              <Text color={theme.accent}>{selected ? "> " : "  "}</Text>
+              <Text color={theme.muted}>{`${c[0]} `}</Text>
+              <Text color={theme.text}>{`${c[1]} ${c[2]} ${c[3]} ${c[4]} `}</Text>
+              <Text color={decisionColor(theme, d)}>{`${c[5]} `}</Text>
+              <Text color={row.outcomes.length > 0 ? theme.text : theme.muted}>{c[6]}</Text>
+            </Text>
+          </Box>
         );
       })}
       {below > 0 ? <Text color={theme.muted}>{`  ↓ ${below} more below   row ${at + 1} of ${rows.length}`}</Text> : null}

@@ -12,15 +12,15 @@ import { ALL, DecisionsView, type Filters, NO_JEVEL, ReportView, jevelNames, row
 import { JevelView, TuneDialog, type QuestionView, questionViews, tunePlan } from "./jevel-screen.js";
 import { DetailView, ReviewView } from "./review.js";
 import { type Place, placeOf, proposeAct, tallies } from "./tuning.js";
-import { HomeView } from "./home.js";
+import { HomeView, StartView } from "./home.js";
 import { TryView } from "./try.js";
 import { MEANINGS, THEMES, ThemeContext, type ThemeName, loadThemeName, saveThemeName, useTheme } from "./theme.js";
 
 /** The TUI is the one place that imports ink and react: `jevelry tui` loads this file with a dynamic import, so no other command pays for them. */
 
-export type Screen = "home" | "review" | "history" | "try" | "jevel";
+export type Screen = "start" | "dashboard" | "review" | "history" | "try" | "jevel";
 
-const GLOBAL: Hint[] = [["h", "home"], ["v", "review"], ["y", "history"], ["t", "try"], ["ctrl+p", "commands"], ["?", "help"], ["q", "quit"]];
+const GLOBAL: Hint[] = [["h", "start"], ["d", "dashboard"], ["v", "review"], ["y", "history"], ["t", "try"], ["ctrl+p", "commands"], ["?", "help"], ["q", "quit"]];
 
 /**
  * Keys on the left; on the right the home directory and version, or for four seconds the toast in their place,
@@ -122,7 +122,7 @@ export function App(props: {
   version?: string;
   /** Fixed size for tests; the terminal's own size otherwise. */
   size?: { columns: number; rows: number };
-  /** The clock Home counts "today" from; tests pin it. */
+  /** The clock the start screen and the dashboard count "today" from; tests pin it. */
   now?: () => Date;
   /** Where a jevel is copied to be tuned; `./jevels` by default. */
   project?: string;
@@ -140,7 +140,7 @@ export function App(props: {
   const version = props.version ?? "0.0.0";
   const [lines, setLines] = useState(props.lines);
   const [skipped, setSkipped] = useState(props.skipped ?? 0);
-  const [screen, setScreen] = useState<Screen>(props.screen ?? "home");
+  const [screen, setScreen] = useState<Screen>(props.screen ?? "start");
   const [themeName, setThemeName] = useState<ThemeName>(() => loadThemeName(props.home));
   const [dialog, setDialog] = useState<null | "palette" | "theme" | "help" | "tune" | "pick" | "quit">(null);
   /** The jevel Try asks, and the state text left in Try per jevel, kept while jevelry runs. */
@@ -159,15 +159,16 @@ export function App(props: {
   const [historyView, setHistoryView] = useState<"list" | "detail" | "report">("list");
   const [open, setOpen] = useState<{ id: string; question: string } | null>(null);
   const [cursor, setCursor] = useState(0);
-  /** A detail opened from Home's feed goes back to Home. */
+  /** A detail opened from the dashboard's feed goes back to the dashboard. */
   const [fromHome, setFromHome] = useState(false);
-  /** Filters set by a jump from Home last for that visit only; the next h, y or palette History opens everything. */
+  /** Filters set by a jump from the dashboard last for that visit only; the next y or palette History opens everything. */
   const [jumped, setJumped] = useState(false);
   const [fresh, setFresh] = useState<ReadonlySet<string>>(new Set());
   const freshTimer = useRef<NodeJS.Timeout | undefined>(undefined);
   // Jevel names for the palette: read once, then again when a jevels folder changes.
   const [shipped, setShipped] = useState(() => listJevels(props.dirs).map((j) => j.name));
   const [homeCursor, setHomeCursor] = useState(0);
+  const [startCursor, setStartCursor] = useState(0);
   const [jevel, setJevel] = useState<string | null>(props.jevel ?? null);
   /** Raised when a jevel file may have changed (a folder changed, a threshold was set), so every file is read again. */
   const [rev, setRev] = useState(0);
@@ -180,7 +181,7 @@ export function App(props: {
     };
   }, [rev]);
   const byQuestion = useMemo(() => tallies(lines), [lines]);
-  // Every question whose act threshold could come down, for Home's "Needs you".
+  // Every question whose act threshold could come down, for the dashboard's "Needs you".
   const worth = useMemo(() => [...byQuestion.values()].filter((t) => {
     const j = loaded(t.jevel);
     const q = j && Object.hasOwn(j.questions, t.question) ? j.questions[t.question]! : null;
@@ -190,8 +191,8 @@ export function App(props: {
   const [quiet, setQuiet] = useState(false);
   const [jevelFocus, setJevelFocus] = useState<string | undefined>(undefined);
   const project = props.project ?? join(process.cwd(), "jevels");
-  /** Where esc from History goes: Home, or the Jevel screen that opened it. */
-  const [historyBack, setHistoryBack] = useState<Screen>("home");
+  /** Where esc from History goes: the start screen, or the Jevel screen that opened it. */
+  const [historyBack, setHistoryBack] = useState<Screen>("start");
   // The project's jevels folder sits in the directory jevelry runs from.
   const place = (j: Jevel): Place => placeOf(j.path, { home: props.home, cwd: dirname(project), ...(props.shipped ? { shipped: props.shipped } : {}) });
   const tuneKeys: Hint[] = dialog !== "tune" || tuning === null || jevel === null || loaded(jevel) === null ? []
@@ -248,10 +249,11 @@ export function App(props: {
     if (next === "history") {
       setHistoryView("list");
       setFromHome(false);
-      setHistoryBack("home");
+      setHistoryBack("start");
       if (jumped) { setFilters(ALL); setCursor(0); setJumped(false); }
     }
   };
+  const openTry = (name: string): void => { setTryName(name); go("try"); };
   const run = (c: Command): void => {
     setDialog(null);
     if ("go" in c) go(c.go);
@@ -271,9 +273,12 @@ export function App(props: {
     else if (input.length > 1) return;
     else if (input === "?") setDialog("help");
     else if (input === "q") quit();
-    else if (input === "h") go("home");
+    else if (input === "h") go("start");
+    else if (input === "d") go("dashboard");
     else if (input === "v") go("review");
     else if (input === "y") go("history");
+    // On an empty log the start screen's first row is ticket-triage with its sample ticket, and t is that row's key.
+    else if (input === "t" && screen === "start" && !lines.some((l) => l.kind === "ask")) openTry("ticket-triage");
     else if (input === "t") setDialog("pick");
   }, { isActive: dialog === null });
 
@@ -285,7 +290,7 @@ export function App(props: {
     if (row) {
       content = (
         <DetailView row={row} home={props.home} thresholds={lookup(row)} tallies={byQuestion} height={body} width={columns} active={active}
-          onBack={() => (fromHome ? go("home") : setHistoryView("list"))} onRecorded={(message: string) => { say(message); if (fromHome) go("home"); else setHistoryView("list"); reload(); }} />
+          onBack={() => (fromHome ? go("dashboard") : setHistoryView("list"))} onRecorded={(message: string) => { say(message); if (fromHome) go("dashboard"); else setHistoryView("list"); reload(); }} />
       );
     } else if (historyView === "report") {
       content = <ReportView lines={lines} filters={filters} height={body} active={active} onFilters={setFilters} onBack={() => setHistoryView("list")} />;
@@ -298,12 +303,12 @@ export function App(props: {
       );
     }
   } else if (screen === "review") {
-    content = <ReviewView lines={lines} home={props.home} lookup={lookup} tallies={byQuestion} width={columns} height={body} active={active} onBack={() => go("home")} onRecorded={(message) => { say(message); reload(); }} />;
+    content = <ReviewView lines={lines} home={props.home} lookup={lookup} tallies={byQuestion} width={columns} height={body} active={active} onBack={() => go("start")} onRecorded={(message) => { say(message); reload(); }} />;
   } else if (screen === "jevel" && jevel !== null) {
     const file = loaded(jevel);
     content = (
       <JevelView key={`${jevel}\n${jevelFocus ?? ""}`} name={jevel} {...(jevelFocus ? { focus: jevelFocus } : {})} jevel={file} place={file ? place(file) : null} views={questionViews(file, jevel, byQuestion)} width={columns} height={body} active={active && !quiet}
-        onBack={() => go("home")}
+        onBack={() => go("start")}
         onTune={(view) => { setTuning(view); setDialog("tune"); }}
         onOpen={(question) => {
           setFilters({ ...ALL, jevel, question }); setCursor(0); setJumped(true);
@@ -314,12 +319,12 @@ export function App(props: {
     content = (
       <TryView key={tryName} name={tryName} dirs={props.dirs} home={props.home} {...(props.client ? { client: props.client } : {})} {...(drafts.has(tryName) ? { draft: drafts.get(tryName)!.text } : {})}
         onDraft={(text, edited) => drafts.set(tryName, { text, edited })}
-        width={columns} height={body} active={active} onPick={() => setDialog("pick")} onBack={() => go("home")} onAsked={reload} />
+        width={columns} height={body} active={active} onPick={() => setDialog("pick")} onBack={() => go("start")} onAsked={reload} />
     );
-  } else {
+  } else if (screen === "dashboard") {
     content = (
-      <HomeView lines={lines} worth={worth} now={(props.now ?? (() => new Date()))()} version={version} width={columns} height={body} rows={rows} fresh={fresh} active={active} cursor={homeCursor} onCursor={setHomeCursor}
-        onTry={(name) => { setTryName(name); go("try"); }}
+      <HomeView lines={lines} worth={worth} now={(props.now ?? (() => new Date()))()} width={columns} height={body} fresh={fresh} active={active} cursor={homeCursor} onCursor={setHomeCursor}
+        onTry={openTry} onBack={() => go("start")}
         onOpen={(target) => {
           if (target.kind === "review") go("review");
           else if (target.kind === "jevel") { setJevel(target.name); setJevelFocus(target.question); go("jevel"); }
@@ -327,11 +332,17 @@ export function App(props: {
           else { setFilters({ ...ALL, ...target.filters }); setCursor(0); setJumped(true); setScreen("history"); setHistoryView("list"); setFromHome(false); }
         }} />
     );
+  } else {
+    content = (
+      <StartView lines={lines} now={(props.now ?? (() => new Date()))()} version={version} width={columns} height={body} active={active} cursor={startCursor} onCursor={setStartCursor}
+        onTry={openTry} onPick={() => setDialog("pick")} onGo={go} />
+    );
   }
 
   // Screens and commands first, so they stay on screen however many jevels follow.
   const palette = (): SelectItem<Command>[] => [
-    { label: "Home", value: { go: "home" }, hint: "h" },
+    { label: "Start screen", value: { go: "start" }, hint: "h" },
+    { label: "Dashboard", value: { go: "dashboard" }, hint: "d" },
     { label: "Review marked decisions", value: { go: "review" }, hint: "v" },
     { label: "History", value: { go: "history" }, hint: "y" },
     { label: "Try a jevel", value: { pick: true }, hint: "t" },
@@ -410,12 +421,12 @@ function Root(props: { columns: number; rows: number; children: React.ReactNode 
   return <Box width={props.columns} height={props.rows} flexDirection="column" backgroundColor={theme.background}>{props.children}</Box>;
 }
 
-export async function runTui(input: { home: string; dirs: string[]; version: string; jevel?: string; since?: string }): Promise<void> {
+export async function runTui(input: { home: string; dirs: string[]; version: string; jevel?: string; since?: string; dashboard?: boolean }): Promise<void> {
   const { lines, skipped } = await readCounted(input.home);
   const filtered = input.jevel !== undefined || input.since !== undefined;
   const filters: Filters = { ...ALL, jevel: input.jevel ?? null, since: input.since ?? null };
   const app = render(
-    <App home={input.home} dirs={input.dirs} lines={lines} skipped={skipped} filters={filters} version={input.version} screen={filtered ? "history" : "home"} />,
+    <App home={input.home} dirs={input.dirs} lines={lines} skipped={skipped} filters={filters} version={input.version} screen={filtered ? "history" : input.dashboard ? "dashboard" : "start"} />,
     { alternateScreen: true },
   );
   await app.waitUntilExit();

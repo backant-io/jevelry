@@ -48,8 +48,8 @@ const homeWith = (lines: LogLine[]): string => {
   writeFileSync(join(home, "log.jsonl"), lines.map((l) => `${JSON.stringify(l)}\n`).join(""));
   return home;
 };
-const app = (lines: LogLine[], size = { columns: 80, rows: 24 }) =>
-  render(createElement(App, { home: homeWith(lines), dirs: [], lines, version: "9.9.9", size, now: () => NOW }));
+const app = (lines: LogLine[], size = { columns: 80, rows: 24 }, screen: "dashboard" | "start" = "dashboard") =>
+  render(createElement(App, { home: homeWith(lines), dirs: [], lines, version: "9.9.9", size, now: () => NOW, screen }));
 
 describe("home numbers", () => {
   const s = homeStats(LOG, NOW);
@@ -100,7 +100,7 @@ describe("home numbers", () => {
   });
 });
 
-describe("home screen", () => {
+describe("dashboard", () => {
   it("answers 'is Jev deciding well, and what needs me' on an 80x24 terminal", async () => {
     const { lastFrame, unmount } = app(LOG);
     await tick();
@@ -108,7 +108,7 @@ describe("home screen", () => {
     const lines = frame.split("\n");
     expect(lines).toHaveLength(24);
     for (const l of lines) expect(l.length).toBeLessThanOrEqual(80);
-    expect(frame).toContain("◆ JEVELRY  Use Jev everywhere to make & track decisions  v9.9.9");
+    expect(lines[0]?.trimEnd()).toBe(" Dashboard   today's decisions, every jevel, the live feed");
     expect(frame).toContain("Today  8 decisions · 3 asks · $0.000033");
     expect(frame).toContain("act: Jev is sure · mark: fairly sure, check it");
     expect(frame).toContain("fall_back: unsure, your code decides");
@@ -122,14 +122,15 @@ describe("home screen", () => {
     unmount();
   });
 
-  it("draws the block logo and the mark right and mix columns on a 120x40 terminal", async () => {
+  it("draws the mark right and mix columns and the side column on a 120x40 terminal", async () => {
     const { lastFrame, unmount } = app(LOG, { columns: 120, rows: 40 });
     await tick();
     const frame = lastFrame() ?? "";
     expect(frame.split("\n")).toHaveLength(40);
     for (const l of frame.split("\n")) expect(l.length).toBeLessThanOrEqual(120);
-    expect(frame).toContain("█▀▀▀ █    █▀▀█");
-    expect(frame).not.toContain("◆ JEVELRY");
+    expect(frame).toContain(" Dashboard   today's decisions");
+    // The logo belongs to the start screen; the dashboard gives its rows to the numbers.
+    expect(frame).not.toContain("█▀▀▀ █    █▀▀█");
     // The side column shows the selected jevel per question, and the rest of the height is the live feed.
     expect(frame).toMatch(/ticket-triage {2}per question/);
     expect(frame).toMatch(/frustration\s+[█▓░]+ -/);
@@ -138,12 +139,11 @@ describe("home screen", () => {
     unmount();
   });
 
-  it("fits 100x30 whole: block logo, the cost, the enter mark, and the mix column", async () => {
+  it("fits 100x30 whole: the cost, the enter mark, and the mix column", async () => {
     const { lastFrame, unmount } = app(LOG, { columns: 100, rows: 30 });
     await tick();
     const frame = lastFrame() ?? "";
     expect(frame.split("\n")).toHaveLength(30);
-    expect(frame).toContain("█▀▀▀ █    █▀▀█");
     expect(frame).toContain("8 decisions · 3 asks · $0.000033");
     expect(frame).toContain("3 marked decisions to review  ⏎");
     expect(frame).toMatch(/ticket-triage\s+9\s+0% of 1\s+█+▓+\s+[▁-█]{14}  peak 6\/day/);
@@ -157,7 +157,7 @@ describe("home screen", () => {
     stdin.write("\r");
     await tick();
     expect(lastFrame()).toMatch(/Is Jev right\?|reading…/);
-    stdin.write("h");
+    stdin.write("d");
     await tick();
     stdin.write("j");
     await tick();
@@ -169,7 +169,7 @@ describe("home screen", () => {
     expect(lastFrame()).toContain("since 09-22 00:00");
     expect(lastFrame()).toMatch(/wake-gate\s+worth_a_turn\s+error/);
     expect(lastFrame()).not.toContain("ticket-triage");
-    stdin.write("h");
+    stdin.write("d");
     await tick();
     stdin.write("j");
     await tick();
@@ -202,8 +202,8 @@ describe("home screen", () => {
     unmount();
   });
 
-  // A first run must lead somewhere: the empty log offers a live try of a shipped jevel.
-  it("opens on a first-run panel with an empty log, and enter goes to Try with ticket-triage", async () => {
+  // An empty dashboard still leads somewhere: a live try of a shipped jevel.
+  it("shows a first-run panel with an empty log, and enter goes to Try with ticket-triage", async () => {
     for (const size of [{ columns: 80, rows: 24 }, { columns: 120, rows: 40 }]) {
       const { stdin, lastFrame, unmount } = app([], size);
       await tick();
@@ -223,7 +223,7 @@ describe("home feed", () => {
   // The feed is the reason to keep Home open; a new ask must be visible the moment it lands.
   it("marks an ask that arrives while Home is open with a dot on its feed row", async () => {
     const home = homeWith([A]);
-    const { lastFrame, unmount } = render(createElement(App, { home, dirs: [], lines: [A], version: "9.9.9", size: { columns: 120, rows: 40 }, now: () => NOW }));
+    const { lastFrame, unmount } = render(createElement(App, { home, dirs: [], lines: [A], version: "9.9.9", size: { columns: 120, rows: 40 }, now: () => NOW, screen: "dashboard" }));
     await tick();
     expect(lastFrame()).not.toMatch(/● 09-22 09:30/);
     appendFileSync(join(home, "log.jsonl"), `${JSON.stringify(B)}\n`);
@@ -257,7 +257,7 @@ describe("home feed", () => {
     unmount();
   });
 
-  it("enter on a feed row opens that decision, and esc comes back to Home", async () => {
+  it("enter on a feed row opens that decision, esc comes back to the dashboard, and esc again to the start screen", async () => {
     const { stdin, lastFrame, unmount } = app(LOG, { columns: 120, rows: 40 });
     await tick();
     // Two needs, two jevels, then the feed, newest first.
@@ -270,6 +270,117 @@ describe("home feed", () => {
     stdin.write("\u001B");
     await tick();
     expect(lastFrame()).toContain("Latest decisions");
+    stdin.write("\u001B");
+    await tick();
+    expect(lastFrame()).toContain("Use Jev everywhere to make & track decisions");
+    expect(lastFrame()).not.toContain("Latest decisions");
     unmount();
+  });
+});
+
+describe("start screen", () => {
+  const PEEK = process.env.PEEK === "1";
+  // Someone who just opened jevelry sees what they can do here, and one line on what is happening today.
+  it("opens on the logo and the four things you can do, at 80x24 and 120x40", async () => {
+    for (const size of [{ columns: 80, rows: 24 }, { columns: 120, rows: 40 }]) {
+      const { lastFrame, unmount } = render(createElement(App, { home: homeWith(LOG), dirs: [], lines: LOG, version: "9.9.9", size, now: () => NOW }));
+      await tick();
+      const frame = lastFrame() ?? "";
+      if (PEEK) console.log(frame);
+      expect(frame.split("\n")).toHaveLength(size.rows);
+      for (const l of frame.split("\n")) expect(l.length).toBeLessThanOrEqual(size.columns);
+      expect(frame).toContain("█▀▀▀ █    █▀▀█");
+      expect(frame).toContain("Use Jev everywhere to make & track decisions   v9.9.9");
+      expect(frame).toMatch(/> t {2}Try a jevel\s+ask Jev live with an example/);
+      expect(frame).toMatch(/ {2}v {2}Review 3 marked decisions\s+say whether Jev was right/);
+      expect(frame).toMatch(/ {2}d {2}Dashboard\s+today's decisions, every jevel, the live feed/);
+      expect(frame).toMatch(/ {2}y {2}History\s+every decision, newest first/);
+      expect(frame).toContain("ctrl+p  Commands     ?  Help     q  Quit");
+      expect(frame).toContain("Today: 8 decisions · act 38% · 3 to review");
+      // The start screen is the way in; the numbers wait behind d.
+      expect(frame).not.toContain("Needs you");
+      unmount();
+    }
+  });
+
+  it("moves with j and k, and enter opens the selected row", async () => {
+    const { stdin, lastFrame, unmount } = app(LOG, { columns: 80, rows: 24 }, "start");
+    await tick();
+    stdin.write("jj");
+    await tick();
+    expect(lastFrame()).toMatch(/> d {2}Dashboard/);
+    stdin.write("\r");
+    await tick();
+    expect(lastFrame()).toContain("Needs you");
+    stdin.write("h");
+    await tick();
+    stdin.write("k");
+    await tick();
+    expect(lastFrame()).toMatch(/> v {2}Review 3 marked decisions/);
+    stdin.write("\r");
+    await tick();
+    expect(lastFrame()).toMatch(/Is Jev right\?|reading…/);
+    stdin.write("\u001B");
+    await tick();
+    stdin.write("j");
+    await tick();
+    stdin.write("j");
+    await tick();
+    stdin.write("\r");
+    await tick();
+    expect(lastFrame()).toContain("History");
+    expect(lastFrame()).toContain("every logged decision, newest first");
+    unmount();
+  });
+
+  it("opens each row with its own key, and d reaches the dashboard from any screen", async () => {
+    const { stdin, lastFrame, unmount } = app(LOG, { columns: 80, rows: 24 }, "start");
+    await tick();
+    stdin.write("d");
+    await tick();
+    expect(lastFrame()).toContain(" Dashboard   today's decisions");
+    stdin.write("y");
+    await tick();
+    expect(lastFrame()).toContain("every logged decision, newest first");
+    stdin.write("d");
+    await tick();
+    expect(lastFrame()).toContain(" Dashboard   today's decisions");
+    stdin.write("h");
+    await tick();
+    stdin.write("t");
+    await tick();
+    expect(lastFrame()).toContain("Try a jevel");
+    expect(lastFrame()).toContain("Type to search");
+    unmount();
+  });
+
+  it("says nothing is marked when every mark has an outcome, and leaves the today line out on a quiet day", async () => {
+    const { lastFrame, unmount } = render(createElement(App, { home: homeWith([B, agreedB]), dirs: [], lines: [B, agreedB], version: "9.9.9", size: { columns: 80, rows: 24 }, now: () => new Date("2026-09-25T12:00:00.000Z") }));
+    await tick();
+    expect(lastFrame()).toMatch(/v {2}Review decisions\s+nothing marked right now/);
+    expect(lastFrame()).not.toContain("Today:");
+    unmount();
+  });
+
+  // A first run must lead somewhere: the empty log offers a live try of a shipped jevel as the first row.
+  it("offers ticket-triage with a sample ticket on an empty log, by enter and by t", async () => {
+    for (const [size, key] of [[{ columns: 80, rows: 24 }, "\r"], [{ columns: 120, rows: 40 }, "t"]] as const) {
+      const { stdin, lastFrame, unmount } = app([], size, "start");
+      await tick();
+      const frame = lastFrame() ?? "";
+      if (PEEK) console.log(frame);
+      expect(frame.split("\n")).toHaveLength(size.rows);
+      for (const l of frame.split("\n")) expect(l.length).toBeLessThanOrEqual(size.columns);
+      expect(frame).toMatch(/> t {2}Try ticket-triage with a sample ticket\s+ask Jev live with an example/);
+      expect(frame).toMatch(/v {2}Review decisions\s+nothing marked right now/);
+      expect(frame).toMatch(/d {2}Dashboard\s+today's decisions/);
+      expect(frame).toMatch(/y {2}History/);
+      expect(frame).not.toContain("Today:");
+      stdin.write(key);
+      await tick();
+      expect(lastFrame()).toContain("Try ticket-triage");
+      expect(lastFrame()).toContain("What Jev decided");
+      unmount();
+    }
   });
 });

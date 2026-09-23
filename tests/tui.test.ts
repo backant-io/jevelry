@@ -5,13 +5,14 @@ import { spawn } from "node:child_process";
 import { appendFileSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import chalk from "chalk";
 import { render } from "ink-testing-library";
 import { createElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { type AskLine, type LogLine, type OutcomeLine, type RunLine, readLog } from "../src/log.js";
 import type { Answer } from "../src/protocol.js";
 import { fuzzyFilter } from "../src/tui/dialog.js";
-import { loadThemeName, saveThemeName } from "../src/tui/theme.js";
+import { THEMES, type ThemeName, loadThemeName, saveThemeName } from "../src/tui/theme.js";
 import { DecisionsView, type Filters, type Found, ReportView, otherValues, rowsOf } from "../src/tui/history.js";
 import { DetailView, stateLines } from "../src/tui/review.js";
 import { App } from "../src/tui/app.js";
@@ -409,7 +410,7 @@ describe("the shell", () => {
   });
 
   // Every screen is one key away, so nobody has to learn a menu to get around.
-  it("h, v, y and t reach Home, Review, History and Try", async () => {
+  it("h, d, v, y and t reach the start screen, the dashboard, Review, History and Try", async () => {
     const { stdin, lastFrame, unmount } = app({ screen: "history" });
     await tick();
     await press(stdin, "v");
@@ -423,6 +424,9 @@ describe("the shell", () => {
     expect(lastFrame()).toContain("8 decisions");
     await press(stdin, "h");
     expect(lastFrame()).not.toContain("8 decisions");
+    expect(lastFrame()).toMatch(/> t {2}Try a jevel/);
+    await press(stdin, "d");
+    expect(lastFrame()).toContain(" Dashboard   today's decisions");
     unmount();
   });
 
@@ -431,7 +435,7 @@ describe("the shell", () => {
     await tick();
     await press(stdin, CTRL_P);
     const frame = lastFrame() ?? "";
-    for (const item of ["Commands", "Home", "Review marked decisions", "History", "Try a jevel", "Jevel run-gate", "Jevel ticket-triage", "Switch theme", "Quit"]) expect(frame).toContain(item);
+    for (const item of ["Commands", "Start screen", "Dashboard", "Review marked decisions", "History", "Try a jevel", "Jevel run-gate", "Jevel ticket-triage", "Switch theme", "Quit"]) expect(frame).toContain(item);
     await press(stdin, ..."histo");
     expect(lastFrame()).toContain("History");
     expect(lastFrame()).not.toContain("Switch theme");
@@ -576,7 +580,8 @@ describe("review fixes", () => {
     await press(stdin, CTRL_P);
     const frame = lastFrame() ?? "";
     for (const item of ["Switch theme", "Help", "Quit"]) expect(frame).toContain(item);
-    expect(frame).toMatch(/> Home\s+h/);
+    expect(frame).toMatch(/> Start screen\s+h/);
+    expect(frame).toMatch(/ {2}Dashboard\s+d/);
     expect(frame).toMatch(/↓ \d+ more/);
     await press(stdin, ..."ticket", ENTER);
     expect(lastFrame()).toContain("Jevel ticket-triage");
@@ -584,8 +589,8 @@ describe("review fixes", () => {
   });
 
   // Pressing y means all of History; a filter Home's failed-asks line set belongs to that one visit.
-  it("opens History unfiltered on y after a jump from Home's failed asks", async () => {
-    const { stdin, lastFrame, unmount } = app({ now: () => new Date("2026-09-22T12:00:00.000Z") });
+  it("opens History unfiltered on y after a jump from the dashboard's failed asks", async () => {
+    const { stdin, lastFrame, unmount } = app({ screen: "dashboard", now: () => new Date("2026-09-22T12:00:00.000Z") });
     await tick();
     await press(stdin, "j", ENTER);
     expect(lastFrame()).toContain("2 failed decisions");
@@ -633,5 +638,94 @@ describe("review fixes", () => {
     await press(stdin, "j", "j", ENTER);
     expect(lastFrame()).toContain("2026-09-22 09:30:00 (local)");
     unmount();
+  });
+});
+
+/** Every cell of a frame with the colours it is drawn in, read from the truecolor escapes ink writes. */
+function cells(frame: string): Array<Array<{ ch: string; fg: string | null; bg: string | null }>> {
+  const hex = (r: string, g: string, b: string): string => `#${[r, g, b].map((n) => Number(n).toString(16).padStart(2, "0")).join("")}`;
+  return frame.split("\n").map((line) => {
+    const row: Array<{ ch: string; fg: string | null; bg: string | null }> = [];
+    let fg: string | null = null;
+    let bg: string | null = null;
+    for (const part of line.split(/(\u001B\[[\d;]*m)/)) {
+      const sgr = /^\u001B\[([\d;]*)m$/.exec(part);
+      if (!sgr) { for (const ch of part) row.push({ ch, fg, bg }); continue; }
+      const codes = sgr[1]!.split(";");
+      for (let i = 0; i < codes.length; i++) {
+        const c = codes[i];
+        if (c === "38" && codes[i + 1] === "2") { fg = hex(codes[i + 2]!, codes[i + 3]!, codes[i + 4]!); i += 4; }
+        else if (c === "48" && codes[i + 1] === "2") { bg = hex(codes[i + 2]!, codes[i + 3]!, codes[i + 4]!); i += 4; }
+        else if (c === "39") fg = null;
+        else if (c === "49") bg = null;
+        else if (c === "0" || c === "") { fg = null; bg = null; }
+      }
+    }
+    return row;
+  });
+}
+
+describe("dialogs", () => {
+  const picker = async (theme: ThemeName, size: { columns: number; rows: number }) => {
+    const home = homeWith(LOG);
+    saveThemeName(home, theme);
+    const r = render(createElement(App, { home, dirs: [SHIPPED], lines: LOG, version: "9.9.9", size, screen: "dashboard", now: () => new Date("2026-09-22T12:00:00.000Z") }));
+    await tick();
+    r.stdin.write("t");
+    await tick();
+    return r;
+  };
+
+  // The owner's screenshot: "> alert-cause" drawn in the background colour on the panel colour, unreadable.
+  it("draws the active row in the background colour on the accent colour, in both themes", async () => {
+    const level = chalk.level;
+    chalk.level = 3;
+    try {
+      for (const name of ["dark", "light"] as const) {
+        const { lastFrame, unmount } = await picker(name, { columns: 120, rows: 40 });
+        const grid = cells(lastFrame() ?? "");
+        const y = grid.findIndex((row) => row.map((c) => c.ch).join("").includes("> alert-cause"));
+        expect(y, name).toBeGreaterThan(-1);
+        const text = grid[y]!.map((c) => c.ch).join("");
+        for (const x of [text.indexOf("> alert-cause"), text.indexOf("alert-cause"), text.indexOf("3 questions")]) {
+          expect(grid[y]![x], `${name} at ${x}`).toMatchObject({ fg: THEMES[name].background, bg: THEMES[name].accent });
+        }
+        // The next row is an ordinary one: text colour on the panel.
+        const next = grid[y + 1]!.map((c) => c.ch).join("");
+        expect(grid[y + 1]![next.indexOf("change-risk")]).toMatchObject({ fg: THEMES[name].text, bg: THEMES[name].panel });
+        unmount();
+      }
+    } finally {
+      chalk.level = level;
+    }
+  });
+
+  // The owner's screenshot: slivers of the panels beside the dialog, and words cut off at its edge.
+  it("paints the whole screen above the footer in the background colour, so nothing behind a dialog shows", async () => {
+    const level = chalk.level;
+    chalk.level = 3;
+    try {
+      for (const name of ["dark", "light"] as const) {
+        for (const size of [{ columns: 80, rows: 24 }, { columns: 120, rows: 40 }]) {
+          const { lastFrame, unmount } = await picker(name, size);
+          const frame = lastFrame() ?? "";
+          const plain = frame.replace(/\u001B\[[\d;]*m/g, "");
+          expect(plain, `${name} ${size.columns}`).toContain("Try a jevel");
+          for (const behind of ["Dashboard", "Needs you", "Latest decisions", "Today", "peak"]) expect(plain, `${name} ${size.columns}: ${behind}`).not.toContain(behind);
+          const grid = cells(frame);
+          expect(grid).toHaveLength(size.rows);
+          // Every cell above the footer is either the background, or inside the dialog's panel.
+          for (const row of grid.slice(0, -1)) {
+            expect(row).toHaveLength(size.columns);
+            for (const c of row) expect([THEMES[name].background, THEMES[name].panel, THEMES[name].accent]).toContain(c.bg);
+            expect(row[0]!.bg).toBe(THEMES[name].background);
+            expect(row[size.columns - 1]!.bg).toBe(THEMES[name].background);
+          }
+          unmount();
+        }
+      }
+    } finally {
+      chalk.level = level;
+    }
   });
 });

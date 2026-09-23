@@ -310,9 +310,9 @@ describe("jevel screen", () => {
     unmount();
   });
 
-  it("counts the thresholds worth moving on Home, and enter opens that jevel", async () => {
+  it("counts the thresholds worth moving on the dashboard, and enter opens that jevel", async () => {
     const { home, project, lines } = setup();
-    const { stdin, lastFrame, unmount } = render(createElement(App, { home, dirs: [project], project, lines, size: { columns: 100, rows: 30 }, now: () => new Date("2026-09-20T12:00:00.000Z") }));
+    const { stdin, lastFrame, unmount } = render(createElement(App, { home, dirs: [project], project, lines, size: { columns: 100, rows: 30 }, now: () => new Date("2026-09-20T12:00:00.000Z"), screen: "dashboard" }));
     await tick();
     expect(lastFrame()).toContain("1 threshold worth moving");
     await press(stdin, "j", ENTER);
