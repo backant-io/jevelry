@@ -420,4 +420,7 @@ export async function runTui(input: { home: string; dirs: string[]; version: str
     { alternateScreen: true },
   );
   await app.waitUntilExit();
+  // An ask still in flight (Try, then q) holds its socket open until the client's timeout. Once the screen is gone,
+  // give a log write in progress a moment, then end: the timer is unref'd, so a quiet event loop ends sooner on its own.
+  setTimeout(() => process.exit(0), 200).unref();
 }
