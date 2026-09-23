@@ -94,7 +94,8 @@ function HelpDialog(props: { hints: Hint[]; columns: number; rows: number; onClo
       <Text key={i}>{cell(hints[2 * i]!)}{hints[2 * i + 1] ? cell(hints[2 * i + 1]!) : null}</Text>
     ));
   const own = props.hints.filter(([k]) => !GLOBAL.some(([g]) => g === k));
-  const height = 17 + Math.max(1, Math.ceil(own.length / 2));
+  // The gutter and the panel's padding (four rows), the title, and the thirteen rows below it besides this screen's keys.
+  const height = 18 + Math.max(1, Math.ceil(own.length / 2));
   return (
     <Dialog title="Keys" width={56} columns={props.columns} rows={props.rows} height={height}>
       <Text> </Text>
@@ -156,6 +157,8 @@ export function App(props: {
   const [cursor, setCursor] = useState(0);
   /** A detail opened from Home's feed goes back to Home. */
   const [fromHome, setFromHome] = useState(false);
+  /** Filters set by a jump from Home last for that visit only; the next h, y or palette History opens everything. */
+  const [jumped, setJumped] = useState(false);
   const [fresh, setFresh] = useState<ReadonlySet<string>>(new Set());
   const freshTimer = useRef<NodeJS.Timeout | undefined>(undefined);
   // Jevel names for the palette: read once, then again when a jevels folder changes.
@@ -212,7 +215,11 @@ export function App(props: {
 
   const go = (next: Screen): void => {
     setScreen(next);
-    if (next === "history") { setHistoryView("list"); setFromHome(false); }
+    if (next === "history") {
+      setHistoryView("list");
+      setFromHome(false);
+      if (jumped) { setFilters(ALL); setCursor(0); setJumped(false); }
+    }
   };
   const run = (c: Command): void => {
     setDialog(null);
@@ -267,7 +274,7 @@ export function App(props: {
           if (target.kind === "review") go("review");
           else if (target.kind === "jevel") { setJevel(target.name); go("jevel"); }
           else if (target.kind === "decision") { setOpen({ id: target.id, question: target.question }); setFromHome(true); setScreen("history"); setHistoryView("detail"); }
-          else { setFilters({ ...ALL, ...target.filters }); setCursor(0); go("history"); }
+          else { setFilters({ ...ALL, ...target.filters }); setCursor(0); setJumped(true); setScreen("history"); setHistoryView("list"); setFromHome(false); }
         }} />
     );
   }

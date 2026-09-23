@@ -1,7 +1,7 @@
 // "Today" is the local day; pin the zone so the fixture's hours fall on the same day everywhere.
 process.env.TZ = "UTC";
 
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { render } from "ink-testing-library";
@@ -60,17 +60,18 @@ describe("home numbers", () => {
 
   // What a day of asks cost is the price of the input tokens; the failed ask was not charged.
   it("prices today's input tokens at the model's rate", () => {
-    expect(s.today.cost).toBeCloseTo(((400 + 380) / 1_000_000) * 0.042, 12);
+    expect(s.today.cost.dollars).toBeCloseTo(((400 + 380) / 1_000_000) * 0.042, 12);
     expect(formatCost(s.today.cost)).toBe("$0.000033");
   });
 
-  it("says the cost is unknown when an answered ask has no usage or an unpriced model", () => {
-    expect(costOf([{ ...A, usage: null }])).toBeNull();
-    expect(costOf([{ ...A, model: "jev-9.0.0" }])).toBeNull();
-    expect(formatCost(null)).toBe("cost unknown");
-    expect(costOf([C])).toBe(0);
-    expect(formatCost(0)).toBe("$0");
-    expect(formatCost(1.5)).toBe("$1.50");
+  // One ask without usage must not hide what the rest of the day cost; it is counted next to the sum.
+  it("sums the asks it can price and counts the answered asks without usage or with an unpriced model", () => {
+    expect(costOf([A, { ...A, usage: null }])).toEqual({ dollars: (400 / 1_000_000) * 0.042, noUsage: 1, noPrice: 0 });
+    expect(formatCost(costOf([A, { ...A, usage: null }, { ...A, usage: null }]))).toBe("$0.000017, 2 asks without usage");
+    expect(formatCost(costOf([{ ...A, model: "jev-9.0.0" }]))).toBe("$0, 1 ask on an unpriced model");
+    expect(costOf([C])).toEqual({ dollars: 0, noUsage: 0, noPrice: 0 });
+    expect(formatCost(costOf([C]))).toBe("$0");
+    expect(formatCost({ dollars: 1.5, noUsage: 0, noPrice: 0 })).toBe("$1.50");
   });
 
   it("counts decisions per hour over the last 24 hours, the current hour last", () => {
@@ -185,10 +186,19 @@ describe("home screen", () => {
     unmount();
   });
 
-  it("shows cost unknown when an ask carries no usage", async () => {
-    const { lastFrame, unmount } = app([{ ...A, usage: null }]);
+  // After a first act on an empty log there is nothing to review yet, which is different from everything reviewed.
+  it("says no marked decisions yet when the log has none", async () => {
+    const onlyActs: AskLine = { ...B, answers: { urgent: B.answers.urgent! } };
+    const { lastFrame, unmount } = app([onlyActs]);
     await tick();
-    expect(lastFrame()).toContain("Today  3 decisions · 1 ask · cost unknown");
+    expect(lastFrame()).toContain("No marked decisions yet.");
+    unmount();
+  });
+
+  it("shows the priced sum and how many asks carry no usage", async () => {
+    const { lastFrame, unmount } = app([{ ...A, id: "eeeeeeee-0000-4000-8000-000000000005", usage: null }, A]);
+    await tick();
+    expect(lastFrame()).toContain("Today  6 decisions · 2 asks · $0.000017, 1 ask without usage");
     unmount();
   });
 
@@ -210,6 +220,43 @@ describe("home screen", () => {
 });
 
 describe("home feed", () => {
+  // The feed is the reason to keep Home open; a new ask must be visible the moment it lands.
+  it("marks an ask that arrives while Home is open with a dot on its feed row", async () => {
+    const home = homeWith([A]);
+    const { lastFrame, unmount } = render(createElement(App, { home, dirs: [], lines: [A], version: "9.9.9", size: { columns: 120, rows: 40 }, now: () => NOW }));
+    await tick();
+    expect(lastFrame()).not.toMatch(/● 09-22 09:30/);
+    appendFileSync(join(home, "log.jsonl"), `${JSON.stringify(B)}\n`);
+    await tick(500);
+    expect(lastFrame()).toMatch(/● 09-22 09:30 ticket-triage/);
+    unmount();
+  });
+
+  // At 80x24 only two jevel rows fit; moving into the feed must not scroll the table or print a zero count.
+  it("keeps the jevels table where it was when the cursor moves into the feed", async () => {
+    const third: AskLine = { ...A, id: "ffffffff-0000-4000-8000-000000000006", at: "2026-09-21T10:00:00.000Z", jevel: { name: "zz-last", version: 1 },
+      answers: { ok: { type: "noul", noul: 0.95, yes: true, certainty: 0.95, decision: "act" } } };
+    const lines = [...LOG, third];
+    const { stdin, lastFrame, unmount } = app(lines);
+    await tick();
+    const table = () => (lastFrame() ?? "").split("\n").filter((l) => /^\s+(> )?(ticket-triage|wake-gate|zz-last)\s+\d/.test(l)).map((l) => l.trim().replace(/^> /, "").split(/\s+/)[0]);
+    expect(table()).toEqual(["ticket-triage", "wake-gate"]);
+    // Straight into the feed: the table stays on its first rows.
+    stdin.write("jjjjjjj");
+    await tick();
+    expect(table()).toEqual(["ticket-triage", "wake-gate"]);
+    expect(lastFrame()).toContain("↓ 1 more below");
+    // Back up onto the last jevel scrolls the table to it, and on into the feed leaves it there.
+    for (const key of ["k", "k", "k"]) { stdin.write(key); await tick(30); }
+    expect(table()).toEqual(["wake-gate", "zz-last"]);
+    expect(lastFrame()).toContain("↑ 1 above");
+    stdin.write("jj");
+    await tick();
+    expect(table()).toEqual(["wake-gate", "zz-last"]);
+    expect(lastFrame()).not.toContain("↓ 0");
+    unmount();
+  });
+
   it("enter on a feed row opens that decision, and esc comes back to Home", async () => {
     const { stdin, lastFrame, unmount } = app(LOG, { columns: 120, rows: 40 });
     await tick();

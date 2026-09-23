@@ -1,5 +1,5 @@
 import { Box, Text, useInput } from "ink";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import type { AskLine, LogLine } from "../log.js";
 import { recordedDecision } from "../report.js";
 import { mix, spark } from "./charts.js";
@@ -12,6 +12,7 @@ const WORD_LINES: Array<["act" | "mark" | "fall_back", string]> = [
   ["mark", ": fairly sure, your code uses it and you check it"],
   ["fall_back", ": unsure, your code decides"],
 ];
+const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" : "s"}`;
 const fit = (text: string, width: number): string => (text.length > width ? `${text.slice(0, width - 1)}~` : text.padEnd(width));
 
 /** Dollars per million input tokens, from https://docs.typesafe.ai/models.md. Output tokens are free. */
@@ -41,11 +42,13 @@ export interface QuestionStats {
 }
 
 export interface HomeStats {
-  today: { asks: number; decisions: number; act: number; mark: number; fallBack: number; cost: number | null };
+  today: { asks: number; decisions: number; act: number; mark: number; fallBack: number; cost: Cost };
   /** Decisions per hour for the last 24 hours, the current hour last. */
   hourly: number[];
   /** Marked decisions nobody has recorded an outcome for yet, from the whole log. */
   toReview: number;
+  /** Every marked decision in the log, with an outcome or not. */
+  marks: number;
   failedToday: { count: number; topError: string | null };
   jevels: JevelStats[];
   empty: boolean;
@@ -54,27 +57,40 @@ export interface HomeStats {
 const HOUR = 3_600_000;
 const startOfDay = (d: Date): number => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 
+/** What the priced asks cost, and how many answered asks could not be priced. */
+export interface Cost {
+  dollars: number;
+  /** Answered asks that logged no usage. */
+  noUsage: number;
+  /** Answered asks on a model without a known price. */
+  noPrice: number;
+}
+
 /**
- * What the input tokens of these asks cost, or null when an answered ask has no usage or a model without a known price.
+ * What the input tokens of these asks cost, summing the asks that can be priced and counting the ones that cannot.
  * An ask Jev could not answer was not charged.
  */
-export function costOf(asks: AskLine[]): number | null {
-  let dollars = 0;
+export function costOf(asks: AskLine[]): Cost {
+  const cost: Cost = { dollars: 0, noUsage: 0, noPrice: 0 };
   for (const ask of asks) {
     if (ask.error) continue;
     const price = ask.model === null ? undefined : PRICE_PER_MTOK[ask.model];
-    if (!ask.usage || price === undefined) return null;
-    dollars += (ask.usage.input_tokens / 1_000_000) * price;
+    if (!ask.usage) cost.noUsage += 1;
+    else if (price === undefined) cost.noPrice += 1;
+    else cost.dollars += (ask.usage.input_tokens / 1_000_000) * price;
   }
-  return dollars;
+  return cost;
 }
 
-/** Two significant digits for the small sums a day of asks costs: `$0.000017`, `$0.42`. */
-export function formatCost(dollars: number | null): string {
-  if (dollars === null) return "cost unknown";
-  if (dollars === 0) return "$0";
-  if (dollars >= 1) return `$${dollars.toFixed(2)}`;
-  return `$${dollars.toFixed(Math.min(10, 1 - Math.floor(Math.log10(dollars))))}`;
+/** Two significant digits for the small sums a day of asks costs, `$0.000017`, `$0.42`, then what could not be priced. */
+export function formatCost(cost: Cost): string {
+  const { dollars } = cost;
+  const sum = dollars === 0 ? "$0" : dollars >= 1 ? `$${dollars.toFixed(2)}` : `$${dollars.toFixed(Math.min(10, 1 - Math.floor(Math.log10(dollars))))}`;
+  const unknown = [
+    cost.noUsage > 0 ? `${plural(cost.noUsage, "ask")} without usage` : "",
+    cost.noPrice > 0 ? `${plural(cost.noPrice, "ask")} on an unpriced model` : "",
+  ].filter((x) => x !== "");
+  return [sum, ...unknown].join(", ");
 }
 
 export function homeStats(lines: LogLine[], now: Date): HomeStats {
@@ -98,6 +114,7 @@ export function homeStats(lines: LogLine[], now: Date): HomeStats {
   const outcomes = new Map<string, "agree" | "disagree">();
   for (const l of lines) if (l.kind === "outcome") outcomes.set(`${l.id}\n${l.question}`, l.outcome);
   let toReview = 0;
+  let marks = 0;
   type Tally = { acts: number; actsAgreed: number };
   const byJevel = new Map<string, JevelStats & Tally & { marks: number; marksAgreed: number; perQuestion: Map<string, QuestionStats & Tally> }>();
   for (const ask of asks) {
@@ -113,7 +130,7 @@ export function homeStats(lines: LogLine[], now: Date): HomeStats {
       if (day >= 0 && day < 14) s.trend[13 - day]! += 1;
       const d = recordedDecision(answer);
       const outcome = outcomes.get(`${ask.id}\n${question}`);
-      if (d === "mark" && outcome === undefined && !ask.error) toReview += 1;
+      if (d === "mark" && !ask.error) { marks += 1; if (outcome === undefined) toReview += 1; }
       const base = question.replace(/\[\d+\]$/, "");
       const q = s.perQuestion.get(base) ?? { name: base, mix: { act: 0, mark: 0, fallBack: 0 }, actRight: null, actOutcomes: 0, acts: 0, actsAgreed: 0 };
       s.perQuestion.set(base, q);
@@ -136,6 +153,7 @@ export function homeStats(lines: LogLine[], now: Date): HomeStats {
     today: { asks: today.length, decisions: count.act + count.mark + count.fallBack, ...count, cost: costOf(today) },
     hourly,
     toReview,
+    marks,
     failedToday: { count: failed.length, topError },
     jevels: [...byJevel.values()]
       .map(({ acts, actsAgreed, marks, marksAgreed, perQuestion, ...s }) => ({
@@ -188,7 +206,6 @@ export function Logo(props: { big: boolean; version: string; center?: boolean })
 }
 
 const pct = (part: number, total: number): string => `${total === 0 ? 0 : Math.round((part / total) * 100)}%`;
-const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** The mix bar in three colours, each part also its own glyph so it reads without colour. */
 function MixBar(props: { act: number; mark: number; fallBack: number; width: number; theme: Theme }): React.JSX.Element {
@@ -256,6 +273,7 @@ export function HomeView(props: {
   const minute = Math.floor(props.now.getTime() / 60_000);
   const s = useMemo(() => homeStats(props.lines, props.now), [props.lines, minute]);
   const feed = useMemo(() => rowsOf(props.lines, ALL), [props.lines]);
+  const jevelTopRef = useRef(0);
   const wide = props.width >= 100;
   const side = props.width >= 120;
   const big = props.width >= 100 && (props.rows ?? props.height + 1) >= 30;
@@ -346,7 +364,7 @@ export function HomeView(props: {
   );
   const needsYou = (
     <Panel title="Needs you" {...(wide ? {} : { width: panelWidth })}>
-      {needs.length === 0 ? <Text color={theme.muted}>Nothing. Every marked decision has an outcome.</Text> : null}
+      {needs.length === 0 ? <Text color={theme.muted}>{s.marks === 0 ? "No marked decisions yet." : "Nothing. Every marked decision has an outcome."}</Text> : null}
       {needs.map((n, i) => {
         const selected = i === at;
         return (
@@ -363,7 +381,15 @@ export function HomeView(props: {
 
   const firstJevel = needs.length;
   const firstFeed = firstJevel + s.jevels.length;
-  const jevelTop = Math.max(0, Math.min(at - firstJevel - jevelRoom + 1, s.jevels.length - jevelRoom));
+  // The table keeps its own scroll: it follows the cursor only while the cursor is on a jevel, and stays put when it is in the feed.
+  let jevelTop = Math.max(0, Math.min(jevelTopRef.current, s.jevels.length - jevelRoom));
+  const onJevel = at - firstJevel;
+  if (onJevel >= 0 && onJevel < s.jevels.length) {
+    if (onJevel < jevelTop) jevelTop = onJevel;
+    else if (onJevel >= jevelTop + jevelRoom) jevelTop = onJevel - jevelRoom + 1;
+  }
+  jevelTopRef.current = jevelTop;
+  const jevelBelow = s.jevels.length - jevelTop - jevelRoom;
   const mainWidth = side ? props.width - 2 - 42 : props.width - 2;
   // The mix column moves into the side column when there is one.
   const mixColumn = wide && !side;
@@ -388,7 +414,7 @@ export function HomeView(props: {
           </Text>
         );
       })}
-      {jevelMore ? <Text color={theme.muted}>{`  ↓ ${s.jevels.length - jevelTop - jevelRoom} more below`}</Text> : null}
+      {jevelMore ? <Text color={theme.muted}>{`  ${[jevelTop > 0 ? `↑ ${jevelTop} above` : "", jevelBelow > 0 ? `↓ ${jevelBelow} more below` : ""].filter((x) => x !== "").join("   ")}`}</Text> : null}
     </Panel>
   );
   const feedName = clamp(mainWidth - 4 - 58, 10, 18);
@@ -424,7 +450,7 @@ export function HomeView(props: {
         </Text>
       ))}
       <Text> </Text>
-      <Text color={theme.muted} wrap="wrap">{`${picked.decisions} decisions, ${pct(picked.mix.act, picked.decisions)} act. Enter on the jevel opens all of it.`}</Text>
+      <Text color={theme.muted} wrap="wrap">{`${plural(picked.decisions, "decision")}, ${pct(picked.mix.act, picked.decisions)} act. Enter on the jevel opens all of it.`}</Text>
     </Panel>
   ) : null;
   const lower = (

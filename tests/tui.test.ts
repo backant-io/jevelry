@@ -544,10 +544,30 @@ describe("review fixes", () => {
     await press(stdin, CTRL_P);
     const frame = lastFrame() ?? "";
     for (const item of ["Switch theme", "Help", "Quit"]) expect(frame).toContain(item);
-    expect(frame).toMatch(/>Home\s+h/);
+    expect(frame).toMatch(/> Home\s+h/);
     expect(frame).toMatch(/↓ \d+ more/);
     await press(stdin, ..."ticket", ENTER);
     expect(lastFrame()).toContain("Jevel ticket-triage");
+    unmount();
+  });
+
+  // Pressing y means all of History; a filter Home's failed-asks line set belongs to that one visit.
+  it("opens History unfiltered on y after a jump from Home's failed asks", async () => {
+    const { stdin, lastFrame, unmount } = app({ now: () => new Date("2026-09-22T12:00:00.000Z") });
+    await tick();
+    await press(stdin, "j", ENTER);
+    expect(lastFrame()).toContain("2 failed decisions");
+    await press(stdin, "h", "y");
+    expect(lastFrame()).toContain("History  8 decisions");
+    expect(lastFrame()).not.toContain("failed only");
+    unmount();
+  });
+
+  it("keeps the help dialog clear of the footer at 80x24", async () => {
+    const { stdin, lastFrame, unmount } = app({ version: "9.9.9" });
+    await tick();
+    await press(stdin, "?");
+    expect((lastFrame() ?? "").split("\n").at(-1)).toContain("v9.9.9");
     unmount();
   });
 

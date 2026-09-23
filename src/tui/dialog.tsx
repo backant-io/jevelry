@@ -119,10 +119,10 @@ export function SelectDialog<V>(props: {
       {shown.slice(top, top + visible).map((item, i) => {
         const active = top + i === cursor;
         const hint = item.hint ?? "";
-        const label = item.label.length > inner - hint.length - 2 ? `${item.label.slice(0, inner - hint.length - 3)}~` : item.label;
+        const label = item.label.length > inner - hint.length - 3 ? `${item.label.slice(0, inner - hint.length - 4)}~` : item.label;
         return (
           <Text key={`${i}:${item.label}`} backgroundColor={active ? theme.accent : theme.panel} bold={active}>
-            <Text color={active ? theme.background : theme.text}>{`${active ? ">" : " "}${label.padEnd(inner - hint.length - 2)}`}</Text>
+            <Text color={active ? theme.background : theme.text}>{`${active ? "> " : "  "}${label.padEnd(inner - hint.length - 3)}`}</Text>
             <Text color={active ? theme.background : theme.muted}>{`${hint} `}</Text>
           </Text>
         );
