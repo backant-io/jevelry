@@ -64,7 +64,7 @@ Each jevel's body says what its state looks like and its `example.json` is a sta
 | `npx jevelry run <jevel> --state @file [--yes] [--dry-run]` | asks the jevel and runs the command of the option Jev picked: `act` runs it, `mark` asks first, `fall_back` runs the jevel's `fall_back` |
 | `npx jevelry outcome <log_id> <question> <value>` | records what proved true (`agree`, `disagree`, an option, a level index, `yes`, `no`) |
 | `npx jevelry report [--jevel <name>] [--json]` | agreement per question from the log |
-| `npx jevelry tui [--jevel <name>]` | a full-screen terminal view of the log: today's decisions, a review queue where a person presses `c` (correct) or `w` (wrong), and Try to ask a jevel live |
+| `npx jevelry tui [--dashboard] [--jevel <name>]` | a full-screen terminal view of the log: a start screen, `d` for the dashboard of today's decisions, a review queue where a person presses `c` (correct) or `w` (wrong), and Try to ask a jevel live |
 | `npx jevelry types [--out <file>]` | writes TypeScript types for every jevel it finds, for `jevel(name).decide()` |
 | `npx jevelry models` | the model names the account may send |
 

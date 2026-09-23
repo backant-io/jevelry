@@ -409,7 +409,7 @@ describe("the shell", () => {
   });
 
   // Every screen is one key away, so nobody has to learn a menu to get around.
-  it("h, v, y and t reach Home, Review, History and Try", async () => {
+  it("h, d, v, y and t reach the start screen, the dashboard, Review, History and Try", async () => {
     const { stdin, lastFrame, unmount } = app({ screen: "history" });
     await tick();
     await press(stdin, "v");
@@ -423,6 +423,9 @@ describe("the shell", () => {
     expect(lastFrame()).toContain("8 decisions");
     await press(stdin, "h");
     expect(lastFrame()).not.toContain("8 decisions");
+    expect(lastFrame()).toMatch(/> t {2}Try a jevel/);
+    await press(stdin, "d");
+    expect(lastFrame()).toContain(" Dashboard   today's decisions");
     unmount();
   });
 
@@ -431,7 +434,7 @@ describe("the shell", () => {
     await tick();
     await press(stdin, CTRL_P);
     const frame = lastFrame() ?? "";
-    for (const item of ["Commands", "Home", "Review marked decisions", "History", "Try a jevel", "Jevel run-gate", "Jevel ticket-triage", "Switch theme", "Quit"]) expect(frame).toContain(item);
+    for (const item of ["Commands", "Start screen", "Dashboard", "Review marked decisions", "History", "Try a jevel", "Jevel run-gate", "Jevel ticket-triage", "Switch theme", "Quit"]) expect(frame).toContain(item);
     await press(stdin, ..."histo");
     expect(lastFrame()).toContain("History");
     expect(lastFrame()).not.toContain("Switch theme");
@@ -576,7 +579,8 @@ describe("review fixes", () => {
     await press(stdin, CTRL_P);
     const frame = lastFrame() ?? "";
     for (const item of ["Switch theme", "Help", "Quit"]) expect(frame).toContain(item);
-    expect(frame).toMatch(/> Home\s+h/);
+    expect(frame).toMatch(/> Start screen\s+h/);
+    expect(frame).toMatch(/ {2}Dashboard\s+d/);
     expect(frame).toMatch(/↓ \d+ more/);
     await press(stdin, ..."ticket", ENTER);
     expect(lastFrame()).toContain("Jevel ticket-triage");
@@ -584,8 +588,8 @@ describe("review fixes", () => {
   });
 
   // Pressing y means all of History; a filter Home's failed-asks line set belongs to that one visit.
-  it("opens History unfiltered on y after a jump from Home's failed asks", async () => {
-    const { stdin, lastFrame, unmount } = app({ now: () => new Date("2026-09-22T12:00:00.000Z") });
+  it("opens History unfiltered on y after a jump from the dashboard's failed asks", async () => {
+    const { stdin, lastFrame, unmount } = app({ screen: "dashboard", now: () => new Date("2026-09-22T12:00:00.000Z") });
     await tick();
     await press(stdin, "j", ENTER);
     expect(lastFrame()).toContain("2 failed decisions");

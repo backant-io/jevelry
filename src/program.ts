@@ -265,18 +265,19 @@ export function buildProgram(): Command {
 
   program
     .command("tui")
-    .description("a full-screen view of your decisions: Home shows today and what needs you, Review records whether Jev was right, Try asks a jevel live")
+    .description("a full-screen view of your decisions: it opens on the start screen, d shows the dashboard, Review records whether Jev was right, Try asks a jevel live")
+    .option("--dashboard", "opens on the dashboard")
     .option("--jevel <name>")
     .option("--since <iso>")
     .option("--jevels <dir>", "a jevels directory searched first (repeatable)", (d: string, all: string[]) => [...all, d], [] as string[])
-    .action(async (opts: { jevel?: string; since?: string; jevels: string[] }) => {
+    .action(async (opts: { dashboard?: boolean; jevel?: string; since?: string; jevels: string[] }) => {
       if (!process.stdin.isTTY || !process.stdout.isTTY) {
         say("tui needs an interactive terminal; use jevelry report for plain text");
         process.exit(1);
       }
       try {
         const { runTui } = await import("./tui/app.js");
-        await runTui({ home: home(), dirs: dirs(opts.jevels), version: pkg.version, ...(opts.jevel ? { jevel: opts.jevel } : {}), ...(opts.since ? { since: opts.since } : {}) });
+        await runTui({ home: home(), dirs: dirs(opts.jevels), version: pkg.version, ...(opts.jevel ? { jevel: opts.jevel } : {}), ...(opts.since ? { since: opts.since } : {}), ...(opts.dashboard ? { dashboard: true } : {}) });
       } catch (error) {
         failCommand(error);
       }

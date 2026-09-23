@@ -277,7 +277,7 @@ describe("review", () => {
     expect(lastFrame()).toContain("Every marked decision has an outcome.");
     expect(lastFrame()).toContain("m reviews act decisions");
     await press(stdin, "\u001B");
-    expect(lastFrame()).toContain("Needs you");
+    expect(lastFrame()).toMatch(/> t {2}Try a jevel/);
     unmount();
   });
 

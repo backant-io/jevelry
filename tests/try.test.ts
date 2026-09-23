@@ -188,7 +188,7 @@ describe("Try", () => {
     expect(lastFrame()).toContain("Try failing-test");
     stdin.write(ESC);
     await tick();
-    expect(lastFrame()).toContain("No decisions yet.");
+    expect(lastFrame()).toContain("Try ticket-triage with a sample ticket");
     unmount();
   });
 
@@ -209,7 +209,7 @@ describe("Try", () => {
   });
 
   // Someone who just installed jevelry: an empty log, one key, and they are asking Jev.
-  it("the first-run panel on Home opens Try on ticket-triage with its example", async () => {
+  it("the start screen on an empty log opens Try on ticket-triage with its example", async () => {
     const h = home();
     const { stdin, lastFrame, unmount } = render(createElement(App, { home: h, dirs: [SHIPPED], lines: [], size: { columns: 80, rows: 24 }, client: client() }));
     await tick();
@@ -234,7 +234,7 @@ describe("Try", () => {
     await tick();
     stdin.write(ESC);
     await tick();
-    stdin.write("h");
+    stdin.write("y");
     await tick();
     stdin.write("t");
     await tick();
