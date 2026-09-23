@@ -26,10 +26,11 @@ Use a jevel when you or the code need one of these and the input is text or a re
 
 Keep arithmetic, counting, date comparison and anything a regex can find in the code, because Jev answers questions about meaning.
 
-Sixteen jevels ship with the package, and each one fits a moment you run into while you work. Ask it with the state in a file, then do what the decision says:
+Seventeen jevels ship with the package, and each one fits a moment you run into while you work. Ask it with the state in a file, then do what the decision says:
 
 | Moment | Command | On `act` | On `mark` | On `fall_back` |
 |---|---|---|---|---|
+| a test failed and the next step is a rerun, a report to the CI owner or a fix | `npx jevelry run failing-test --state @test.json` | the command for the `cause` runs: `flaky` reruns with `retries`, `environment` reports it, `defect` says fix the code | it asks first, and `--yes` runs it | its `fall_back` command runs, which says read the output yourself |
 | a service or a job printed a burst of log lines | `npx jevelry ask log-triage --state @lines.json` | treat it as the `kind`: a bug means fix the code, a misconfiguration means fix the setting, an outage means wait and report it | do the same and say in your summary that it was a guess | read the lines yourself before you change anything |
 | a test failed, or a review comment or a failing check lands on your pull request | `npx jevelry ask review-comment-kind --state @comment.json` | `defect`: fix the code, `environment`: fix or report the CI or the sandbox and leave the code alone, `style`: fold it into a cleanup pass | do the same and name the kind you assumed | read the comment and the failing output closer yourself |
 | you are about to merge or hand over a change | `npx jevelry ask change-risk --state @change.json` | `risk` at level 2: ask the person for a second reviewer, and `breaking` yes: add a migration note | apply the level and point the person at it | follow the project's usual review rules |

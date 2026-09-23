@@ -87,3 +87,16 @@ live("every shipped jevel decides each of its cases", () => {
     }
   }
 });
+
+// The one shipped jevel with a `run` block: its example is a flaky test that fails about once a week,
+// so the call lands on `flaky` with 2 retries and the command it runs prints that, on stderr.
+live("failing-test runs the command Jev picks", () => {
+  it("runs the flaky command with its retries filled in", () => {
+    const r = run(["run", "failing-test", "--yes", "--state", `@${join("jevels", "failing-test", "example.json")}`]);
+    expect(r.status, r.stderr).toBe(0);
+    const doc = JSON.parse(r.stdout) as { run: { option: string; command: string; exit: number } };
+    expect(validate(doc), JSON.stringify(validate.errors)).toBe(true);
+    expect(doc.run).toMatchObject({ option: "flaky", command: 'echo "rerun with 2 retries"', exit: 0 });
+    expect(r.stderr).toContain("rerun with 2 retries");
+  });
+});

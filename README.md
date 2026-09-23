@@ -19,7 +19,7 @@
 
 Your code and your coding agent make the same small calls every day: is this ticket urgent, which team should get it, is this bug a duplicate, did this test fail because of the code or because of the machine it ran on. Today each of those is usually a prompt that returns text you parse, and you don't learn how sure the model was.
 
-jevelry asks each of those questions to Jev, the decision model from TypeSafe, with one command. A question lives in a small file called a jevel, and sixteen ready-made jevels ship with the package. Jev answers with how sure it is, and the jevel turns that into one of three decisions:
+jevelry asks each of those questions to Jev, the decision model from TypeSafe, with one command. A question lives in a small file called a jevel, and seventeen ready-made jevels ship with the package. Jev answers with how sure it is, and the jevel turns that into one of three decisions:
 
 | Decision | Meaning | What your code does |
 |---|---|---|
@@ -78,6 +78,39 @@ switch (d.team?.decision) {
 ```
 
 `decide` asks Jev, writes the ask to your log and hands you every question with its `decision` and its `answer`, so here `d.team.answer` is `"billing"` and `d.urgent.answer` is `true`. When Jev cannot answer, because TypeSafe is busy or your network is down, every question comes back `fall_back` with the reason in `d.error`, so your code just keeps its old path. Run `npx jevelry types --out src/jevels.d.ts` once and your editor knows the options of every jevel, so `d.team.answer` is typed as `"billing" | "technical" | "account" | "other"` and you can drop the `?.`. The lower level functions are importable as well, `import { ask, loadJevel, discoveryDirs } from "jevelry"`, when you want to build the call yourself.
+
+## Let Jev run the command
+
+Sometimes the next step after a decision is always one of a few commands, like running a flaky test again or telling whoever owns the CI that the sandbox broke. You can put those commands into the jevel, and jevelry runs the one Jev picks. This is the `failing-test` jevel that ships with the package, trimmed:
+
+```yaml
+questions:
+  cause:
+    type: choice
+    criteria: { defect: {...}, environment: {...}, flaky: {...}, other: {...} }
+    thresholds: { act: 0.9, mark: 0.7 }
+    run:
+      defect: "echo \"the code is wrong, fix it before you rerun the test\""
+      environment: "echo \"the machine stopped the test, report it to whoever owns the CI\""
+      flaky: "echo \"rerun with {{retries}} retries\""
+  retries:
+    type: choice
+    criteria: { "1": {...}, "2": {...}, "3": {...} }
+    thresholds: { act: 0.8, mark: 0.6 }
+fall_back: "echo \"Jev is unsure, read the failing output yourself\""
+```
+
+    npx jevelry run failing-test --state @run.json
+
+`{{retries}}` gets the option Jev picked for the `retries` question, and when a command uses an argument like that, the call is only as sure as the least sure answer behind it. Then the decision says what happens:
+
+| Decision | What happens |
+|---|---|
+| `act` | the command runs |
+| `mark` | jevelry asks you first, and `--yes` runs it straight away |
+| `fall_back` | your `fall_back` command runs |
+
+The commands are fixed text in the jevel and Jev only picks which one runs, so the only thing jevelry fills in is an option name you wrote yourself. Your data goes to the command on stdin and in the file `JEVELRY_STATE` points at, and it stays out of the command line, so a ticket that says `; rm -rf ~` is just text to the command. Add `--dry-run` to see what would run, and in your program `failing.run(state, { flaky: (args) => rerun(args.retries) })` calls your own function in place of the shell command.
 
 ## See every decision
 
@@ -210,7 +243,7 @@ Adding a use case is adding a folder. jevelry finds jevels in `--jevels <dir>`, 
     npx jevelry list
     npx jevelry show ticket-triage
 
-`check` refuses a jevel the API would refuse anyway (more than 255 options, a threshold outside 0 to 1, a question with no instructions) and warns you about the cases Jev handles poorly: a yes/no question whose "yes" means no, a double negative, options that carry different fields, a model that is not pinned. Sixteen jevels ship with the package, from a support queue and a bug tracker to pull requests, logs, alerts and meeting notes, each with an `example.json` to ask it with and a `cases.json` of states it is tested on; the list is in [jevels/README.md](jevels/README.md), so you always have something to copy.
+`check` refuses a jevel the API would refuse anyway (more than 255 options, a threshold outside 0 to 1, a question with no instructions) and warns you about the cases Jev handles poorly: a yes/no question whose "yes" means no, a double negative, options that carry different fields, a model that is not pinned. Seventeen jevels ship with the package, from a support queue and a bug tracker to pull requests, logs, alerts, failing tests and meeting notes, each with an `example.json` to ask it with and a `cases.json` of states it is tested on; the list is in [jevels/README.md](jevels/README.md), so you always have something to copy.
 
 ## Decisions
 
@@ -258,7 +291,7 @@ Currently jevelry asks Jev questions and hands you the answers, and that is the 
 
 ## How do we know you can trust it
 
-209 tests run offline against recorded answers from TypeSafe's API reference and against the sixteen jevels and their cases. 90 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself and one routes the `ticket-triage` example through `decide` in your program. One of those tests reads the log afterwards and checks that your key stays out of it.
+240 tests run offline against recorded answers from TypeSafe's API reference and against the seventeen jevels and their cases. 98 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## Environment
 

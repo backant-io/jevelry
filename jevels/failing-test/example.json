@@ -1,0 +1,8 @@
+{
+  "test": {
+    "name": "checkout > pays with a saved card",
+    "output": "TimeoutError: waiting for selector \"button[data-test=pay]\" failed: timeout 5000ms exceeded\n    at tests/e2e/checkout.spec.ts:48:16\n1 failed, 212 passed",
+    "change": "The commit changes the wording on the order history page",
+    "history": "fails about once a week and passes on a rerun"
+  }
+}

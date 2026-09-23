@@ -1,0 +1,90 @@
+[
+  {
+    "name": "a login test that times out now and then",
+    "state": {
+      "test": {
+        "name": "auth > signs in with a magic link",
+        "output": "Error: Timed out 10000ms waiting for expect(page).toHaveURL(/dashboard/)\n    at tests/e2e/auth.spec.ts:31:22\n1 failed, 187 passed",
+        "change": "The commit adds a column to the invoices table",
+        "history": "fails about once a week and passes on a rerun"
+      }
+    },
+    "expect": {
+      "cause": "flaky",
+      "retries": "2"
+    }
+  },
+  {
+    "name": "the sandbox denied the network call",
+    "state": {
+      "test": {
+        "name": "api > asks ticket-triage",
+        "output": "TypeError: fetch failed\n  cause: Error: connect EPERM 104.18.2.1:443 - Local (0.0.0.0:0)\n  errno: -1, code: 'EPERM', syscall: 'connect'\n1 failed, 141 passed",
+        "change": "The commit fixes a typo in the README",
+        "history": "passed on every run for the last month"
+      }
+    },
+    "expect": {
+      "cause": "environment",
+      "retries": "1"
+    }
+  },
+  {
+    "name": "a filter change drops the last page",
+    "state": {
+      "test": {
+        "name": "reports > lists every order of the month",
+        "output": "AssertionError: expected 3 rows, got 2\n    at tests/reports.test.ts:88:30\n  - expected: [\"A-101\", \"A-102\", \"A-103\"]\n  + received: [\"A-101\", \"A-102\"]",
+        "change": "The commit rewrites the pagination in src/reports/filter.ts",
+        "history": "passed on every run until this commit"
+      }
+    },
+    "expect": {
+      "cause": "defect",
+      "retries": "1"
+    }
+  },
+  {
+    "name": "a race in the queue test that fails most mornings",
+    "state": {
+      "test": {
+        "name": "queue > processes jobs in order",
+        "output": "AssertionError: expected [ 'job-1', 'job-2' ] to deeply equal [ 'job-2', 'job-1' ]\n    at tests/queue.test.ts:54:12\nThe test passed when run again with the same commit.",
+        "change": "The commit updates the wording of two error messages",
+        "history": "fails in about a third of the runs this week and passes on a rerun"
+      }
+    },
+    "expect": {
+      "cause": "flaky",
+      "retries": "3"
+    }
+  },
+  {
+    "name": "a new test that fails with no useful output",
+    "state": {
+      "test": {
+        "name": "sync > imports the partner feed",
+        "output": "Error: something went wrong\nProcess exited with code 1",
+        "change": "The commit adds this test and updates three dependencies",
+        "history": "no earlier runs, the test is new"
+      }
+    },
+    "expect": {
+      "cause": "other"
+    }
+  },
+  {
+    "name": "a timeout in a test the commit touched, on a test that fails now and then",
+    "state": {
+      "test": {
+        "name": "checkout > applies the discount code",
+        "output": "TimeoutError: waiting for text \"Total 90.00\" failed: timeout 5000ms exceeded\n    at tests/e2e/checkout.spec.ts:72:14\n1 failed, 212 passed",
+        "change": "The commit changes how the discount is computed in src/checkout/discount.ts",
+        "history": "fails about once a month and passes on a rerun"
+      }
+    },
+    "expect": {
+      "cause": null
+    }
+  }
+]
