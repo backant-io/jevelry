@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { JevelError, discoveryDirs, findJevel, listJevels, loadJevel, parseJevel } from "../src/jevel.js";
+import { JevelError, SHIPPED_JEVELS, discoveryDirs, findJevel, listJevels, loadJevel, parseJevel } from "../src/jevel.js";
 
 const FIXTURES = join(process.cwd(), "tests", "fixtures", "jevels");
 
@@ -167,9 +167,13 @@ describe("parseJevel", () => {
 });
 
 describe("discovery", () => {
-  it("orders cli, env, ./jevels, home/jevels and drops duplicates", () => {
-    const dirs = discoveryDirs({ cli: ["/a", "/b"], env: "/c:/a", cwd: "/w", home: "/h" });
-    expect(dirs).toEqual(["/a", "/b", "/c", "/w/jevels", "/h/jevels"]);
+  it("orders cli, env, ./jevels, home/jevels, the shipped jevels last, and drops duplicates", () => {
+    const dirs = discoveryDirs({ cli: ["/a", "/b"], env: "/c:/a", cwd: "/w", home: "/h", shipped: "/s" });
+    expect(dirs).toEqual(["/a", "/b", "/c", "/w/jevels", "/h/jevels", "/s"]);
+  });
+  it("finds the shipped jevels from any working directory, so an installed jevelry works outside the repo", () => {
+    const dirs = discoveryDirs({ cwd: mkdtempSync(join(tmpdir(), "jevelry-elsewhere-")), home: "/h" });
+    expect(findJevel("ticket-triage", dirs)).toBe(join(SHIPPED_JEVELS, "ticket-triage", "JEVEL.md"));
   });
   it("finds the first directory holding the jevel and lists every jevel once", () => {
     const root = mkdtempSync(join(tmpdir(), "jevelry-"));
@@ -195,7 +199,7 @@ describe("review rulings", () => {
     ).toThrowError(expect.objectContaining({ field: "thresholds" }) as unknown as Error);
   });
   it("resolves a relative discovery dir against the injected cwd, not the process cwd", () => {
-    expect(discoveryDirs({ cli: ["rel"], cwd: "/w", home: "/h" })).toEqual(["/w/rel", "/w/jevels", "/h/jevels"]);
+    expect(discoveryDirs({ cli: ["rel"], cwd: "/w", home: "/h", shipped: "/s" })).toEqual(["/w/rel", "/w/jevels", "/h/jevels", "/s"]);
   });
   it("refuses a jevel name that could escape the discovery dirs", () => {
     expect(() => loadJevel("../x", [FIXTURES])).toThrowError(
