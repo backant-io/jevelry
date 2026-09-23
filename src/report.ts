@@ -1,5 +1,5 @@
 import type { AskLine, LogLine } from "./log.js";
-import type { Answer, Decision } from "./protocol.js";
+import type { Answer, Decision, FallBackAnswer } from "./protocol.js";
 
 export interface QuestionReport {
   jevel: string;
@@ -14,7 +14,7 @@ export interface QuestionReport {
 
 const NO_JEVEL = "(questions)";
 /** Log lines written before protocol 2 carry `verdict` where newer ones carry `decision`; the log on disk holds both. */
-const recordedDecision = (answer: Answer): Decision => (answer.decision ?? (answer as { verdict?: Decision }).verdict) as Decision;
+const recordedDecision = (answer: Answer | FallBackAnswer): Decision => (answer.decision ?? (answer as { verdict?: Decision }).verdict) as Decision;
 /** `same_as[3]` reports under `same_as`. */
 const baseName = (name: string): string => name.replace(/\[\d+\]$/, "");
 

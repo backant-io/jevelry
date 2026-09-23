@@ -58,6 +58,27 @@ Every jevel ships with a `cases.json`, a few realistic states with the answer a 
     npx jevelry outcome <log_id> urgent yes
     npx jevelry report --jevel ticket-triage
 
+## In your program
+
+When the decision happens inside your own code, you install jevelry in the project, load the jevel once when your program starts and call `decide` at the point where your code decides today:
+
+    npm install jevelry
+
+```ts
+import { jevel } from "jevelry";
+
+const triage = jevel("ticket-triage");
+
+const d = await triage.decide({ ticket });
+switch (d.team?.decision) {
+  case "act": route(ticket, d.team.answer); break;
+  case "mark": route(ticket, d.team.answer); flagForQueueOwner(ticket); break;
+  case "fall_back": leaveInGeneralQueue(ticket); break;
+}
+```
+
+`decide` asks Jev, writes the ask to your log and hands you every question with its `decision` and its `answer`, so here `d.team.answer` is `"billing"` and `d.urgent.answer` is `true`. When Jev cannot answer, because TypeSafe is busy or your network is down, every question comes back `fall_back` with the reason in `d.error`, so your code just keeps its old path. Run `npx jevelry types --out src/jevels.d.ts` once and your editor knows the options of every jevel, so `d.team.answer` is typed as `"billing" | "technical" | "account" | "other"` and you can drop the `?.`. The lower level functions are importable as well, `import { ask, loadJevel, discoveryDirs } from "jevelry"`, when you want to build the call yourself.
+
 ## What is underneath
 
 Jev takes a state (a support ticket, a bug report, the form somebody just filled in) and typed questions, and it answers each one with a calibrated probability. There are three kinds of questions:
@@ -215,15 +236,7 @@ Currently jevelry asks Jev questions and hands you the answers, and that is the 
 
 ## How do we know you can trust it
 
-170 tests run offline against recorded answers from TypeSafe's API reference and against the sixteen jevels and their cases. 89 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, and five more cover the API itself. One of those tests reads the log afterwards and checks that your key stays out of it.
-
-## Use it from code
-
-You can also import it and stay in process:
-
-```ts
-import { ask, loadJevel, discoveryDirs } from "jevelry";
-```
+184 tests run offline against recorded answers from TypeSafe's API reference and against the sixteen jevels and their cases. 90 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself and one routes the `ticket-triage` example through `decide` in your program. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## Environment
 
