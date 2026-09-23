@@ -20,34 +20,7 @@
 
 <p align="center"><b>Use Jev everywhere to make &amp; track decisions.</b></p>
 
-```
- ◆ JEVELRY  Use Jev everywhere to make & track decisions  v0.5.0
-
-   Today  50 decisions · 21 asks · $0.00094
-   ██████████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░ act 32% mark 36% fall_back 32%
-   act: Jev is sure · mark: fairly sure, check it
-   fall_back: unsure, your code decides
-   ▃▁▃▁▇█▄▄▅▅█▁▄▄▁▁▇▄▁▁▁▅▄▇  24h · peak 9/h
-
-   Needs you
-   > ● 56 marked decisions to review  ⏎
-     ● 3 asks failed today (rate_limited)
-
-   Jevels  how each one decides; enter opens its questions
-     jevel               decisions     act right  last 14 days
-     ticket-triage             189     96% of 24  ▃▃▄▃▃▄▃▃▂▄▄▃██  peak 39/day
-     message-triage             66     92% of 12  ▆▆▃▄▄▆▆▁▄▇▁▃█▇  peak 10/day
-     ↓ 1 more below
-
-   Latest decisions  newest first, live as your code asks
-     time        jevel            question       answer     decision  outcome
-     09-23 15:55 ticket-triage    team           billing    mark      -
-     09-23 15:55 ticket-triage    urgent         no         act       -
-     09-23 15:55 ticket-triage    frustration    level 1    mark      -
- j/k move  enter open  ctrl+p commands  ? help                           v0.5.0
-```
-
-<p align="center"><sub>Home in <code>jevelry tui</code>, captured from a real log at 80 columns.</sub></p>
+<p align="center"><img src="docs/assets/tui.png" alt="jevelry tui: today's decisions, what needs you, every jevel and the latest decisions, with the Try a jevel picker open" width="100%"></p>
 
 jevelry lets your code and your coding agent ask Jev, the decision model from TypeSafe, a small typed question and get back a decision it can act on, and it keeps every decision so you can see how often Jev was right.
 
