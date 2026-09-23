@@ -252,6 +252,7 @@ After a few hundred asks that table shows you which thresholds to move and which
 | 5 | over the token budget, no request was made |
 | 6 | the network or TypeSafe's servers |
 | 7 | TypeSafe answered a shape this build cannot read |
+| 9 | `jevelry run` only: Jev marked the call and nobody confirmed it, so the command stayed put |
 
 Currently jevelry asks Jev questions and hands you the answers, and that is the whole of it - we built it that way because Jev is built to answer, and in our own experience a small tool that does one thing is the one you can put in front of your own code and forget about. We are working on an authoring loop so you can try questions against a pasted state before you write the jevel.
 

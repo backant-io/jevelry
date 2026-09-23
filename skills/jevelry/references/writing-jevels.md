@@ -130,6 +130,43 @@ A `choice` or `score` is judged on the confidence Jev reports, and a `noul` on h
 
 Set them by what a wrong answer costs. A question that only sorts a queue can act at 0.7. A question that skips a step a person would otherwise do should sit at 0.9, and you lower it later with the report in front of you. The runtime defaults are 0.9 and 0.7, and you can set jevel-wide defaults in a `thresholds` block at the top and override them per question. The values in the shipped jevels are a starting point, and the report is what moves them.
 
+## Commands
+
+A choice question can name a command for each of its options, and `jevelry run` runs the one Jev picks. One question per jevel carries the `run` block, and it maps option names to commands:
+
+    questions:
+      cause:
+        type: choice
+        instructions: { question: "...", focus: "..." }
+        criteria: { defect: {...}, environment: {...}, flaky: {...}, other: {...} }
+        thresholds: { act: 0.9, mark: 0.7 }
+        run:
+          flaky: "npm test -- --retry={{retries}}"
+          environment: "gh issue create --label ci --title 'The sandbox blocked the test run' --body-file -"
+      retries:
+        type: choice
+        instructions: { question: "...", focus: "..." }
+        criteria: { "1": {...}, "2": {...}, "3": {...} }
+        thresholds: { act: 0.8, mark: 0.6 }
+    fall_back: "echo 'Jev is unsure, look at the failing test yourself'"
+
+An option you leave out of `run` runs nothing when Jev picks it, which is what you want for `other`. `{{retries}}` is an argument: it names another choice question of the jevel and gets the option Jev picked there, or it names a noul and gets `true` or `false`. That is the only thing jevelry puts into a command, so the option names of an argument may only use letters, digits, dot, underscore and hyphen, and `check` refuses the jevel otherwise. Your state reaches the command as data, as JSON on stdin and in a file whose path is in `JEVELRY_STATE`, next to `JEVELRY_DECISION`, `JEVELRY_OPTION` and `JEVELRY_LOG_ID`.
+
+The call is as sure as the least sure answer behind it. When Jev picks `flaky` at 0.97 and 2 retries at 0.72, the call is 0.72, and the thresholds of `cause` turn that into the decision: `act` runs the command, `mark` asks you first or runs with `--yes`, and `fall_back` runs the top-level `fall_back` command when the jevel has one. So give every argument clear criteria of its own, because one unsure argument pulls the whole call down to `mark`.
+
+In your program, `run` takes a handler per option in place of the shell commands:
+
+```ts
+const failing = jevel("failing-test");
+const { ran } = await failing.run({ test }, {
+  flaky: (args) => rerun(test, Number(args.retries)),
+  environment: () => reportToCiOwner(test),
+  fall_back: () => leaveForAPerson(test),
+}, { confirm: (option, certainty) => askTheOnCall(option, certainty) });
+```
+
+When you leave out `confirm`, a `mark` runs nothing and `ran.confirmed` is `false`, and with `{ shell: true }` the jevel's own commands run for every option you gave no handler.
+
 ## Prove it
 
 Before you wire a decision into anything, you prove that the questions decide, and you do that with a `cases.json` next to the `JEVEL.md`. It is a JSON array of cases, and each case has a `name`, a `state` your jevel accepts and an `expect` that says what a correct answer looks like for each question, by its answer name (a `repeat` question appears as `same_as[0]`). A string expects that choice, `true` or `false` expects that noul answer, and a whole number expects the score to round to that level, and in each of those the decision must be `act` or `mark`. A `null` says the case is unclear, so the decision must stay below `act`. A question you leave out of `expect` is asked and left alone. One case from `ticket-triage`:

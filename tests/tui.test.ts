@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { render } from "ink-testing-library";
 import { createElement } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { type AskLine, type LogLine, type OutcomeLine, readLog } from "../src/log.js";
+import { type AskLine, type LogLine, type OutcomeLine, type RunLine, readLog } from "../src/log.js";
 import type { Answer } from "../src/protocol.js";
 import { App, DecisionsView, DetailView, type Filters, ReportView, otherValues, rowsOf } from "../src/tui.js";
 
@@ -141,6 +141,15 @@ describe("detail view", () => {
     for (let i = 0; i < 50; i++) deep = { level: deep };
     const frame = detail({ ...row(A.id, "team"), ask: { ...A, state: deep } }, null);
     for (const line of frame.split("\n")) expect(line.length).toBeLessThanOrEqual(99);
+  });
+
+  it("shows what jevelry run did after the ask, so a reviewer sees the command a decision started", () => {
+    const ran: RunLine = { kind: "run", id: A.id, at: A.at, option: "billing", command: 'echo "refund queued"', decision: "mark", exit: 0, ms: 42, confirmed: true };
+    const withRun = rowsOf([...LOG, ran], ALL).find((r) => r.ask.id === A.id && r.question === "team")!;
+    expect(detail(withRun, null)).toContain('run: billing: echo "refund queued", exit 0 in 42 ms, confirmed');
+    const declined = rowsOf([...LOG, { ...ran, exit: null, ms: null, confirmed: false }], ALL).find((r) => r.ask.id === A.id)!;
+    expect(detail(declined, null)).toContain("did not run, not confirmed");
+    expect(detail(row(B.id, "team"), null)).not.toContain("run:");
   });
 
   it("shows the error body of an ask Jev could not answer", () => {

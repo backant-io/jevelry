@@ -30,7 +30,9 @@ export async function startServer(): Promise<TestServer> {
         else if (q.type === "choice") {
           const options = Object.keys(q.criteria as Record<string, unknown>);
           const probabilities = Object.fromEntries(options.map((o, i) => [o, i === 0 ? 0.9 : 0.1 / Math.max(1, options.length - 1)]));
-          answers[name] = { type: "choice", choice: options[0], probabilities, confidence: 0.88 };
+          // A state may set a choice's confidence by question name, so a test can land on act, mark or fall_back.
+          const confidence = (body.state as { confidence?: Record<string, number> } | null)?.confidence?.[name] ?? 0.88;
+          answers[name] = { type: "choice", choice: options[0], probabilities, confidence };
         } else {
           const levels = q.criteria as string[];
           const legend = Object.fromEntries(levels.map((l, i) => [String(i), l]));

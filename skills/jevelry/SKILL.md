@@ -60,6 +60,7 @@ Each jevel's body says what its state looks like and its `example.json` is a sta
 | `npx jevelry check <jevel>` | refuses a jevel the API would refuse and warns about questions Jev handles poorly |
 | `npx jevelry ask <jevel> --state @file` | asks every question in the jevel about the state, prints one JSON document |
 | `npx jevelry ask --questions '<json>' --state '<json>'` | a one-off ask with the API's question shape |
+| `npx jevelry run <jevel> --state @file [--yes] [--dry-run]` | asks the jevel and runs the command of the option Jev picked: `act` runs it, `mark` asks first, `fall_back` runs the jevel's `fall_back` |
 | `npx jevelry outcome <log_id> <question> <value>` | records what proved true (`agree`, `disagree`, an option, a level index, `yes`, `no`) |
 | `npx jevelry report [--jevel <name>] [--json]` | agreement per question from the log |
 | `npx jevelry tui [--jevel <name>]` | a terminal view of every logged decision, where a person marks whether Jev was right |
@@ -67,6 +68,10 @@ Each jevel's body says what its state looks like and its `example.json` is a sta
 | `npx jevelry models` | the model names the account may send |
 
 Jevels are found in `--jevels <dir>`, then `JEVELRY_JEVELS` (colon separated), then `./jevels`, then `~/.jevelry/jevels`. Keep the project's jevels in `./jevels/` so a person reviews them with the code.
+
+## Let Jev run the command
+
+Use `npx jevelry run <jevel> --state @file` when the next step after the decision is always one of a few commands, like rerunning a flaky test or filing an issue for the CI owner, and the jevel names those commands in a `run` block (`failing-test` is the one that ships). Run it with `--dry-run` first, so you see which command it picks and what it fills in. Leave `--yes` off while the person is around, because a `mark` then waits for their `y`, and exit 9 means the call was a `mark` and nobody confirmed it, so tell the person which command it wanted. When your own code acts on the answer, keep using `ask` or `decide`.
 
 ## Write a jevel
 

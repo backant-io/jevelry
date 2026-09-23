@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { JevelError } from "./jevel.js";
-import type { Answer, ErrorBody, FallBackAnswer, Usage } from "./protocol.js";
+import type { Answer, ErrorBody, FallBackAnswer, RunReport, Usage } from "./protocol.js";
 
 export const LOG_FILE = "log.jsonl";
 
@@ -39,7 +39,14 @@ export interface OutcomeLine {
   at: string;
 }
 
-export type LogLine = AskLine | OutcomeLine;
+/** What ran after an ask, under the ask's id. A library handler logs `command: null`. */
+export interface RunLine extends RunReport {
+  kind: "run";
+  id: string;
+  at: string;
+}
+
+export type LogLine = AskLine | OutcomeLine | RunLine;
 
 /** Append-only. The state is written only when state logging is on; the key is never written anywhere. */
 export async function appendLine(home: string, line: LogLine): Promise<void> {
