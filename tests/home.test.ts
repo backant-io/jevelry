@@ -68,7 +68,7 @@ describe("home numbers", () => {
   it("sums the asks it can price and counts the answered asks without usage or with an unpriced model", () => {
     expect(costOf([A, { ...A, usage: null }])).toEqual({ dollars: (400 / 1_000_000) * 0.042, noUsage: 1, noPrice: 0 });
     expect(formatCost(costOf([A, { ...A, usage: null }, { ...A, usage: null }]))).toBe("$0.000017, 2 asks without usage");
-    expect(formatCost(costOf([{ ...A, model: "jev-9.0.0" }]))).toBe("$0, 1 ask on an unpriced model");
+    expect(formatCost(costOf([{ ...A, model: "jev-9.0.0" }]))).toBe("cost unknown");
     expect(costOf([C])).toEqual({ dollars: 0, noUsage: 0, noPrice: 0 });
     expect(formatCost(costOf([C]))).toBe("$0");
     expect(formatCost({ dollars: 1.5, noUsage: 0, noPrice: 0 })).toBe("$1.50");

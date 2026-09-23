@@ -15,6 +15,8 @@ export interface Filters {
   /** Only asks Jev could not answer (a line with `error`). */
   failed: boolean;
   since: string | null;
+  /** One question of the jevel, as the Jevel screen opens it (a `repeat` question under its base name). */
+  question?: string;
 }
 
 export const ALL: Filters = { decision: "all", jevel: null, noOutcome: false, failed: false, since: null };
@@ -51,6 +53,7 @@ export function rowsOf(lines: LogLine[], filters: Filters): Row[] {
     if (filters.since !== null && ask.at < filters.since) continue;
     if (filters.failed && ask.error === undefined) continue;
     for (const [question, answer] of Object.entries(ask.answers)) {
+      if (filters.question !== undefined && baseName(question) !== filters.question) continue;
       const run = runs.get(ask.id);
       const row = { ask, question, answer, outcomes: outcomes.get(`${ask.id}\n${question}`) ?? [], ...(run ? { run } : {}) };
       if (filters.decision !== "all" && recordedDecision(answer) !== filters.decision) continue;
@@ -158,7 +161,7 @@ export function DecisionsView(props: {
   }, { isActive: props.active ?? true });
   const title = filters.decision === "mark" && filters.noOutcome ? plural(rows.length, "marked decision") + " to review"
     : filters.failed ? plural(rows.length, "failed decision") : plural(rows.length, "decision");
-  const filtered = filters.decision !== "all" || filters.jevel !== null || filters.noOutcome || filters.failed || filters.since !== null;
+  const filtered = filters.decision !== "all" || filters.jevel !== null || filters.noOutcome || filters.failed || filters.since !== null || filters.question !== undefined;
   const empty = !lines.some((l) => l.kind === "ask");
   return (
     <Box flexDirection="column" paddingX={1}>
@@ -171,6 +174,7 @@ export function DecisionsView(props: {
       <Text wrap="truncate">
         <Chip label="decision" value={filters.decision} on={filters.decision !== "all"} />
         <Chip label="jevel" value={filters.jevel ?? "all"} on={filters.jevel !== null} />
+        {filters.question !== undefined ? <Chip label="question" value={filters.question} on /> : null}
         <Chip label="outcome" value={filters.noOutcome ? "none yet" : "any"} on={filters.noOutcome} />
         {filters.failed ? <Chip label="failed" value="only" on /> : null}
         {filters.since ? <Chip label="since" value={time(filters.since)} on /> : null}

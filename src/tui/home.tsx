@@ -85,6 +85,8 @@ export function costOf(asks: AskLine[]): Cost {
 /** Two significant digits for the small sums a day of asks costs, `$0.000017`, `$0.42`, then what could not be priced. */
 export function formatCost(cost: Cost): string {
   const { dollars } = cost;
+  // Nothing priced at all: a sum of $0 would read as free.
+  if (dollars === 0 && cost.noUsage + cost.noPrice > 0) return "cost unknown";
   const sum = dollars === 0 ? "$0" : dollars >= 1 ? `$${dollars.toFixed(2)}` : `$${dollars.toFixed(Math.min(10, 1 - Math.floor(Math.log10(dollars))))}`;
   const unknown = [
     cost.noUsage > 0 ? `${plural(cost.noUsage, "ask")} without usage` : "",
@@ -264,6 +266,8 @@ export function HomeView(props: {
   active?: boolean;
   /** Asks that arrived in the last few seconds, marked in the feed. */
   fresh?: ReadonlySet<string>;
+  /** Questions whose act threshold the tuning rule would lower. */
+  worth?: Array<{ jevel: string; question: string }>;
   cursor: number;
   onCursor: (update: (cursor: number) => number) => void;
   onOpen: (target: Target) => void;
@@ -279,6 +283,11 @@ export function HomeView(props: {
   const big = props.width >= 100 && (props.rows ?? props.height + 1) >= 30;
   const needs: Array<{ text: string; key: string; target: Target; tone: string }> = [];
   if (s.toReview > 0) needs.push({ text: `${plural(s.toReview, "marked decision")} to review`, key: "review", target: { kind: "review" }, tone: theme.mark });
+  const worth = props.worth ?? [];
+  if (worth.length > 0) {
+    const first = worth[0]!;
+    needs.push({ text: `${plural(worth.length, "threshold")} worth moving`, key: "tune", target: { kind: "jevel", name: first.jevel }, tone: theme.accent });
+  }
   if (s.failedToday.count > 0) {
     needs.push({ text: `${plural(s.failedToday.count, "ask")} failed today (${s.failedToday.topError})`, key: "failed", target: { kind: "history", filters: { failed: true, since: midnight(props.now) } }, tone: theme.error });
   }
