@@ -9,7 +9,7 @@ import { installSkill, knownAgents, promptForKey, unknownAgents, whereToPutTheKe
 import { JevelError, discoveryDirs, listJevels, loadJevel } from "./jevel.js";
 import { defaultClient, renderTypes } from "./decide.js";
 import { resolveKey, storeKey } from "./key.js";
-import { appendLine, findAsk, jevelryHome, logAsk, outcomeOf, readLog } from "./log.js";
+import { appendLine, findAsk, jevelryHome, logAsk, logStateFromEnv, outcomeOf, readLog } from "./log.js";
 import { type AskDocument, type ErrorBody, type ErrorDocument, PROTOCOL } from "./protocol.js";
 import { renderReport, report } from "./report.js";
 
@@ -94,7 +94,8 @@ export function buildProgram(): Command {
     .option("--model <id>", "model id, overriding the jevel's pin and JEVELRY_MODEL")
     .option("--jevels <dir>", "a jevels directory searched first (repeatable)", (d: string, all: string[]) => [...all, d], [] as string[])
     .option("--no-log", "do not append this ask to the log")
-    .action(async (jevelName: string | undefined, opts: { state: string; questions?: string; model?: string; jevels: string[]; log: boolean }) => {
+    .option("--log-state", "write the state itself into the log line, not only its hash (or JEVELRY_LOG_STATE=1)")
+    .action(async (jevelName: string | undefined, opts: { state: string; questions?: string; model?: string; jevels: string[]; log: boolean; logState?: boolean }) => {
       let jevel: ReturnType<typeof loadJevel>["jevel"] | undefined;
       let questions: Questions | undefined;
       let state: unknown;
@@ -124,7 +125,8 @@ export function buildProgram(): Command {
       const document = result.document;
       if (opts.log) {
         const { jevel: j, model, state_hash, answers, usage } = document;
-        document.log_id = await logAsk(home(), { jevel: j, model, state_hash, answers, usage }, (m) => say(`warning: ${m}`));
+        const logged = opts.logState === true || logStateFromEnv(process.env) ? { state } : {};
+        document.log_id = await logAsk(home(), { jevel: j, model, state_hash, ...logged, answers, usage }, (m) => say(`warning: ${m}`));
       }
       out(document);
     });

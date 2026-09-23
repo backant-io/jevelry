@@ -18,8 +18,14 @@ beforeAll(async () => { server = await startServer(); });
 afterAll(async () => server.close());
 
 const client = (apiKey = "test-key", baseURL = server.url) => new TypeSafeClient({ apiKey, baseURL, retry: { maxRetries: 0 }, defaultModel: "jev-1.13.0" });
-const load = (options: { home?: string; log?: boolean; client?: TypeSafeClient } = {}) =>
-  jevel("wake-gate", { jevels: [FIXTURES], home: options.home ?? mkdtempSync(join(tmpdir(), "jevelry-decide-")), client: options.client ?? client(), ...(options.log === undefined ? {} : { log: options.log }) });
+const load = (options: { home?: string; log?: boolean; logState?: boolean; client?: TypeSafeClient } = {}) =>
+  jevel("wake-gate", {
+    jevels: [FIXTURES],
+    home: options.home ?? mkdtempSync(join(tmpdir(), "jevelry-decide-")),
+    client: options.client ?? client(),
+    ...(options.log === undefined ? {} : { log: options.log }),
+    ...(options.logState === undefined ? {} : { logState: options.logState }),
+  });
 
 describe("jevel() at load", () => {
   it("throws JevelError for a jevel that is not there, so a typo fails at startup and not at the first decision", () => {
@@ -80,6 +86,23 @@ describe("decide", () => {
     await expect(load().decide({ employee: {} })).rejects.toThrow(JevelError);
     await expect(load().decide(42)).rejects.toThrow(JevelError);
     expect(server.requests.length).toBe(before);
+  });
+
+  // States often hold customer text: hash only by default, the state itself only when the host asks.
+  it("logs the state only with logState: true or JEVELRY_LOG_STATE=1, on answered and failed asks", async () => {
+    const home = mkdtempSync(join(tmpdir(), "jevelry-decide-"));
+    await load({ home }).decide(state);
+    await load({ home, logState: true }).decide(state);
+    await load({ home, logState: true }).decide({ ...state, fail: 429 });
+    vi.stubEnv("JEVELRY_LOG_STATE", "1");
+    try {
+      await load({ home }).decide(state);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    const lines = (await readLog(home)) as AskLine[];
+    expect(lines.map((l) => l.state)).toEqual([undefined, state, { ...state, fail: 429 }, state]);
+    expect(lines[2]?.error?.code).toBe("rate_limited");
   });
 
   it("writes nothing with log: false", async () => {

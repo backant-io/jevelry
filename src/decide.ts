@@ -3,7 +3,7 @@ import { type EntryType, TypeSafeClient } from "@typesafe-ai/sdk";
 import { ask, errorBody, stateHash } from "./ask.js";
 import { type Jevel, JevelError, type JevelQuestion, checkState, discoveryDirs, expandQuestions, isEntry, loadJevel } from "./jevel.js";
 import { resolveKey } from "./key.js";
-import { jevelryHome, logAsk } from "./log.js";
+import { jevelryHome, logAsk, logStateFromEnv } from "./log.js";
 import type { Answer, ChoiceAnswer, ErrorBody, FallBackAnswer, NoulAnswer, ScoreAnswer, Usage } from "./protocol.js";
 
 /**
@@ -60,6 +60,8 @@ export interface JevelOptions {
   home?: string;
   /** Default true. */
   log?: boolean;
+  /** Write the state itself into the log line, not only its hash. Default false, or `JEVELRY_LOG_STATE=1`. */
+  logState?: boolean;
   /** Default: built the way the CLI builds it. */
   client?: TypeSafeClient;
 }
@@ -106,9 +108,10 @@ export function jevel<N extends string>(
       }
       const jevelRef = { name: loaded.name, version: loaded.version };
       const warn = (m: string): void => { process.emitWarning(m); };
+      const logged = (options.logState ?? logStateFromEnv(process.env)) ? { state } : {};
       if (result.ok) {
         const { model, state_hash, answers, usage } = result.document;
-        const logId = options.log === false ? null : await logAsk(home, { jevel: jevelRef, model, state_hash, answers, usage }, warn);
+        const logId = options.log === false ? null : await logAsk(home, { jevel: jevelRef, model, state_hash, ...logged, answers, usage }, warn);
         const decided = Object.fromEntries(Object.entries(answers).map(([q, a]) => [q, withAnswer(a)]));
         return { logId, error: null, model, usage, ...decided } as never;
       }
@@ -119,7 +122,7 @@ export function jevel<N extends string>(
       // Logged per question like an answer, so `report` counts every decision point that fired, the failed ones as fall_back.
       const logId = options.log === false
         ? null
-        : await logAsk(home, { jevel: jevelRef, model: null, state_hash: stateHash(state), answers: fallen, usage: null, error }, warn);
+        : await logAsk(home, { jevel: jevelRef, model: null, state_hash: stateHash(state), ...logged, answers: fallen, usage: null, error }, warn);
       return { logId, error, model: null, usage: null, ...fallen } as never;
     },
   };

@@ -101,6 +101,18 @@ describe("ask", () => {
     expect(log).toHaveLength(1);
     expect(JSON.parse(log[0] ?? "")).toMatchObject({ kind: "ask", id: doc.log_id, jevel: { name: "wake-gate", version: 1 } });
   });
+  // States often hold customer text: the log keeps only the hash until the host asks for the state itself.
+  it("logs the state only with --log-state or JEVELRY_LOG_STATE=1", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "jevelry-state-"));
+    const lastLine = () => JSON.parse(readFileSync(join(dir, "log.jsonl"), "utf8").trim().split("\n").at(-1) ?? "") as { state?: unknown; state_hash: string };
+    await run(["ask", "wake-gate", "--state", JSON.stringify(state)], { env: { JEVELRY_HOME: dir } });
+    expect(lastLine()).not.toHaveProperty("state");
+    expect(lastLine().state_hash).toMatch(/^sha256:/);
+    await run(["ask", "wake-gate", "--log-state", "--state", JSON.stringify(state)], { env: { JEVELRY_HOME: dir } });
+    expect(lastLine().state).toEqual(state);
+    await run(["ask", "wake-gate", "--state", JSON.stringify(state)], { env: { JEVELRY_HOME: dir, JEVELRY_LOG_STATE: "1" } });
+    expect(lastLine().state).toEqual(state);
+  });
   it("reads the state from stdin with --state -", async () => {
     const r = await run(["ask", "wake-gate", "--state", "-"], { input: JSON.stringify(state) });
     expect(r.status).toBe(0);
