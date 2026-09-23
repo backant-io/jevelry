@@ -62,6 +62,17 @@ function meaningOf(a: Answer, found: Found | null): string | null {
   return criteria ? labelOf(criteria[a.yes ? "true" : "false"]) : null;
 }
 
+/** Every option of an answer with its probability and whether Jev picked it, the way a card and Try draw them as bars. */
+export function optionsOf(answer: Answer): Array<[name: string, p: number, picked: boolean]> {
+  if (answer.type === "noul") return [["yes", answer.noul, answer.yes], ["no", 1 - answer.noul, !answer.yes]];
+  const picked = answer.type === "choice" ? answer.choice : String(Math.round(answer.score));
+  // A score's level words go next to the number when they are short; long ones are the meaning line under the bars.
+  const short = answer.type === "score" && Object.values(answer.legend).every((l) => (labelOf(l) ?? "").length <= 10);
+  return Object.entries(answer.probabilities).map(([name, p]) => [
+    answer.type === "score" ? (short ? `${name} ${labelOf(answer.legend[name]) ?? ""}`.trim() : `level ${name}`) : name, p, name === picked,
+  ]);
+}
+
 type Line = { text: string; tone: "text" | "muted" | "accent" | "error" | "act" | "mark" | "fall_back"; bold?: boolean };
 
 /** The right half of a card: the question, every option with its probability, what the pick means, the decision and what happened since. */
@@ -73,16 +84,7 @@ export function decidedLines(row: Row, found: Found | null, width: number, room:
   if (asked) out.push(...wrapLine(asked, width).slice(0, 2).map((text): Line => ({ text, tone: "muted" })));
   out.push({ text: " ", tone: "text" });
   if (hasAnswer(answer)) {
-    let options: Array<[name: string, p: number, picked: boolean]>;
-    if (answer.type === "noul") options = [["yes", answer.noul, answer.yes], ["no", 1 - answer.noul, !answer.yes]];
-    else {
-      const picked = answer.type === "choice" ? answer.choice : String(Math.round(answer.score));
-      // A score's level words go next to the number when they are short; long ones are the meaning line under the bars.
-      const short = answer.type === "score" && Object.values(answer.legend).every((l) => (labelOf(l) ?? "").length <= 10);
-      options = Object.entries(answer.probabilities).map(([name, p]) => [
-        answer.type === "score" ? (short ? `${name} ${labelOf(answer.legend[name]) ?? ""}`.trim() : `level ${name}`) : name, p, name === picked,
-      ]);
-    }
+    let options = optionsOf(answer);
     // A choice with more options than rows shows the likeliest ones.
     const fits = Math.max(2, room - out.length - 8);
     let more = 0;

@@ -213,7 +213,7 @@ describe("home screen", () => {
       stdin.write("\r");
       await tick();
       expect(lastFrame()).toContain("Try ticket-triage");
-      expect(lastFrame()).toContain("coming in the next task");
+      expect(lastFrame()).toContain("What Jev decided");
       unmount();
     }
   });

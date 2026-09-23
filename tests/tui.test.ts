@@ -405,9 +405,10 @@ describe("the shell", () => {
     await press(stdin, "v");
     expect(lastFrame()).toContain("Review 1 of 2");
     expect(lastFrame()).toMatch(/Was Jev right\?|reading…/);
+    // t opens the jevel picker; esc closes it where you were.
     await press(stdin, "t");
     expect(lastFrame()).toContain("Try a jevel");
-    await press(stdin, "y");
+    await press(stdin, ESC, "y");
     expect(lastFrame()).toContain("History");
     expect(lastFrame()).toContain("8 decisions");
     await press(stdin, "h");

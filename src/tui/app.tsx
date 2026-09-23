@@ -1,4 +1,5 @@
 import { watch } from "node:fs";
+import type { TypeSafeClient } from "@typesafe-ai/sdk";
 import { homedir } from "node:os";
 import { Box, Text, render, useApp, useInput, useWindowSize } from "ink";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -12,6 +13,7 @@ import { JevelView, TuneDialog, type QuestionView, questionViews, tunePlan } fro
 import { DetailView, ReviewView } from "./review.js";
 import { type Place, placeOf, proposeAct, tallies } from "./tuning.js";
 import { HomeView } from "./home.js";
+import { TryView } from "./try.js";
 import { THEMES, ThemeContext, type ThemeName, loadThemeName, saveThemeName, useTheme } from "./theme.js";
 
 /** The TUI is the one place that imports ink and react: `jevelry tui` loads this file with a dynamic import, so no other command pays for them. */
@@ -19,23 +21,6 @@ import { THEMES, ThemeContext, type ThemeName, loadThemeName, saveThemeName, use
 export type Screen = "home" | "review" | "history" | "try" | "jevel";
 
 const GLOBAL: Hint[] = [["h", "home"], ["v", "review"], ["y", "history"], ["t", "try"], ["ctrl+p", "commands"], ["?", "help"], ["q", "quit"]];
-
-/** A screen the next task builds: its title, what it will be for, and where to go meanwhile. */
-function Placeholder(props: { title: string; purpose: string; meanwhile: string; height: number }): React.JSX.Element {
-  const theme = useTheme();
-  useChrome([]);
-  return (
-    <Box flexDirection="column" alignItems="center" justifyContent="center" height={props.height}>
-      <Box flexDirection="column" backgroundColor={theme.panel} paddingX={3} paddingY={1}>
-        <Text bold color={theme.text}>{props.title}</Text>
-        <Text color={theme.muted}>{props.purpose}</Text>
-        <Text> </Text>
-        <Text color={theme.text}>This screen is coming in the next task.</Text>
-        <Text color={theme.muted}>{props.meanwhile}</Text>
-      </Box>
-    </Box>
-  );
-}
 
 /**
  * Keys on the left; on the right the home directory and version, or for four seconds the toast in their place,
@@ -128,7 +113,7 @@ async function readCounted(home: string): Promise<{ lines: LogLine[]; skipped: n
   return { lines, skipped };
 }
 
-type Command = { go: Screen } | { jevel: string } | { theme: true } | { help: true } | { quit: true };
+type Command = { go: Screen } | { jevel: string } | { pick: true } | { theme: true } | { help: true } | { quit: true };
 
 export function App(props: {
   home: string;
@@ -144,8 +129,10 @@ export function App(props: {
   now?: () => Date;
   /** Where a jevel is copied to be tuned; `./jevels` by default. */
   project?: string;
-  /** The jevel the Jevel screen opens on. */
+  /** The jevel the Jevel screen, or Try, opens on. */
   jevel?: string;
+  /** What Try asks Jev through; tests pass one that talks to a local server. */
+  client?: TypeSafeClient;
 }): React.JSX.Element {
   const { exit } = useApp();
   const window = useWindowSize();
@@ -156,7 +143,12 @@ export function App(props: {
   const [skipped, setSkipped] = useState(props.skipped ?? 0);
   const [screen, setScreen] = useState<Screen>(props.screen ?? "home");
   const [themeName, setThemeName] = useState<ThemeName>(() => loadThemeName(props.home));
-  const [dialog, setDialog] = useState<null | "palette" | "theme" | "help" | "tune">(null);
+  const [dialog, setDialog] = useState<null | "palette" | "theme" | "help" | "tune" | "pick" | "quit">(null);
+  /** The jevel Try asks, and the state text left in Try per jevel, kept while jevelry runs. */
+  const [tryName, setTryName] = useState<string | null>(props.screen === "try" ? props.jevel ?? null : null);
+  const drafts = useRef(new Map<string, { text: string; edited: boolean }>()).current;
+  /** q asks first when an edit in Try would be lost. */
+  const quit = (): void => { if ([...drafts.values()].some((d) => d.edited)) setDialog("quit"); else exit(); };
   const [hints, setHints] = useState<Hint[]>([]);
   const [capture, setCaptureState] = useState(false);
   const captureRef = useRef(false);
@@ -266,7 +258,8 @@ export function App(props: {
     else if ("jevel" in c) { setJevel(c.jevel); setJevelFocus(undefined); go("jevel"); }
     else if ("theme" in c) setDialog("theme");
     else if ("help" in c) setDialog("help");
-    else exit();
+    else if ("pick" in c) setDialog("pick");
+    else quit();
   };
   useInput((input, key) => {
     // Typed text belongs to the screen (the ref is set the moment a screen starts taking it).
@@ -276,11 +269,11 @@ export function App(props: {
     // A chunk of several keys (a paste, a burst) belongs to the screen.
     else if (input.length > 1) return;
     else if (input === "?") setDialog("help");
-    else if (input === "q") exit();
+    else if (input === "q") quit();
     else if (input === "h") go("home");
     else if (input === "v") go("review");
     else if (input === "y") go("history");
-    else if (input === "t") { setJevel(null); go("try"); }
+    else if (input === "t") setDialog("pick");
   }, { isActive: dialog === null });
 
   const body = rows - 1;
@@ -316,12 +309,16 @@ export function App(props: {
           setScreen("history"); setHistoryView("list"); setFromHome(false); setHistoryBack("jevel");
         }} />
     );
-  } else if (screen === "try") {
-    content = <Placeholder title={`Try ${jevel ?? "a jevel"}`} purpose="Ask Jev live with an example state and see how it decides." meanwhile="Meanwhile: npx jevelry ask ticket-triage --state @jevels/ticket-triage/example.json" height={body} />;
+  } else if (screen === "try" && tryName !== null) {
+    content = (
+      <TryView key={tryName} name={tryName} dirs={props.dirs} home={props.home} {...(props.client ? { client: props.client } : {})} {...(drafts.has(tryName) ? { draft: drafts.get(tryName)!.text } : {})}
+        onDraft={(text, edited) => drafts.set(tryName, { text, edited })}
+        width={columns} height={body} active={active} onPick={() => setDialog("pick")} onBack={() => go("home")} onAsked={reload} />
+    );
   } else {
     content = (
       <HomeView lines={lines} worth={worth} now={(props.now ?? (() => new Date()))()} version={version} width={columns} height={body} rows={rows} fresh={fresh} active={active} cursor={homeCursor} onCursor={setHomeCursor}
-        onTry={(name) => { setJevel(name); go("try"); }}
+        onTry={(name) => { setTryName(name); go("try"); }}
         onOpen={(target) => {
           if (target.kind === "review") go("review");
           else if (target.kind === "jevel") { setJevel(target.name); setJevelFocus(target.question); go("jevel"); }
@@ -336,7 +333,7 @@ export function App(props: {
     { label: "Home", value: { go: "home" }, hint: "h" },
     { label: "Review marked decisions", value: { go: "review" }, hint: "v" },
     { label: "History", value: { go: "history" }, hint: "y" },
-    { label: "Try a jevel", value: { go: "try" }, hint: "t" },
+    { label: "Try a jevel", value: { pick: true }, hint: "t" },
     { label: "Switch theme", value: { theme: true }, hint: themeName },
     { label: "Help", value: { help: true }, hint: "?" },
     { label: "Quit", value: { quit: true }, hint: "q" },
@@ -352,7 +349,7 @@ export function App(props: {
           <Box height={body} flexDirection="column" overflow="hidden">{content}</Box>
           <Footer
             hints={dialog === null ? hints : []}
-            extra={dialog === "help" ? [["esc", "close"]] : dialog === "tune" ? tuneKeys : dialog !== null ? [["↑↓", "move"], ["enter", "choose"], ["esc", "close"]] : capture ? [] : [["ctrl+p", "commands"], ["?", "help"]]}
+            extra={dialog === "help" ? [["esc", "close"]] : dialog === "tune" ? tuneKeys : dialog === "quit" ? [["enter", "quit"], ["esc", "stay"]] : dialog !== null ? [["↑↓", "move"], ["enter", "choose"], ["esc", "close"]] : capture ? [] : [["ctrl+p", "commands"], ["?", "help"]]}
             home={home} version={version} width={columns} toast={toast} />
           {dialog === "palette" ? <SelectDialog title="Commands" items={palette()} columns={columns} rows={rows} onSelect={run} onClose={() => setDialog(null)} /> : null}
           {dialog === "theme" ? (
@@ -378,10 +375,31 @@ export function App(props: {
                 setQuiet(true); setTimeout(() => setQuiet(false), 300);
               }} />
           ) : null}
+          {dialog === "pick" ? (
+            <SelectDialog title="Try a jevel" items={shipped.map((name) => ({ label: name, value: name, hint: questionCount(loaded(name)) }))} columns={columns} rows={rows}
+              onClose={() => setDialog(null)} onSelect={(name) => { setDialog(null); setTryName(name); go("try"); }} />
+          ) : null}
+          {dialog === "quit" ? <QuitDialog columns={columns} rows={rows} onQuit={exit} onStay={() => setDialog(null)} /> : null}
           {dialog === "help" ? <HelpDialog hints={hints} columns={columns} rows={rows} onClose={() => setDialog(null)} /> : null}
         </Root>
       </ChromeContext.Provider>
     </ThemeContext.Provider>
+  );
+}
+
+const questionCount = (j: Jevel | null): string => (j === null ? "" : `${Object.keys(j.questions).length} question${Object.keys(j.questions).length === 1 ? "" : "s"}`);
+
+/** An edit in Try lives only while jevelry runs, so q asks before it goes. */
+function QuitDialog(props: { columns: number; rows: number; onQuit: () => void; onStay: () => void }): React.JSX.Element {
+  const theme = useTheme();
+  useInput((input, key) => { if (key.return || input === "q" || input === "y") props.onQuit(); else if (key.escape || input === "n") props.onStay(); });
+  return (
+    <Dialog title="Quit jevelry?" width={56} columns={props.columns} rows={props.rows} height={9}>
+      <Text> </Text>
+      <Text color={theme.text}>The state you edited in Try is kept only while jevelry runs.</Text>
+      <Text> </Text>
+      <Text><Text color={theme.accent} bold>enter</Text><Text color={theme.text}> quit   </Text><Text color={theme.accent} bold>esc</Text><Text color={theme.text}> stay</Text></Text>
+    </Dialog>
   );
 }
 
