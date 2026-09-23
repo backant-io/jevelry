@@ -8,7 +8,7 @@ import { type Jevel, listJevels, loadJevel } from "../jevel.js";
 import { LOG_FILE, type LogLine, readLog } from "../log.js";
 import { ChromeContext, Dialog, type Hint, SelectDialog, type SelectItem, useChrome } from "./dialog.js";
 import { ALL, DecisionsView, type Filters, NO_JEVEL, ReportView, jevelNames, rowsOf, thresholdsLookup } from "./history.js";
-import { JevelView, TuneDialog, type QuestionView, questionViews } from "./jevel-screen.js";
+import { JevelView, TuneDialog, type QuestionView, questionViews, tunePlan } from "./jevel-screen.js";
 import { DetailView, ReviewView } from "./review.js";
 import { type Place, placeOf, proposeAct, tallies } from "./tuning.js";
 import { HomeView } from "./home.js";
@@ -142,8 +142,6 @@ export function App(props: {
   size?: { columns: number; rows: number };
   /** The clock Home counts "today" from; tests pin it. */
   now?: () => Date;
-  /** The jevels folder of the jevelry package: those files are not the project's to tune. */
-  shippedDir?: string;
   /** Where a jevel is copied to be tuned; `./jevels` by default. */
   project?: string;
   /** The jevel the Jevel screen opens on. */
@@ -160,7 +158,10 @@ export function App(props: {
   const [themeName, setThemeName] = useState<ThemeName>(() => loadThemeName(props.home));
   const [dialog, setDialog] = useState<null | "palette" | "theme" | "help" | "tune">(null);
   const [hints, setHints] = useState<Hint[]>([]);
-  const [capture, setCapture] = useState(false);
+  const [capture, setCaptureState] = useState(false);
+  const captureRef = useRef(false);
+  const setCapture = (on: boolean): void => { captureRef.current = on; setCaptureState(on); };
+  const captureNow = (on: boolean): void => { captureRef.current = on; };
   const [toast, setToast] = useState<{ text: string; error: boolean } | null>(null);
   const [filters, setFilters] = useState<Filters>(props.filters ?? ALL);
   const [historyView, setHistoryView] = useState<"list" | "detail" | "report">("list");
@@ -194,9 +195,14 @@ export function App(props: {
     return j !== null && q !== null && proposeAct(t, mergeThresholds(j.thresholds, q.thresholds)) !== null;
   }).map((t) => ({ jevel: t.jevel, question: t.question })), [byQuestion, loaded]);
   const [tuning, setTuning] = useState<QuestionView | null>(null);
+  const [quiet, setQuiet] = useState(false);
+  const [jevelFocus, setJevelFocus] = useState<string | undefined>(undefined);
+  const project = props.project ?? join(process.cwd(), "jevels");
   /** Where esc from History goes: Home, or the Jevel screen that opened it. */
   const [historyBack, setHistoryBack] = useState<Screen>("home");
-  const place = (j: Jevel): Place => placeOf(j.path, { home: props.home, ...(props.shippedDir ? { shipped: props.shippedDir } : {}) });
+  const place = (j: Jevel): Place => placeOf(j.path, { home: props.home });
+  const tuneBlocked = dialog === "tune" && tuning !== null && jevel !== null && loaded(jevel) !== null
+    ? tunePlan(loaded(jevel)!, place(loaded(jevel)!), tuning, project).blocked !== null : false;
   const toastTimer = useRef<NodeJS.Timeout | undefined>(undefined);
 
   const say = (text: string, error = false): void => {
@@ -256,21 +262,25 @@ export function App(props: {
   const run = (c: Command): void => {
     setDialog(null);
     if ("go" in c) go(c.go);
-    else if ("jevel" in c) { setJevel(c.jevel); go("jevel"); }
+    else if ("jevel" in c) { setJevel(c.jevel); setJevelFocus(undefined); go("jevel"); }
     else if ("theme" in c) setDialog("theme");
     else if ("help" in c) setDialog("help");
     else exit();
   };
   useInput((input, key) => {
+    // Typed text belongs to the screen (the ref is set the moment a screen starts taking it).
+    if (captureRef.current) return;
     if (key.ctrl && input === "p") setDialog("palette");
     else if (key.ctrl || key.meta) return;
+    // A chunk of several keys (a paste, a burst) belongs to the screen.
+    else if (input.length > 1) return;
     else if (input === "?") setDialog("help");
     else if (input === "q") exit();
     else if (input === "h") go("home");
     else if (input === "v") go("review");
     else if (input === "y") go("history");
     else if (input === "t") { setJevel(null); go("try"); }
-  }, { isActive: dialog === null && !capture });
+  }, { isActive: dialog === null });
 
   const body = rows - 1;
   const active = dialog === null;
@@ -297,7 +307,7 @@ export function App(props: {
   } else if (screen === "jevel" && jevel !== null) {
     const file = loaded(jevel);
     content = (
-      <JevelView key={jevel} name={jevel} jevel={file} place={file ? place(file) : null} views={questionViews(file, jevel, byQuestion)} width={columns} height={body} active={active}
+      <JevelView key={`${jevel}\n${jevelFocus ?? ""}`} name={jevel} {...(jevelFocus ? { focus: jevelFocus } : {})} jevel={file} place={file ? place(file) : null} views={questionViews(file, jevel, byQuestion)} width={columns} height={body} active={active && !quiet}
         onBack={() => go("home")}
         onTune={(view) => { setTuning(view); setDialog("tune"); }}
         onOpen={(question) => {
@@ -313,7 +323,7 @@ export function App(props: {
         onTry={(name) => { setJevel(name); go("try"); }}
         onOpen={(target) => {
           if (target.kind === "review") go("review");
-          else if (target.kind === "jevel") { setJevel(target.name); go("jevel"); }
+          else if (target.kind === "jevel") { setJevel(target.name); setJevelFocus(target.question); go("jevel"); }
           else if (target.kind === "decision") { setOpen({ id: target.id, question: target.question }); setFromHome(true); setScreen("history"); setHistoryView("detail"); }
           else { setFilters({ ...ALL, ...target.filters }); setCursor(0); setJumped(true); setScreen("history"); setHistoryView("list"); setFromHome(false); }
         }} />
@@ -336,12 +346,12 @@ export function App(props: {
   const home = tilde.length > 24 ? `...${tilde.slice(-21)}` : tilde;
   return (
     <ThemeContext.Provider value={THEMES[themeName]}>
-      <ChromeContext.Provider value={{ setHints, setCapture }}>
+      <ChromeContext.Provider value={{ setHints, setCapture, captureNow }}>
         <Root columns={columns} rows={rows}>
           <Box height={body} flexDirection="column" overflow="hidden">{content}</Box>
           <Footer
             hints={dialog === null ? hints : []}
-            extra={dialog === "help" ? [["esc", "close"]] : dialog === "tune" ? [["enter", "set"], ["esc", "cancel"]] : dialog !== null ? [["↑↓", "move"], ["enter", "choose"], ["esc", "close"]] : capture ? [] : [["ctrl+p", "commands"], ["?", "help"]]}
+            extra={dialog === "help" ? [["esc", "close"]] : dialog === "tune" ? (tuneBlocked ? [["esc", "close"]] : [["enter", "set"], ["esc", "cancel"]]) : dialog !== null ? [["↑↓", "move"], ["enter", "choose"], ["esc", "close"]] : capture ? [] : [["ctrl+p", "commands"], ["?", "help"]]}
             home={home} version={version} width={columns} toast={toast} />
           {dialog === "palette" ? <SelectDialog title="Commands" items={palette()} columns={columns} rows={rows} onSelect={run} onClose={() => setDialog(null)} /> : null}
           {dialog === "theme" ? (
@@ -359,9 +369,13 @@ export function App(props: {
             />
           ) : null}
           {dialog === "tune" && tuning && jevel && loaded(jevel) ? (
-            <TuneDialog jevel={loaded(jevel)!} place={place(loaded(jevel)!)} view={tuning} project={props.project ?? join(process.cwd(), "jevels")} columns={columns} rows={rows}
-              onClose={() => setDialog(null)}
-              onDone={(message, error) => { setDialog(null); say(message, error); setRev((r) => r + 1); }} />
+            <TuneDialog jevel={loaded(jevel)!} place={place(loaded(jevel)!)} view={tuning} project={project} columns={columns} rows={rows}
+              onClose={() => setDialog(null)} onQuit={exit}
+              onDone={(message, error) => {
+                setDialog(null); say(message, error); setRev((r) => r + 1);
+                // A second enter from the same press must not fall through to the Jevel screen.
+                setQuiet(true); setTimeout(() => setQuiet(false), 300);
+              }} />
           ) : null}
           {dialog === "help" ? <HelpDialog hints={hints} columns={columns} rows={rows} onClose={() => setDialog(null)} /> : null}
         </Root>
@@ -376,12 +390,12 @@ function Root(props: { columns: number; rows: number; children: React.ReactNode 
   return <Box width={props.columns} height={props.rows} flexDirection="column" backgroundColor={theme.background}>{props.children}</Box>;
 }
 
-export async function runTui(input: { home: string; dirs: string[]; version: string; shippedDir?: string; jevel?: string; since?: string }): Promise<void> {
+export async function runTui(input: { home: string; dirs: string[]; version: string; jevel?: string; since?: string }): Promise<void> {
   const { lines, skipped } = await readCounted(input.home);
   const filtered = input.jevel !== undefined || input.since !== undefined;
   const filters: Filters = { ...ALL, jevel: input.jevel ?? null, since: input.since ?? null };
   const app = render(
-    <App home={input.home} dirs={input.dirs} lines={lines} skipped={skipped} filters={filters} version={input.version} screen={filtered ? "history" : "home"} {...(input.shippedDir ? { shippedDir: input.shippedDir } : {})} />,
+    <App home={input.home} dirs={input.dirs} lines={lines} skipped={skipped} filters={filters} version={input.version} screen={filtered ? "history" : "home"} />,
     { alternateScreen: true },
   );
   await app.waitUntilExit();

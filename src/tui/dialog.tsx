@@ -6,9 +6,15 @@ import { useTheme } from "./theme.js";
 export type Hint = [key: string, label: string];
 
 /** How a screen tells the app shell which keys it offers and whether it is taking typed text (then the global keys stay off). */
-export const ChromeContext = createContext<{ setHints: (hints: Hint[]) => void; setCapture: (capture: boolean) => void }>({
+export const ChromeContext = createContext<{
+  setHints: (hints: Hint[]) => void;
+  setCapture: (capture: boolean) => void;
+  /** The same, at once: a key that arrives before the next render must already be text, not a shell key. */
+  captureNow: (capture: boolean) => void;
+}>({
   setHints: () => undefined,
   setCapture: () => undefined,
+  captureNow: () => undefined,
 });
 
 export function useChrome(hints: Hint[], capture = false): void {

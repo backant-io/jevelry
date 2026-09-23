@@ -2,7 +2,7 @@ import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, sep } from "node:path";
 import { type Node, isMap, isScalar, parseDocument } from "yaml";
 import { mergeThresholds, type Thresholds } from "../decision.js";
-import { parseJevel } from "../jevel.js";
+import { SHIPPED_JEVELS, parseJevel } from "../jevel.js";
 import type { AskLine, LogLine } from "../log.js";
 import { recordedDecision } from "../report.js";
 
@@ -72,11 +72,15 @@ export interface Proposal {
 export const MIN_REVIEWED = 20;
 const EPS = 1e-9;
 
+/** A proposal stays at least this far above the mark threshold, so the mark band never closes. */
+export const MARK_GAP = 0.05;
+
 /**
- * The threshold tuning rule. Among the reviewed act and mark decisions, the lowest act threshold from the mark threshold
- * up to 0.99, in steps of 0.01, at which the decisions at or above it were right at least as often as they are at the
- * current act threshold minus two points, and never less than 90% of the time. null when there are fewer than 20 reviewed
- * decisions, none at the current threshold, or no lower threshold holds.
+ * The threshold tuning rule. Among the reviewed act and mark decisions, the lowest certainty of a reviewed decision,
+ * at least 0.05 above the mark threshold and below the current act threshold, at which the decisions at or above it
+ * were right at least as often as they are at the current act threshold minus two points, and never less than 90% of
+ * the time. A certainty Jev actually gave and a person checked, so no unreviewed stretch hides under the new threshold.
+ * null when there are fewer than 20 reviewed decisions, none at the current threshold, or no lower threshold holds.
  */
 export function proposeAct(t: Pick<Tally, "reviewed" | "certainties">, thresholds: Thresholds): Proposal | null {
   if (t.reviewed.length < MIN_REVIEWED) return null;
@@ -87,11 +91,12 @@ export function proposeAct(t: Pick<Tally, "reviewed" | "certainties">, threshold
   const current = agreementAt(thresholds.act);
   if (current === null) return null;
   const target = Math.max(current - 0.02, 0.9);
-  for (let k = Math.ceil(thresholds.mark * 100 - EPS); k <= 99; k++) {
-    const act = k / 100;
-    if (act >= thresholds.act - EPS) return null;
-    const agreement = agreementAt(act);
-    if (agreement === null || agreement < target - EPS) continue;
+  const candidates = [...new Set(t.reviewed.map((r) => r.certainty))]
+    .filter((c) => c >= thresholds.mark + MARK_GAP - EPS && c < thresholds.act - EPS)
+    .sort((a, b) => a - b);
+  for (const act of candidates) {
+    const agreement = agreementAt(act)!;
+    if (agreement < target - EPS) continue;
     const between = t.certainties.filter((c) => c >= act - EPS && c < thresholds.act - EPS).length;
     return { act, agreement, current, more: t.certainties.length === 0 ? 0 : between / t.certainties.length, reviewed: t.reviewed.length };
   }
@@ -125,6 +130,8 @@ export function setActThreshold(text: string, question: string, act: number): { 
   const doc = parseDocument(text.slice(base, open[0].length - 1 + close.index));
   if (doc.errors.length > 0) throw new Error(`the frontmatter is not YAML: ${doc.errors[0]!.message}`);
   const value = String(act);
+  // An inserted line takes the file's own line end.
+  const eol = /\r\n/.test(text) ? "\r\n" : "\n";
   // Edits as [offset in the file, length to replace, new text], applied from the end so the earlier offsets hold.
   const edits: Array<[number, number, string]> = [];
   const q = doc.getIn(["questions", question], true) as Node | undefined;
@@ -134,7 +141,7 @@ export function setActThreshold(text: string, question: string, act: number): { 
   if (thresholds === undefined) {
     if (q.flow) throw new Error(`questions.${question} is written on one line; add thresholds to it by hand`);
     const at = base + (q.items[0]!.key as Node).range![0];
-    edits.push([at, 0, `thresholds: { act: ${value} }\n${indentAt(at)}`]);
+    edits.push([at, 0, `thresholds: { act: ${value} }${eol}${indentAt(at)}`]);
   } else if (!isMap(thresholds)) {
     throw new Error(`questions.${question}.thresholds is not a map`);
   } else {
@@ -145,7 +152,7 @@ export function setActThreshold(text: string, question: string, act: number): { 
       edits.push([base + thresholds.range![0], thresholds.range![1] - thresholds.range![0], `{ act: ${value} }`]);
     } else {
       const at = base + (thresholds.items[0]!.key as Node).range![0];
-      edits.push([at, 0, thresholds.flow ? `act: ${value}, ` : `act: ${value}\n${indentAt(at)}`]);
+      edits.push([at, 0, thresholds.flow ? `act: ${value}, ` : `act: ${value}${eol}${indentAt(at)}`]);
     }
   }
   const version = doc.get("version", true) as Node | undefined;
@@ -178,6 +185,7 @@ export function setActThreshold(text: string, question: string, act: number): { 
 export type Place = { kind: "project" } | { kind: "shipped" } | { kind: "home" };
 
 export function placeOf(path: string, dirs: { shipped?: string; home: string }): Place {
+  dirs = { shipped: SHIPPED_JEVELS, ...dirs };
   const under = (dir: string | undefined): boolean => dir !== undefined && path.startsWith(dir.endsWith(sep) ? dir : dir + sep);
   if (under(dirs.shipped)) return { kind: "shipped" };
   if (under(join(dirs.home, "jevels"))) return { kind: "home" };

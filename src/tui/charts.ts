@@ -58,8 +58,8 @@ export function mix(act: number, mark: number, fallBack: number, width: number):
 }
 
 /**
- * Certainties from 0 to 1 counted into `width` columns and drawn as one row of spark glyphs,
- * then a second row with `│` under each threshold in `marks`. Two lines joined by a newline; no certainties draw a flat floor.
+ * Certainties from 0 to 1 counted into `width` columns and drawn as one row of spark glyphs, an empty column as `·`
+ * so "none" never looks like "a few", then a second row with `│` under each threshold in `marks`. Two lines joined by a newline.
  */
 export function histogram(certainties: number[], width: number, marks: number[]): string {
   if (!(width > 0)) return "\n";
@@ -68,5 +68,6 @@ export function histogram(certainties: number[], width: number, marks: number[])
   for (const c of certainties) if (Number.isFinite(c)) counts[column(c)]! += 1;
   const under = new Array<string>(width).fill(" ");
   for (const m of marks) if (Number.isFinite(m)) under[column(m)] = "│";
-  return `${spark(counts, width)}\n${under.join("").trimEnd()}`;
+  const bars = [...spark(counts, width)].map((g, i) => (counts[i] === 0 ? "·" : g)).join("");
+  return `${bars}\n${under.join("").trimEnd()}`;
 }

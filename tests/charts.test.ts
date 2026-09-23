@@ -54,12 +54,12 @@ describe("mix", () => {
 describe("histogram", () => {
   it("counts certainties into columns and marks each threshold under its column", () => {
     const [top, marks] = histogram([0.05, 0.95, 0.95, 0.72], 10, [0.7, 0.9]).split("\n");
-    expect(top).toBe("▅▁▁▁▁▁▁▅▁█");
+    expect(top).toBe("▅······▅·█");
     expect(marks).toBe("       │ │");
   });
 
   it("puts a certainty of exactly 1 in the last column", () => {
-    expect(histogram([1], 4, []).split("\n")[0]).toBe("▁▁▁█");
+    expect(histogram([1], 4, []).split("\n")[0]).toBe("···█");
   });
 });
 
@@ -88,10 +88,10 @@ describe("chart edges", () => {
     expect(bar(Number.NaN, 4)).toBe("    ");
     expect(spark([Number.NaN, 2], 2)).toBe("▁█");
     expect(mix(Number.NaN, 1, 0, 4)).toBe("▓▓▓▓");
-    expect(histogram([Number.NaN, 0.5], 4, [Number.NaN]).split("\n")).toEqual(["▁▁█▁", ""]);
+    expect(histogram([Number.NaN, 0.5], 4, [Number.NaN]).split("\n")).toEqual(["··█·", ""]);
   });
 
-  it("draws an empty histogram as a flat floor with its threshold marks", () => {
-    expect(histogram([], 5, [0.7])).toBe("▁▁▁▁▁\n   │");
+  it("draws an empty histogram as a row of dots, so no bin reads as a small count", () => {
+    expect(histogram([], 5, [0.7])).toBe("·····\n   │");
   });
 });

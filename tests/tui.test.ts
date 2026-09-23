@@ -12,7 +12,7 @@ import { type AskLine, type LogLine, type OutcomeLine, type RunLine, readLog } f
 import type { Answer } from "../src/protocol.js";
 import { fuzzyFilter } from "../src/tui/dialog.js";
 import { loadThemeName, saveThemeName } from "../src/tui/theme.js";
-import { DecisionsView, type Filters, ReportView, otherValues, rowsOf } from "../src/tui/history.js";
+import { DecisionsView, type Filters, type Found, ReportView, otherValues, rowsOf } from "../src/tui/history.js";
 import { DetailView, stateLines } from "../src/tui/review.js";
 import { App } from "../src/tui/app.js";
 
@@ -61,6 +61,8 @@ const ENTER = "\r";
 const CTRL_P = "\u0010";
 const ESC = "\u001B";
 const DOWN = "\u001B[B";
+/** A card takes a, d and s only once it has been on screen this long (SETTLE_MS plus slack). */
+const SETTLE = 520;
 
 const homeWith = (lines: LogLine[]): string => {
   const home = mkdtempSync(join(tmpdir(), "jevelry-tui-"));
@@ -112,16 +114,18 @@ describe("decisions view", () => {
 });
 
 describe("detail view", () => {
-  const detail = (row: ReturnType<typeof rowsOf>[number], thresholds: { thresholds: { act: number; mark: number }; version: number } | null) =>
+  const detail = (row: ReturnType<typeof rowsOf>[number], thresholds: Found | null) =>
     render(createElement(DetailView, { row, home: homeWith(LOG), thresholds, height: 60, width: 100, onBack: noop, onRecorded: noop })).lastFrame() ?? "";
   const row = (id: string, question: string) => rowsOf(LOG, ALL).find((r) => r.ask.id === id && r.question === question)!;
 
   it("shows every option with its probability, the picked one marked, certainty against the thresholds and the logged state", () => {
-    const frame = detail(row(A.id, "team"), { thresholds: { act: 0.8, mark: 0.6 }, version: 3 });
+    const frame = detail(row(A.id, "team"), { thresholds: { act: 0.8, mark: 0.6 }, version: 3, question: { type: "choice", instructions: "Which team?" } });
     expect(frame).toContain("ticket-triage team  v3");
     expect(frame).toMatch(/> billing\s+█+[▏▎▍▌▋▊▉]?\s+0\.91/);
     expect(frame).toMatch(/ {2}technical\s+\S*\s+0\.05/);
     expect(frame).toContain("certainty 0.91  (act 0.80, mark 0.60)");
+    // A question the file no longer has says so instead of showing the jevel-wide thresholds as its own.
+    expect(detail(row(A.id, "team"), { thresholds: { act: 0.8, mark: 0.6 }, version: 3 })).toContain("this question is no longer in the jevel file");
     expect(frame).toContain("decision  act  Jev was sure");
     expect(frame).toContain("subject: Charged twice");
   });
@@ -196,7 +200,7 @@ describe("recording outcomes from the review queue", () => {
     for (const ch of "late reply") stdin.write(ch);
     await tick();
     stdin.write(ENTER);
-    await tick();
+    await tick(SETTLE);
     stdin.write("a");
     await tick(200);
     // One outcome per visit: the detail closes and the queue shows the next mark.
@@ -206,6 +210,7 @@ describe("recording outcomes from the review queue", () => {
     stdin.write(ENTER);
     await tick();
     expect(lastFrame()).toMatch(/question {2}frustration/);
+    await tick(SETTLE);
     stdin.write("d");
     await tick();
     expect(lastFrame()).toContain("What was right?");
@@ -227,6 +232,7 @@ describe("recording outcomes from the review queue", () => {
     await tick();
     for (const key of ["j", "j", ENTER]) { stdin.write(key); await tick(20); }
     expect(lastFrame()).toMatch(/question {2}team/);
+    await tick(SETTLE);
     stdin.write("a");
     stdin.write("a");
     stdin.write("d");
@@ -518,7 +524,9 @@ describe("review fixes", () => {
     const home = homeWith(LOG);
     const { stdin, lastFrame, unmount } = render(createElement(App, { home, dirs: [], lines: LOG, screen: "history", size: SIZE, filters: { ...ALL, decision: "mark", noOutcome: true } }));
     await tick();
-    await press(stdin, ENTER, "a");
+    await press(stdin, ENTER);
+    await tick(SETTLE);
+    await press(stdin, "a");
     await tick(200);
     const lines = (lastFrame() ?? "").split("\n");
     expect(lines[1]).toMatch(/^ decision mark {3}jevel all {3}outcome none yet\s*$/);

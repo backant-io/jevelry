@@ -43,10 +43,23 @@ describe("the tuning rule", () => {
     expect(p.more).toBeCloseTo(certainties.filter((c) => c >= 0.75 && c < 0.9).length / certainties.length, 10);
   });
 
-  // Below mark the decision would skip the check a person does on a mark; the rule stops there.
-  it("never goes below the mark threshold", () => {
+  // Below mark the decision would skip the check a person does on a mark; the rule keeps a band of 0.05 above it.
+  it("never goes below the mark threshold plus 0.05", () => {
     const r = spread(40, 0.3, 0.99, () => true);
-    expect(proposeAct({ reviewed: r, certainties: r.map((x) => x.certainty) }, { act: 0.9, mark: 0.7 })!.act).toBe(0.7);
+    const lowest = Math.min(...r.map((x) => x.certainty).filter((c) => c >= 0.75));
+    expect(lowest).toBeGreaterThan(0.75);
+    expect(proposeAct({ reviewed: r, certainties: r.map((x) => x.certainty) }, { act: 0.9, mark: 0.7 })!.act).toBe(lowest);
+    const onGrid = spread(70, 0.3, 0.99, () => true);
+    expect(proposeAct({ reviewed: onGrid, certainties: [] }, { act: 0.9, mark: 0.7 })!.act).toBe(0.75);
+  });
+
+  // A threshold between two reviewed certainties would let unreviewed decisions act on no evidence at all.
+  it("proposes the certainty of a decision someone reviewed, never a step in between", () => {
+    const r = reviewed([...Array.from({ length: 20 }, (): [number, boolean] => [0.95, true]), ...Array.from({ length: 5 }, (): [number, boolean] => [0.87, true]), [0.79, false]]);
+    const unreviewed = [0.8, 0.81, 0.82, 0.83, 0.84, 0.85, 0.86];
+    const p = proposeAct({ reviewed: r, certainties: [...r.map((x) => x.certainty), ...unreviewed] }, { act: 0.9, mark: 0.6 })!;
+    expect(p.act).toBe(0.87);
+    expect(r.map((x) => x.certainty)).toContain(p.act);
   });
 
   // When act is right only 85% of the time already, "two points less" would be 83%; the floor is 90%.
@@ -108,6 +121,16 @@ describe("setting the act threshold in the file", () => {
     expect(parsed.questions.team!.thresholds).toEqual({ act: 0.72, mark: 0.6 });
     expect(parsed.version).toBe(4);
     expect(parsed.body).toBe(parseJevel(shipped, "ticket-triage").jevel.body);
+  });
+
+  // A CRLF file with one LF line reads as a mixed file in every diff and editor.
+  it("inserts a line with the file's own CRLF line end", () => {
+    const crlf = wake.replace(/\n/g, "\r\n");
+    for (const question of ["worth_a_turn", "same_as"]) {
+      const text = crlf.replace("    thresholds: { act: 0.85 }", "    thresholds:\r\n      mark: 0.7");
+      const edited = setActThreshold(text, question, 0.8).text;
+      expect(edited).not.toMatch(/[^\r]\n/);
+    }
   });
 
   it("keeps CRLF line ends and edits a flow map without mark", () => {
@@ -176,11 +199,12 @@ describe("jevel screen", () => {
       expect(frame).toMatch(/> team {2}choice {2}act ≥ 0\.80 {2}mark ≥ 0\.60 {2}60 decisions/);
       expect(frame).toMatch(/█+▓+ {2}act 40% {2}mark 60% {2}fall_back 0%/);
       expect(frame).toContain("act right 100% of 20   mark right 47% of 30");
-      expect(frame).toMatch(/0 [▁-█]+ 1 {2}certainty of each answer/);
-      expect(frame).toContain("│ mark 0.60  │ act 0.80");
+      // Empty bins are dots, so "none" never reads as "a few"; the markers are shapes named in words.
+      expect(frame).toMatch(/0 ·+[▁-█][·▁-█]+ 1 {2}certainty of each answer/);
+      expect(frame).toMatch(/△ +▲ +▲ act 0\.80 {2}△ mark 0\.60/);
       expect(frame).toContain("act would still be right 100% at 0.70, and 33% more decisions would act.");
       // A question with no reviews says what it waits for instead.
-      expect(frame).toContain("0 of 20 reviewed decisions needed to suggest a threshold");
+      expect(frame).toContain("0 reviewed; 20 needed to suggest a threshold");
       unmount();
     }
   });
@@ -217,7 +241,7 @@ describe("jevel screen", () => {
     const project = join(mkdtempSync(join(tmpdir(), "jevelry-proj-")), "jevels");
     const shippedPath = join(SHIPPED, "ticket-triage", "JEVEL.md");
     const before = readFileSync(shippedPath, "utf8");
-    const { stdin, lastFrame, unmount } = render(createElement(App, { home, dirs: [project, SHIPPED], shippedDir: SHIPPED, project, lines, size: { columns: 100, rows: 30 }, screen: "jevel", jevel: "ticket-triage" }));
+    const { stdin, lastFrame, unmount } = render(createElement(App, { home, dirs: [project, SHIPPED], project, lines, size: { columns: 100, rows: 30 }, screen: "jevel", jevel: "ticket-triage" }));
     await tick();
     expect(lastFrame()).toContain("ships with jevelry: ");
     await press(stdin, "T");
@@ -229,6 +253,23 @@ describe("jevel screen", () => {
     expect(readFileSync(copy, "utf8")).toBe(before.replace("version: 3", "version: 4").replace("thresholds: { act: 0.8, mark: 0.6 }", "thresholds: { act: 0.7, mark: 0.6 }"));
     expect(existsSync(join(project, "ticket-triage", "example.json"))).toBe(true);
     expect(lastFrame()).toContain("your project's file: ");
+    unmount();
+  });
+
+  // Inside the jevelry repo ./jevels is the shipped folder itself: there is nowhere to copy to, and the dialog says only that.
+  it("says whole why it cannot tune a shipped jevel from inside the repo, and offers only esc", async () => {
+    const { home, lines } = setup();
+    const before = readFileSync(join(SHIPPED, "ticket-triage", "JEVEL.md"), "utf8");
+    const { stdin, lastFrame, unmount } = render(createElement(App, { home, dirs: [SHIPPED], project: SHIPPED, lines, size: { columns: 80, rows: 24 }, screen: "jevel", jevel: "ticket-triage" }));
+    await tick();
+    await press(stdin, "T");
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("Cannot tune here");
+    expect(frame.replace(/\s+/g, " ")).toContain("Run jevelry tui in your project to copy it there and tune it.");
+    expect(frame).not.toContain("enter copies");
+    expect(frame.split("\n").at(-1)).toMatch(/^ esc close/);
+    await press(stdin, ENTER);
+    expect(readFileSync(join(SHIPPED, "ticket-triage", "JEVEL.md"), "utf8")).toBe(before);
     unmount();
   });
 

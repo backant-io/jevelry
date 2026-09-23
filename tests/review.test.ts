@@ -41,6 +41,8 @@ const agreedB: OutcomeLine = { kind: "outcome", id: B.id, question: "team", outc
 const LOG: LogLine[] = [A, B, C, D, agreedB];
 
 const tick = (ms = 60) => new Promise((resolve) => setTimeout(resolve, ms));
+/** A card takes a, d and s only once it has been on screen this long (SETTLE_MS plus slack). */
+const SETTLE = 520;
 const press = async (stdin: { write: (s: string) => void }, ...keys: string[]) => { for (const k of keys) { stdin.write(k); await tick(80); } };
 const homeWith = (lines: LogLine[]): string => {
   const home = mkdtempSync(join(tmpdir(), "jevelry-review-"));
@@ -100,12 +102,12 @@ describe("review", () => {
       expect(frame.replace(/\s+/g, " ")).toContain("account: Logging in, a password, a seat");
       expect(frame).toContain("certainty 0.75  (act 0.80, mark 0.60)");
       expect(frame).toContain("decision  mark  fairly sure, check it");
-      expect(frame).toMatch(/Was Jev right\? {3}a yes {2}d no, pick the right one {2}s skip {2}m review acts/);
+      expect(frame).toMatch(/Was Jev right\? {3}a right {2}d wrong, then pick {2}n note {2}s skip {2}m review acts/);
       // How this question has done so far, so the reviewer knows how much to trust the pick.
-      if (size.columns === 120) {
-        expect(frame).toContain("so far    4 decisions: act 25%, mark 50%, fall_back 25%");
-        expect(frame).toContain("act right -, mark right 100% of 1");
-      }
+      // The so-far block fits whole at both sizes: its last line is never cut.
+      expect(frame).toContain("so far  4 decisions of this question");
+      expect(frame).toContain("act 25% mark 50% fall_back 25%");
+      expect(frame).toContain("right   act -, mark 1/1");
       unmount();
     }
   });
@@ -113,15 +115,17 @@ describe("review", () => {
   // The whole job: a, d or s moves on, and each a or d is one outcome line the report counts.
   it("a, d and s record or skip and bring the next card, newest first, and the end says what was done", async () => {
     const { home, stdin, lastFrame, unmount } = review(LOG);
-    await tick();
+    await tick(SETTLE);
     await press(stdin, "a");
     await tick(150);
     expect(lastFrame()).toContain("Review 2 of 3");
     expect(lastFrame()).toMatch(/> yes\s+\S+\s+0\.78/);
     expect(lastFrame()).toContain("Saved: Jev was right on ticket-triage team");
+    await tick(SETTLE);
     await press(stdin, "s");
     expect(lastFrame()).toContain("Review 3 of 3");
     expect(lastFrame()).toMatch(/> 1 annoyed\s+\S+\s+0\.62/);
+    await tick(SETTLE);
     await press(stdin, "d", "j", "\r");
     await tick(150);
     expect(lastFrame()).toContain("All reviewed");
@@ -134,6 +138,55 @@ describe("review", () => {
     // s brings the skipped one back.
     await press(stdin, "s");
     expect(lastFrame()).toMatch(/question {2}urgent/);
+    unmount();
+  });
+
+  // A held key must not hand out verdicts on cards nobody saw: that is exactly what the tuning rule reads.
+  it("records one outcome for a held a, ten presses 30 ms apart, and for a key repeat's first delay", async () => {
+    const { home, stdin, lastFrame, unmount } = review(LOG);
+    await tick(SETTLE);
+    for (let i = 0; i < 10; i++) { stdin.write("a"); await tick(30); }
+    await tick(200);
+    expect(await outcomes(home)).toEqual([agreedB, expect.objectContaining({ id: D.id, question: "team", outcome: "agree" })]);
+    expect(lastFrame()).toContain("Review 2 of 3");
+    // A terminal's key repeat: the press, 400 ms, then repeats 33 ms apart. One press, one outcome.
+    await tick(SETTLE);
+    stdin.write("a");
+    await tick(400);
+    for (let i = 0; i < 9; i++) { stdin.write("a"); await tick(33); }
+    await tick(200);
+    expect((await outcomes(home)).slice(1)).toEqual([
+      expect.objectContaining({ id: D.id, question: "team" }),
+      expect.objectContaining({ id: A.id, question: "urgent", outcome: "agree" }),
+    ]);
+    expect(lastFrame()).toContain("Review 3 of 3");
+    unmount();
+  });
+
+  it("takes no a, d or s in the first moments a card is up, and handles keys that arrive in one read", async () => {
+    const { home, stdin, lastFrame, unmount } = review(LOG);
+    await tick(60);
+    stdin.write("a");
+    await tick(SETTLE);
+    expect(await outcomes(home)).toEqual([agreedB]);
+    // "sa" in one read: skip, then (the next card not yet settled) nothing.
+    stdin.write("sa");
+    await tick(150);
+    expect(lastFrame()).toContain("Review 2 of 3");
+    expect(await outcomes(home)).toEqual([agreedB]);
+    unmount();
+  });
+
+  // On a noul there is one other value, so "wrong" is the whole answer; a picker with one row is a wasted key.
+  it("d on a noul records the opposite value at once, and the keys say right and wrong", async () => {
+    const { home, stdin, lastFrame, unmount } = review([A, B, agreedB]);
+    await tick(SETTLE);
+    expect(lastFrame()).toMatch(/question {2}urgent/);
+    expect(lastFrame()).toContain("d wrong (it was no)");
+    stdin.write("d");
+    await tick(200);
+    expect((await outcomes(home)).at(-1)).toMatchObject({ id: A.id, question: "urgent", outcome: "disagree", value: "no" });
+    expect(lastFrame()).not.toContain("What was right?");
     unmount();
   });
 

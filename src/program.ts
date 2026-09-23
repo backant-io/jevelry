@@ -276,7 +276,7 @@ export function buildProgram(): Command {
       }
       try {
         const { runTui } = await import("./tui/app.js");
-        await runTui({ home: home(), dirs: dirs(opts.jevels), version: pkg.version, shippedDir: join(here, "..", "jevels"), ...(opts.jevel ? { jevel: opts.jevel } : {}), ...(opts.since ? { since: opts.since } : {}) });
+        await runTui({ home: home(), dirs: dirs(opts.jevels), version: pkg.version, ...(opts.jevel ? { jevel: opts.jevel } : {}), ...(opts.since ? { since: opts.since } : {}) });
       } catch (error) {
         failCommand(error);
       }

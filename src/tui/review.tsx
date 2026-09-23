@@ -1,10 +1,10 @@
-import { Box, Text, useInput } from "ink";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Box, type Key, Text, useInput } from "ink";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { type LogLine, recordOutcome } from "../log.js";
 import type { Answer } from "../protocol.js";
 import { recordedDecision } from "../report.js";
 import { bar } from "./charts.js";
-import { type Hint, moves, useChrome } from "./dialog.js";
+import { ChromeContext, type Hint, moves, useChrome } from "./dialog.js";
 import { ALL, type Found, type Row, answerWord, fullTime, hasAnswer, jevelOf, label, otherValues, rowsOf, runLine, savedMessage, time, wrapLine } from "./history.js";
 import { decisionColor, useTheme } from "./theme.js";
 import { type Tally, tallyKey } from "./tuning.js";
@@ -34,6 +34,16 @@ export function stateLines(state: unknown, width: number): string[] {
   else walk(state, "");
   return out;
 }
+
+/**
+ * How long a card is on screen before a, d or s count, and how close a repeat of the same key is a held key.
+ * A held key repeats after the terminal's initial delay (often 300 to 450 ms) and then every 30 ms or so; the settle
+ * time has to outlast that first delay, or the first repeat lands on the next card as a second verdict.
+ */
+export const SETTLE_MS = 450;
+export const REPEAT_MS = 150;
+/** The last key any card saw: a held key's repeats stay repeats across the change of card. */
+const lastKey = { key: "", at: 0 };
 
 const MEANING = { act: "Jev was sure", mark: "fairly sure, check it", fall_back: "your code decided" } as const;
 const labelOf = (v: unknown): string | null => (v === undefined || v === null ? null : label(v));
@@ -99,10 +109,11 @@ export function decidedLines(row: Row, found: Found | null, width: number, room:
   }
   out.push({ text: " ", tone: "text" });
   const t = found?.thresholds;
-  const bands = t
-    ? `(act ${t.act.toFixed(2)}, mark ${t.mark.toFixed(2)}${found.version === ask.jevel?.version ? "" : `, from v${found.version}`})`
-    : "(thresholds unknown: the jevel is not found here)";
-  out.push(...wrapLine(`certainty ${answer.certainty.toFixed(2)}  ${bands}`, width).map((text): Line => ({ text, tone: "text" })));
+  const certainty = `certainty ${answer.certainty.toFixed(2)}`;
+  if (!found || !t) out.push(...wrapLine(`${certainty}  (thresholds unknown: the jevel is not found here)`, width).map((text): Line => ({ text, tone: "text" })));
+  else if (!found.question) out.push({ text: certainty, tone: "text" }, ...wrapLine("this question is no longer in the jevel file", width).map((text): Line => ({ text, tone: "muted" })));
+  else if (found.version === ask.jevel?.version) out.push(...wrapLine(`${certainty}  (act ${t.act.toFixed(2)}, mark ${t.mark.toFixed(2)})`, width).map((text): Line => ({ text, tone: "text" })));
+  else out.push({ text: certainty, tone: "text" }, ...wrapLine(`thresholds now (v${found.version}): act ${t.act.toFixed(2)}, mark ${t.mark.toFixed(2)}`, width).map((text): Line => ({ text, tone: "muted" })));
   out.push({ text: `decision  ${d}  ${MEANING[d]}`, tone: d, bold: true });
   if (ask.error) out.push(...wrapLine(`error     ${ask.error.code}: ${ask.error.message}`, width).map((text): Line => ({ text, tone: "error" })));
   if (row.run) out.push(...wrapLine(runLine(row.run), width).map((text): Line => ({ text, tone: "text" })));
@@ -111,16 +122,18 @@ export function decidedLines(row: Row, found: Found | null, width: number, room:
     const said = o.outcome === "agree" ? "Jev was right" : `Jev was wrong${o.value !== null ? `, it was ${o.value}` : ""}`;
     out.push(...wrapLine(`outcome   ${said} (${time(o.at)})${o.note ? `, note: ${o.note}` : ""}`, width).map((text): Line => ({ text, tone: "text" })));
   }
-  // How this question has done so far, last, so a short terminal drops it first.
+  // How this question has done so far, last and whole: when it does not fit, all of it goes.
   if (sofar) {
     const n = sofar.act + sofar.mark + sofar.fallBack;
-    const pc = (x: number, of: number): string => `${Math.round((x / of) * 100)}%`;
-    const right = (ok: number, of: number): string => (of === 0 ? "-" : `${pc(ok, of)} of ${of}`);
-    out.push(
+    const pc = (x: number): string => `${Math.round((x / n) * 100)}%`;
+    const right = (ok: number, of: number): string => (of === 0 ? "-" : `${ok}/${of}`);
+    const block: Line[] = [
       { text: " ", tone: "text" },
-      ...wrapLine(`so far    ${n} decision${n === 1 ? "" : "s"}: act ${pc(sofar.act, n)}, mark ${pc(sofar.mark, n)}, fall_back ${pc(sofar.fallBack, n)}`, width).map((text): Line => ({ text, tone: "muted" })),
-      ...wrapLine(`          act right ${right(sofar.actRight, sofar.actReviewed)}, mark right ${right(sofar.markRight, sofar.markReviewed)}`, width).map((text): Line => ({ text, tone: "muted" })),
-    );
+      { text: `so far  ${n} decision${n === 1 ? "" : "s"} of this question`, tone: "muted" },
+      { text: `        act ${pc(sofar.act)} mark ${pc(sofar.mark)} fall_back ${pc(sofar.fallBack)}`, tone: "muted" },
+      { text: `right   act ${right(sofar.actRight, sofar.actReviewed)}, mark ${right(sofar.markRight, sofar.markReviewed)}`, tone: "muted" },
+    ];
+    if (block.every((l) => l.text.length <= width) && out.length + block.length <= room) out.push(...block);
   }
   return out;
 }
@@ -189,13 +202,18 @@ export function Card(props: {
   );
   // The handler reads the mode from a ref: keys typed right after n or d arrive before the next render,
   // and must already count as note text or a pick, never as a or d.
+  const chrome = useContext(ChromeContext);
   const modeRef = useRef<"view" | "pick" | "note">("view");
   const noteRef = useRef("");
   const edit = (f: (n: string) => string): void => { noteRef.current = f(noteRef.current); setNote(noteRef.current); };
   const pickRef = useRef(0);
-  const to = (m: "view" | "pick" | "note"): void => { modeRef.current = m; setMode(m); };
+  const to = (m: "view" | "pick" | "note"): void => { modeRef.current = m; setMode(m); chrome.captureNow(m === "note"); };
   const pickAt = (i: number): void => { pickRef.current = i; setPick(i); };
-  useInput((input, key) => {
+  // A verdict needs a card someone has seen: a, d and s count only once the card has been up for SETTLE_MS,
+  // and a key that repeats within REPEAT_MS is a held key, not a second decision.
+  const shownAt = useRef(Date.now());
+  const skipped = useRef(false);
+  const one = (input: string, key: Partial<Key>): void => {
     if (modeRef.current === "note") {
       if (key.escape) { edit(() => ""); to("view"); }
       else if (key.return) to("view");
@@ -210,14 +228,31 @@ export function Card(props: {
       else if (key.return && choices[pickRef.current] !== undefined) { to("view"); record(choices[pickRef.current]!); }
       return;
     }
+    const now = Date.now();
+    const repeated = lastKey.key === input && now - lastKey.at < REPEAT_MS;
+    lastKey.key = input;
+    lastKey.at = now;
+    const verdict = input === "a" || input === "d" || input === "s";
+    // Once a verdict or a skip is given, this card is done: the next key belongs to the next card.
+    if (verdict && (repeated || now - shownAt.current < SETTLE_MS || recording.current || skipped.current)) return;
     if (key.escape) props.onBack();
-    else if (moves(input, key) !== 0) { const step = moves(input, key); setScroll((s) => Math.max(s + step, 0)); }
+    else if (moves(input, key as Key) !== 0) { const step = moves(input, key as Key); setScroll((s) => Math.max(s + step, 0)); }
     else if (input === "a" && answered) record("agree");
     else if (input === "d" && answered) {
-      if (choices.length === 0) record("disagree");
+      // One other value (a noul) is the answer itself: record it, no picker.
+      if (choices.length <= 1) record(choices[0] ?? "disagree");
       else { pickAt(0); to("pick"); }
     } else if (input === "n" && answered) to("note");
-    else props.onKey?.(input);
+    else {
+      if (input === "s" && props.keys?.some(([k]) => k === "s")) skipped.current = true;
+      props.onKey?.(input);
+    }
+  };
+  useInput((input, key) => {
+    // Several keys in one read (a paste, a burst) are taken one by one; note text stays whole.
+    if (input.length > 1 && modeRef.current !== "note" && !/^[jk]+$/.test(input) && /^[\x20-\x7e]+$/.test(input)) {
+      for (const ch of input) one(ch, {});
+    } else one(input, key);
   }, { isActive: props.active });
 
   const inner = props.width - 2;
@@ -240,7 +275,9 @@ export function Card(props: {
   const decided = decidedLines(row, props.found, right, room, props.sofar).slice(0, room);
   const tone = (t: Line["tone"]): string => (t === "act" || t === "mark" || t === "fall_back" ? decisionColor(theme, t) : theme[t]);
   // The question the screen asks, with its keys, right above the footer: the one line a reviewer needs.
-  const ask: Hint[] = answered ? [["a", "yes"], ["d", "no, pick the right one"], ...(props.keys ?? [])] : (props.keys ?? []).filter(([k]) => k !== "s");
+  const ask: Hint[] = answered
+    ? [["a", "right"], ["d", choices.length === 1 ? `wrong (it was ${choices[0]})` : "wrong, then pick"], ["n", "note"], ...(props.keys ?? [])]
+    : (props.keys ?? []).filter(([k]) => k !== "s");
   const prompt = mode !== "view" ? null : (
     <Box width={inner} backgroundColor={theme.panel}>
       <Text wrap="truncate">

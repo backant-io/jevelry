@@ -225,7 +225,7 @@ function MixBar(props: { act: number; mark: number; fallBack: number; width: num
 export type Target =
   | { kind: "review" }
   | { kind: "history"; filters: Partial<Filters> }
-  | { kind: "jevel"; name: string }
+  | { kind: "jevel"; name: string; question?: string }
   | { kind: "decision"; id: string; question: string };
 
 function Panel(props: { title: string; note?: string; width?: number; children: React.ReactNode }): React.JSX.Element {
@@ -286,7 +286,7 @@ export function HomeView(props: {
   const worth = props.worth ?? [];
   if (worth.length > 0) {
     const first = worth[0]!;
-    needs.push({ text: `${plural(worth.length, "threshold")} worth moving`, key: "tune", target: { kind: "jevel", name: first.jevel }, tone: theme.accent });
+    needs.push({ text: `${plural(worth.length, "threshold")} worth moving`, key: "tune", target: { kind: "jevel", name: first.jevel, question: first.question }, tone: theme.accent });
   }
   if (s.failedToday.count > 0) {
     needs.push({ text: `${plural(s.failedToday.count, "ask")} failed today (${s.failedToday.topError})`, key: "failed", target: { kind: "history", filters: { failed: true, since: midnight(props.now) } }, tone: theme.error });

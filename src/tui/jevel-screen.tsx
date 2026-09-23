@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { Box, Text, useInput } from "ink";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { mergeThresholds, type Thresholds } from "../decision.js";
 import type { Jevel } from "../jevel.js";
 import { histogram, mix } from "./charts.js";
@@ -17,6 +17,8 @@ export function shown(path: string): string {
   if (rel !== "" && !rel.startsWith("..")) return rel;
   return path.startsWith(homedir()) ? `~${path.slice(homedir().length)}` : path;
 }
+/** A threshold as written: two decimals when it has two, the reviewed certainty itself otherwise. */
+export const th = (x: number): string => (Math.abs(x * 100 - Math.round(x * 100)) < 1e-9 ? x.toFixed(2) : String(x));
 const pct = (n: number): string => `${Math.round(n * 100)}%`;
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" : "s"}`;
 const rightOf = (right: number, of: number): string => (of === 0 ? "-" : `${pct(right / of)} of ${of}`);
@@ -46,12 +48,14 @@ export function questionViews(jevel: Jevel | null, name: string, tallies: Map<st
 export function tuningLine(v: QuestionView): { text: string; suggest: boolean } {
   if (v.proposal) {
     const p = v.proposal;
-    return { text: `act would still be right ${pct(p.agreement)} at ${p.act.toFixed(2)}, and ${pct(p.more)} more decisions would act. T to set it.`, suggest: true };
+    return { text: `act would still be right ${pct(p.agreement)} at ${th(p.act)}, and ${pct(p.more)} more decisions would act. T to set it.`, suggest: true };
   }
   if (!v.thresholds) return { text: "thresholds unknown: the jevel file is not found here", suggest: false };
   const reviewed = v.tally?.reviewed.length ?? 0;
-  if (reviewed < MIN_REVIEWED) return { text: `${reviewed} of ${MIN_REVIEWED} reviewed decisions needed to suggest a threshold`, suggest: false };
-  return { text: `act ${v.thresholds.act.toFixed(2)} holds: no lower threshold keeps act as right`, suggest: false };
+  if (reviewed < MIN_REVIEWED) return { text: `${reviewed} reviewed; ${MIN_REVIEWED} needed to suggest a threshold`, suggest: false };
+  const act = v.thresholds.act;
+  if (!v.tally!.reviewed.some((r) => r.certainty >= act - 1e-9)) return { text: `no reviewed decision at or above act ${th(act)} yet, so nothing to compare a lower one with`, suggest: false };
+  return { text: `act ${th(act)} holds: no lower threshold keeps act as right`, suggest: false };
 }
 
 function MixLine(props: { t: Tally | null; width: number; theme: Theme }): React.JSX.Element {
@@ -65,6 +69,27 @@ function MixLine(props: { t: Tally | null; width: number; theme: Theme }): React
       <Text color={theme.act}>{`  act ${pct(t.act / total)}`}</Text>
       <Text color={theme.mark}>{`  mark ${pct(t.mark / total)}`}</Text>
       <Text color={theme.fallBack}>{`  fall_back ${pct(t.fallBack / total)}`}</Text>
+    </Text>
+  );
+}
+
+/**
+ * The row under the histogram: `▲` under the act threshold and `△` under mark, each in its colour, and a legend in words.
+ * When the two are equal there is one `▲` and the legend says so.
+ */
+function Markers(props: { t: Thresholds; width: number; theme: Theme }): React.JSX.Element {
+  const { t, width, theme } = props;
+  const column = (x: number): number => Math.min(width - 1, Math.max(0, Math.floor(x * width)));
+  const cells = new Array<string>(width).fill(" ");
+  cells[column(t.mark)] = "△";
+  cells[column(t.act)] = "▲";
+  const same = column(t.act) === column(t.mark);
+  return (
+    <Text>
+      {cells.map((c, k) => <Text key={k} color={c === "▲" ? decisionColor(theme, "act") : decisionColor(theme, "mark")}>{c}</Text>)}
+      <Text color={theme.muted}>{"   "}</Text>
+      <Text color={decisionColor(theme, "act")}>{same && t.act === t.mark ? `▲ act and mark both ${th(t.act)}` : `▲ act ${th(t.act)}`}</Text>
+      {same && t.act === t.mark ? null : <Text color={decisionColor(theme, "mark")}>{`  △ mark ${th(t.mark)}`}</Text>}
     </Text>
   );
 }
@@ -84,10 +109,12 @@ export function JevelView(props: {
   onOpen: (question: string) => void;
   onTune: (question: QuestionView) => void;
   onBack: () => void;
+  /** The question the cursor starts on, such as the one Home says is worth tuning. */
+  focus?: string;
 }): React.JSX.Element {
   const theme = useTheme();
   const { views } = props;
-  const [at, setAt] = useState(0);
+  const [at, setAt] = useState(() => Math.max(0, views.findIndex((v) => v.name === props.focus)));
   const cursor = Math.min(at, Math.max(views.length - 1, 0));
   const current = views[cursor];
   useChrome([["j/k", "move"], ["enter", "its decisions"], ...(current?.proposal ? [["T", "set threshold"] as [string, string]] : []), ["esc", "home"]]);
@@ -123,7 +150,7 @@ export function JevelView(props: {
       {visible.map((v, i) => {
         const selected = top + i === cursor;
         const t = v.tally;
-        const [bars, marks] = histogram(t?.certainties ?? [], histWidth, v.thresholds ? [v.thresholds.mark, v.thresholds.act] : []).split("\n") as [string, string];
+        const [bars] = histogram(t?.certainties ?? [], histWidth, v.thresholds ? [v.thresholds.mark, v.thresholds.act] : []).split("\n") as [string, string];
         const line = tuningLine(v);
         const decisions = t ? t.act + t.mark + t.fallBack : 0;
         return (
@@ -132,7 +159,7 @@ export function JevelView(props: {
               <Text color={theme.accent}>{selected ? "> " : "  "}</Text>
               <Text color={theme.text} bold>{v.name}</Text>
               <Text color={theme.muted}>{`  ${v.type ?? "not in the file"}`}</Text>
-              <Text color={theme.muted}>{v.thresholds ? `  act ≥ ${v.thresholds.act.toFixed(2)}  mark ≥ ${v.thresholds.mark.toFixed(2)}` : ""}</Text>
+              <Text color={theme.muted}>{v.thresholds ? `  act ≥ ${th(v.thresholds.act)}  mark ≥ ${th(v.thresholds.mark)}` : ""}</Text>
               <Text color={theme.muted}>{`  ${plural(decisions, "decision")}`}</Text>
             </Text>
             <Box paddingLeft={2}><MixLine t={t} width={Math.min(30, inner - 36)} theme={theme} /></Box>
@@ -145,17 +172,12 @@ export function JevelView(props: {
             </Text>
             <Text wrap="truncate">
               <Text color={theme.muted}>{"  0 "}</Text>
-              <Text color={theme.accent}>{bars}</Text>
+              {(bars.match(/·+|[^·]+/g) ?? []).map((run, k) => <Text key={k} color={run[0] === "·" ? theme.border : theme.accent}>{run}</Text>)}
               <Text color={theme.muted}>{" 1  certainty of each answer"}</Text>
             </Text>
             <Text wrap="truncate">
               <Text>{"    "}</Text>
-              {[...marks.padEnd(histWidth)].map((c, k) => {
-                const isMark = v.thresholds !== null && c === "│";
-                const isAct = isMark && Math.min(histWidth - 1, Math.floor(v.thresholds!.act * histWidth)) === k;
-                return <Text key={k} color={isAct ? decisionColor(theme, "act") : isMark ? decisionColor(theme, "mark") : theme.muted}>{c}</Text>;
-              })}
-              <Text color={theme.muted}>{v.thresholds ? `   │ mark ${v.thresholds.mark.toFixed(2)}  │ act ${v.thresholds.act.toFixed(2)}` : ""}</Text>
+              {v.thresholds ? <Markers t={v.thresholds} width={histWidth} theme={theme} /> : null}
             </Text>
             {wrapLine(line.text, inner - 2).slice(0, 2).map((l, k) => <Text key={k} wrap="truncate" color={line.suggest ? theme.accent : theme.muted} bold={line.suggest}>{`  ${l}`}</Text>)}
           </Box>
@@ -166,9 +188,24 @@ export function JevelView(props: {
   );
 }
 
+/** What `T` would do: the edit, or why it cannot be done here. The dialog and the footer both read it. */
+export function tunePlan(jevel: Jevel, place: Place, view: QuestionView, project: string): { edited: ReturnType<typeof setActThreshold> | null; blocked: string | null; copy: boolean; target: string } {
+  const copy = place.kind !== "project";
+  const target = join(project, jevel.name);
+  if (copy && resolve(target) === resolve(dirname(jevel.path))) {
+    return { edited: null, copy, target, blocked: `${jevel.name} here is jevelry's own shipped copy, and ./jevels is jevelry's own folder. Run jevelry tui in your project to copy it there and tune it.` };
+  }
+  try {
+    return { edited: setActThreshold(readFileSync(jevel.path, "utf8"), view.name, view.proposal!.act), blocked: null, copy, target };
+  } catch (e) {
+    return { edited: null, copy, target, blocked: `The file cannot be edited here: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
 /**
  * The confirm for `T`: the file, the exact lines that change, and enter to write them. A jevel that ships with jevelry
  * or sits in JEVELRY_HOME is not the project's to change, so enter copies it into the project's jevels folder first.
+ * When neither is possible it says why and offers only esc.
  */
 export function TuneDialog(props: {
   jevel: Jevel;
@@ -179,62 +216,60 @@ export function TuneDialog(props: {
   rows: number;
   onDone: (message: string, error?: boolean) => void;
   onClose: () => void;
+  onQuit: () => void;
 }): React.JSX.Element {
   const theme = useTheme();
   const p = props.view.proposal!;
   const q = props.view.name;
-  const copy = props.place.kind !== "project";
-  const target = join(props.project, props.jevel.name);
-  const plan = useMemo(() => {
-    try {
-      return { edited: setActThreshold(readFileSync(props.jevel.path, "utf8"), q, p.act), error: null };
-    } catch (e) {
-      return { edited: null, error: e instanceof Error ? e.message : String(e) };
-    }
-  }, [props.jevel.path, q, p.act]);
-  const self = copy && resolve(target) === resolve(dirname(props.jevel.path));
-  const blocked = plan.error ?? (self ? "this folder is jevelry's own copy; run jevelry tui in your project to copy and tune it" : null);
-  const rel = shown;
-  useInput((_input, key) => {
+  const plan = useMemo(() => tunePlan(props.jevel, props.place, props.view, props.project), [props.jevel.path, q, p.act]);
+  const { copy, target, blocked } = plan;
+  const done = useRef(false);
+  useInput((input, key) => {
     if (key.escape) props.onClose();
-    else if (key.return && blocked === null) {
+    else if (input === "q") props.onQuit();
+    else if (key.return && blocked === null && !done.current) {
+      done.current = true;
       try {
         const path = copy ? copyJevel(props.jevel.path, props.project) : props.jevel.path;
         writeActThreshold(path, q, p.act);
-        props.onDone(`threshold set to ${p.act.toFixed(2)} in ${rel(path)}`);
+        props.onDone(`threshold set to ${th(p.act)} in ${shown(path)}`);
       } catch (e) {
         props.onDone(`threshold not set: ${e instanceof Error ? e.message : String(e)}`, true);
       }
     }
   });
+  const width = Math.min(96, props.columns - 4);
   const lines: Array<{ text: string; color: string; bold?: boolean }> = [
-    { text: `${props.jevel.name} ${q}: act ${props.view.thresholds!.act.toFixed(2)} → ${p.act.toFixed(2)}`, color: theme.text, bold: true },
+    { text: `${props.jevel.name} ${q}: act ${th(props.view.thresholds!.act)} → ${th(p.act)}`, color: theme.text, bold: true },
     { text: `act would still be right ${pct(p.agreement)} (now ${pct(p.current)}), from ${p.reviewed} reviewed.`, color: theme.muted },
     { text: " ", color: theme.text },
   ];
-  if (copy) {
-    lines.push(
-      { text: props.place.kind === "shipped" ? `${props.jevel.name} ships with jevelry, so tune your own copy.` : `${props.jevel.name} is in JEVELRY_HOME, shared by every project.`, color: theme.text },
-      { text: `enter copies its folder to ${rel(target)}, then:`, color: theme.text },
-    );
+  if (blocked !== null) {
+    lines.push(...wrapLine(blocked, width - 4).map((text) => ({ text, color: theme.error })));
+  } else {
+    if (copy) {
+      lines.push(
+        { text: props.place.kind === "shipped" ? `${props.jevel.name} ships with jevelry, so tune your own copy.` : `${props.jevel.name} is in JEVELRY_HOME, shared by every project.`, color: theme.text },
+        { text: `enter copies its folder to ${shown(target)}, then:`, color: theme.text },
+      );
+    }
+    lines.push({ text: `in ${copy ? shown(join(target, "JEVEL.md")) : shown(props.jevel.path)}`, color: theme.muted });
+    for (const c of plan.edited?.changes ?? []) {
+      lines.push({ text: `line ${c.line}`, color: theme.muted });
+      lines.push({ text: `- ${c.before.trim()}`, color: theme.fallBack });
+      for (const after of c.after.split("\n")) lines.push({ text: `+ ${after.trim()}`, color: theme.act });
+    }
+    lines.push({ text: "Every other byte of the file stays as it is.", color: theme.muted });
   }
-  lines.push({ text: `in ${copy ? rel(join(target, "JEVEL.md")) : rel(props.jevel.path)}`, color: theme.muted });
-  for (const c of plan.edited?.changes ?? []) {
-    lines.push({ text: `line ${c.line}`, color: theme.muted });
-    lines.push({ text: `- ${c.before.trim()}`, color: theme.fallBack });
-    for (const after of c.after.split("\n")) lines.push({ text: `+ ${after.trim()}`, color: theme.act });
-  }
-  lines.push({ text: "Every other byte of the file stays as it is.", color: theme.muted });
-  if (blocked !== null) lines.push({ text: " ", color: theme.text }, { text: blocked, color: theme.error });
-  const width = Math.min(72, props.columns - 4);
+  const title = blocked !== null ? "Cannot tune here" : copy ? "Copy the jevel and set its threshold" : "Set the act threshold";
   return (
-    <Dialog title={copy ? "Copy the jevel and set its threshold" : "Set the act threshold"} width={width} columns={props.columns} rows={props.rows} height={8 + lines.length}>
+    <Dialog title={title} width={width} columns={props.columns} rows={props.rows} height={8 + lines.length}>
       <Text> </Text>
       {lines.map((l, i) => <Text key={i} wrap="truncate" color={l.color} bold={l.bold ?? false}>{l.text}</Text>)}
       <Text> </Text>
       <Text>
         {blocked === null ? <Text><Text color={theme.accent} bold>enter</Text><Text color={theme.text}>{copy ? " copy and set   " : " set it   "}</Text></Text> : null}
-        <Text color={theme.accent} bold>esc</Text><Text color={theme.text}> cancel</Text>
+        <Text color={theme.accent} bold>esc</Text><Text color={theme.text}>{blocked === null ? " cancel" : " close"}</Text>
       </Text>
     </Dialog>
   );
