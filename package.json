@@ -59,14 +59,14 @@
     "url": "https://github.com/backant-io/jevelry/issues"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "author": "Pavel Hegler <business@hegler.tech>",
   "license": "MIT",
   "dependencies": {
     "@typesafe-ai/sdk": "0.6.0",
     "commander": "^12.1.0",
-    "ink": "6.8.0",
+    "ink": "7.1.1",
     "react": "19.2.8",
     "yaml": "^2.6.0"
   },

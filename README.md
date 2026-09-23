@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/npm-jevelry-3fb950" alt="npm">
-  <img src="https://img.shields.io/badge/node-%3E%3D20-3fb950" alt="Node 20">
+  <img src="https://img.shields.io/badge/node-%3E%3D22-3fb950" alt="Node 22">
   <img src="https://img.shields.io/badge/tests-offline%2C%20live%20on%20demand-3fb950" alt="Tests">
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT">
 </p>
@@ -114,24 +114,78 @@ The commands are fixed text in the jevel and Jev only picks which one runs, so t
 
 ## See every decision
 
-Every ask your program or your agent makes goes into `~/.jevelry/log.jsonl`, and you can look through all of them in your terminal:
+Every ask your program or your agent makes goes into `~/.jevelry/log.jsonl`, and you can look at all of them in your terminal:
 
     npx jevelry tui
 
-    8 decisions
-    decision: all   jevel: all   outcome: any
-      time        jevel         question       answer     cert decision  outcome
-    > 09-22 10:00 wake-gate     worth_a_turn   error      0.00 fall_back -
-      09-22 10:00 wake-gate     depth          error      0.00 fall_back -
-      09-22 09:30 ticket-triage team           technical  0.72 mark      agree
-      09-22 09:30 ticket-triage urgent         no         0.90 act       -
-      09-22 09:30 ticket-triage frustration    level 0    0.90 act       -
-      09-22 09:00 ticket-triage team           billing    0.91 act       -
-      09-22 09:00 ticket-triage urgent         yes        0.78 mark      -
-      09-22 09:00 ticket-triage frustration    level 1    0.62 mark      -
-    j/k move  enter open  f decision  J jevel  o no outcome  r report  q quit
+It opens on Home, which shows you how Jev decided today, what needs you and how each of your jevels is doing:
 
-You see one row per question with the time, the jevel, the answer, how sure Jev was and the decision, newest first. Press `f` until it shows `mark` and `o` to keep only the ones nobody has looked at yet, and you have the list of decisions Jev flagged for a person. Press enter on one and you see every option with its probability, the thresholds of the jevel and the state Jev was asked about. The state is only there when you ask for it with `--log-state`, `jevel(name, { logState: true })` in your program or `JEVELRY_LOG_STATE=1`, because states often hold customer text. Pressing `a` tells jevelry that Jev was right, and `d` tells it Jev was wrong and asks you for the right answer, which is what `jevelry report` then counts.
+```
+ ◆ JEVELRY  Use Jev everywhere to make & track decisions  v0.4.1
+
+   Today  50 decisions · 21 asks · $0.00094
+   ██████████████▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░░░░ act 32% mark 36% fall_back 32%
+   act: Jev is sure · mark: fairly sure, check it
+   fall_back: unsure, your code decides
+   ▃▁▃▁▇█▄▄▅▅█▁▄▄▁▁▇▄▁▁▁▅▄▇  24h · peak 9/h
+
+   Needs you
+   > ● 56 marked decisions to review  ⏎
+     ● 3 asks failed today (rate_limited)
+
+   Jevels  how each one decides; enter opens its questions
+     jevel               decisions     act right  last 14 days
+     ticket-triage             189     96% of 24  ▃▃▄▃▃▄▃▃▂▄▄▃██  peak 39/day
+     message-triage             66     92% of 12  ▆▆▃▄▄▆▆▁▄▇▁▃█▇  peak 10/day
+     ↓ 1 more below
+
+   Latest decisions  newest first, live as your code asks
+     time        jevel            question       answer     decision  outcome
+     09-23 15:55 ticket-triage    team           billing    mark      -
+     09-23 15:55 ticket-triage    urgent         no         act       -
+     09-23 15:55 ticket-triage    frustration    level 1    mark      -
+ j/k move  enter open  ctrl+p commands  ? help                           v0.4.1
+```
+
+When your log is still empty, Home offers you a sample ticket. Press enter to open it in Try and enter again to ask Jev about it live, and you see your first answer in a few seconds.
+
+Press `v` for Review, which shows you one marked decision at a time with what Jev saw on the left and what it decided on the right:
+
+```
+ Review 1 of 56  marked decisions without an outcome, newest first
+ ticket-triage team  v3 · 2026-09-23 15:55:58 (local) · jev-1.13.0
+
+ What Jev saw                           What Jev decided
+ ticket:                                question  team  (choice)
+   subject: Invoice and login           Which team should handle `ticket`?
+   message: The March invoice charged
+     us for 12 seats but we only have   > billing   ██████████████▎      0.71
+     9 users. Also Anna cannot log in     technical ▋                    0.03
+     since yesterday.                     account   ████▊                0.24
+   customer_since: 2023-11                other     ▍                    0.02
+                                        billing: A charge, an invoice, a
+                                          refund, a price or a subscription
+                                          change
+
+                                        certainty 0.71  (act 0.80, mark 0.60)
+                                        decision  mark  fairly sure, check it
+                                        outcome   none yet
+                                        so far  65 decisions of this question
+                                                act 43% mark 15% fall_back 42%
+                                        right   act 10/10, mark 4/4
+  Jev says: team = billing
+  Is Jev right?  c correct  w wrong  s skip  n note  m review acts
+ c correct  w wrong  s skip  m review acts  n note  ? help               v0.4.1
+```
+
+You press `c` when Jev is correct, `w` when it is wrong and `s` to skip. On a yes or no question `w` records the other answer right away, and on a choice or a score jevelry asks you for the right one. `jevelry report` counts these outcomes, and so does the Jevel screen of each jevel. The state on the left is only there when you ask for it with `--log-state`, `jevel(name, { logState: true })` in your program or `JEVELRY_LOG_STATE=1`, because states often hold customer text. An ask from Try always keeps its state, because you typed it there yourself.
+
+The other screens are one key away:
+
+- `t` opens Try, where you pick a jevel, press `e` to edit its example state and enter to ask Jev live, and the answer comes back as bars with the decision of every question. Try keeps the state in the log, so you can open the ask later and see what Jev saw.
+- `y` opens History, the list of every logged decision, which you can filter by decision, by jevel and by the ones that still need an outcome.
+- Enter on a jevel on Home opens its Jevel screen, which shows how each question decides and how often `act` was right, and when the act threshold could come down, `T` sets it in your jevel file for you. A jevel that came with jevelry is first copied into `./jevels`, and from then on your project uses that copy, so the change is yours to keep.
+- `ctrl+p` finds any screen or jevel when you type a part of its name, and `?` shows the keys of the screen you are on.
 
 ## What is underneath
 
@@ -291,7 +345,7 @@ Currently jevelry asks Jev questions and hands you the answers, and that is the 
 
 ## How do we know you can trust it
 
-258 tests run offline against recorded answers from TypeSafe's API reference and against the seventeen jevels and their cases. 98 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
+357 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## Environment
 
@@ -307,6 +361,8 @@ Currently jevelry asks Jev questions and hands you the answers, and that is the 
 | `JEVELRY_LOG_STATE` | `1` writes the state itself into each ask line, for `ask` and `decide` | off, only the hash |
 
 ## Start
+
+jevelry runs on Node 22 or newer, so check `node --version` before you install it.
 
     npm install -g jevelry
     export TYPESAFE_API_KEY=...

@@ -265,7 +265,7 @@ export function buildProgram(): Command {
 
   program
     .command("tui")
-    .description("browse the logged decisions in the terminal, review the marked ones and record whether Jev was right")
+    .description("a full-screen view of your decisions: Home shows today and what needs you, Review records whether Jev was right, Try asks a jevel live")
     .option("--jevel <name>")
     .option("--since <iso>")
     .option("--jevels <dir>", "a jevels directory searched first (repeatable)", (d: string, all: string[]) => [...all, d], [] as string[])
@@ -275,8 +275,8 @@ export function buildProgram(): Command {
         process.exit(1);
       }
       try {
-        const { runTui } = await import("./tui.js");
-        await runTui({ home: home(), dirs: dirs(opts.jevels), ...(opts.jevel ? { jevel: opts.jevel } : {}), ...(opts.since ? { since: opts.since } : {}) });
+        const { runTui } = await import("./tui/app.js");
+        await runTui({ home: home(), dirs: dirs(opts.jevels), version: pkg.version, ...(opts.jevel ? { jevel: opts.jevel } : {}), ...(opts.since ? { since: opts.since } : {}) });
       } catch (error) {
         failCommand(error);
       }
