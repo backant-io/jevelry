@@ -110,7 +110,7 @@ fall_back: "echo \"Jev is unsure, read the failing output yourself\""
 | `mark` | jevelry asks you first, and `--yes` runs it straight away |
 | `fall_back` | your `fall_back` command runs |
 
-The commands are fixed text in the jevel and Jev only picks which one runs, so the only thing jevelry fills in is an option name you wrote yourself. Your data goes to the command on stdin and in the file `JEVELRY_STATE` points at, and it stays out of the command line, so a ticket that says `; rm -rf ~` is just text to the command. Add `--dry-run` to see what would run, and in your program `failing.run(state, { flaky: (args) => rerun(args.retries) })` calls your own function in place of the shell command.
+The commands are fixed text in the jevel and Jev only picks which one runs, so the only thing jevelry fills in is an option name you wrote yourself. Your data goes to the command on stdin and in the file `JEVELRY_STATE` points at, and it stays out of the command line, so a ticket that says `; rm -rf ~` is just text to the command. `jevelry run` runs the commands of the first jevel it finds, and a `jevels/` folder in your project comes before the ones that ship, so a `jevels/failing-test/` in a repository you check out replaces the shipped one. jevelry prints the path of the jevel on stderr before it runs anything, so check that it is the file you expect. Add `--dry-run` to see what would run, and in your program `failing.run(state, { flaky: (args) => rerun(args.retries) })` calls your own function in place of the shell command.
 
 ## See every decision
 
@@ -291,7 +291,7 @@ Currently jevelry asks Jev questions and hands you the answers, and that is the 
 
 ## How do we know you can trust it
 
-242 tests run offline against recorded answers from TypeSafe's API reference and against the seventeen jevels and their cases. 98 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
+254 tests run offline against recorded answers from TypeSafe's API reference and against the seventeen jevels and their cases. 98 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## Environment
 

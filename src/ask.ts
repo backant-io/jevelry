@@ -113,6 +113,20 @@ function readEnvelope(result: unknown): { model: string; answers: Record<string,
   };
 }
 
+/**
+ * An answer must be the type its question asked for, and a choice must name one of the question's own
+ * options: every caller, `decide` and `run` among them, reads the answer as that type, and `run` puts
+ * the option name into a command.
+ */
+function checkFits(name: string, raw: unknown, question: unknown): void {
+  if (!isRecord(raw) || !isRecord(question)) return;
+  const field = `answers.${name}`;
+  if (raw.type !== question.type) throw new UnreadableAnswer(field, `${field} is a ${String(raw.type)} answer to a ${String(question.type)} question`);
+  if (question.type === "choice" && (typeof raw.choice !== "string" || !isRecord(question.criteria) || !Object.hasOwn(question.criteria, raw.choice))) {
+    throw new UnreadableAnswer(`${field}.choice`, `${field} picked ${JSON.stringify(raw.choice)}, which is no option of ${name}`);
+  }
+}
+
 export interface AskInput {
   client: TypeSafeClient;
   state: EntryType;
@@ -154,8 +168,9 @@ export async function ask(input: AskInput): Promise<AskResult> {
     const result = readEnvelope(await input.client.systemOne(model === undefined ? { state: input.state, questions } : { state: input.state, questions, model }));
     const answers: Record<string, Answer> = {};
     for (const name of Object.keys(questions)) {
-      const raw = result.answers[name];
+      const raw = Object.hasOwn(result.answers, name) ? result.answers[name] : undefined;
       if (raw === undefined) throw new UnreadableAnswer(`answers.${name}`, `the API returned no answer named ${name}`);
+      checkFits(name, raw, questions[name]);
       answers[name] = shapeAnswer(name, raw, thresholds[name] ?? DEFAULT_THRESHOLDS);
     }
     const document: AskDocument = {

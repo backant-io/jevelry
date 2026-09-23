@@ -335,7 +335,8 @@ function thresholdsLookup(dirs: string[]): (row: Row) => { thresholds: Threshold
     }
     const j = cache.get(name);
     if (!j) return null;
-    return { thresholds: mergeThresholds(j.thresholds, j.questions[baseName(row.question)]?.thresholds), version: j.version };
+    const base = baseName(row.question);
+    return { thresholds: mergeThresholds(j.thresholds, Object.hasOwn(j.questions, base) ? j.questions[base]!.thresholds : undefined), version: j.version };
   };
 }
 

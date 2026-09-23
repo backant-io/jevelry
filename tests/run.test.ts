@@ -1,5 +1,5 @@
-import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { createWriteStream, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TypeSafeClient } from "@typesafe-ai/sdk";
@@ -51,6 +51,14 @@ describe("parsing run", () => {
   });
   it("refuses a dispatcher option named fall_back, which a handler map could not tell apart", () => {
     refuses(`name: t\nversion: 1\nquestions:\n  q: { type: choice, instructions: x, criteria: { a: x, fall_back: x }, run: { a: "echo" } }`, "questions.q.criteria.fall_back");
+  });
+  it("refuses {{constructor}} and {{toString}}, which only an inherited property would answer", () => {
+    for (const name of ["constructor", "toString"]) {
+      refuses(`name: t\nversion: 1\nquestions:\n  q: { ${choice}, run: { a: "echo {{${name}}}" } }`, "questions.q.run.a");
+    }
+  });
+  it("refuses a question named __proto__, which would set a prototype wherever answers are gathered by name", () => {
+    refuses(`name: t\nversion: 1\nquestions:\n  __proto__: { type: noul, instructions: x }`, "questions.__proto__");
   });
   it("refuses arguments in fall_back, because fall_back runs when nothing was decided", () => {
     refuses(`name: t\nversion: 1\nfall_back: "echo {{q}}"\nquestions:\n  q: { ${choice}, run: { a: "echo" } }`, "fall_back");
@@ -122,6 +130,9 @@ describe("jevelry run", () => {
     expect(doc.run).toMatchObject({ option: "flaky", decision: "act", exit: 3, confirmed: null });
     // The command's own output goes to stderr, so stdout stays one document.
     expect(r.stderr).toContain("ran");
+    // A ./jevels folder in the project wins over a shipped jevel, so the source of the commands is named first.
+    expect(r.stderr).toContain(`jevelry: running flaky from ${join(FIXTURES, "run-gate", "JEVEL.md")}: printf`);
+    expect(r.stderr.indexOf("jevelry: running")).toBeLessThan(r.stderr.indexOf("ran\n"));
     expect(readFileSync(join(out, "args"), "utf8")).toBe(FLAKY_ARGS("act"));
     expect(JSON.parse(readFileSync(join(out, "stdin.json"), "utf8"))).toEqual(JSON.parse(state()));
     expect(JSON.parse(readFileSync(join(out, "file.json"), "utf8"))).toEqual(JSON.parse(state()));
@@ -164,7 +175,7 @@ describe("jevelry run", () => {
     const r = await cli(["run", "run-gate", "--dry-run", "--state", state()]);
     expect(r.status).toBe(0);
     expect(JSON.parse(r.stdout).run).toMatchObject({ option: "flaky", exit: null });
-    expect(r.stderr).toContain("would run");
+    expect(r.stderr).toContain(`would run flaky from ${join(FIXTURES, "run-gate", "JEVEL.md")}: printf`);
     expect(existsSync(join(out, "args"))).toBe(false);
     expect(await runLines(r.home)).toEqual([]);
   });
@@ -272,4 +283,133 @@ describe("the command's process", () => {
     expect(await execute("kill -TERM $$", {}, meta)).toMatchObject({ exit: 143, signal: "SIGTERM" });
     expect(await execute("exit 4", {}, meta)).not.toHaveProperty("signal");
   });
+});
+
+const choiceOf = (choice: string, confidence = 0.95) => ({ type: "choice", choice, probabilities: { [choice]: 1 }, confidence });
+const wrongShapes: Array<[string, Record<string, unknown>]> = [
+  ["an option the question lacks", { cause: choiceOf("flaky"), retries: choiceOf("9; touch pwned"), loud: { type: "noul", noul: 0.99 } }],
+  ["a score where a choice was asked", { cause: choiceOf("flaky"), retries: { type: "score", score: 1, legend: { "0": "a" }, probabilities: { "0": 1 }, confidence: 0.95 }, loud: { type: "noul", noul: 0.99 } }],
+];
+
+describe("an answer no command can be planned from", () => {
+  for (const [label, reply] of wrongShapes) {
+    it(`runs the fall_back command and exits 7 on ${label}, and logs the ask as failed`, async () => {
+      const r = await cli(["run", "run-gate", "--state", state({ reply })]);
+      expect(r.status).toBe(7);
+      const doc = JSON.parse(r.stdout) as { error: { code: string }; run: { command: string } };
+      expect(validate(doc), JSON.stringify(validate.errors)).toBe(true);
+      expect(doc.error.code).toBe("unreadable_answer");
+      expect(doc.run).toMatchObject({ option: null, decision: "fall_back", exit: 0 });
+      expect(readFileSync(join(out, "fall_back"), "utf8")).toBe("fell back\n");
+      expect(existsSync(join(out, "args")), "the flaky command never ran").toBe(false);
+      expect(existsSync(join(out, "pwned"))).toBe(false);
+      const [ask] = (await readLog(r.home)).filter((l) => l.kind === "ask") as Array<{ error?: { code: string }; answers: Record<string, { decision: string }> }>;
+      expect(ask?.error?.code).toBe("unreadable_answer");
+      expect(Object.values(ask?.answers ?? {}).map((a) => a.decision)).toEqual(["fall_back", "fall_back", "fall_back"]);
+    });
+  }
+
+  it("calls the fall_back handler in a program, with the error on the decisions", async () => {
+    const home = mkdtempSync(join(tmpdir(), "jevelry-run-lib-"));
+    const client = new TypeSafeClient({ apiKey: "test-key", baseURL: server.url, retry: { maxRetries: 0 }, defaultModel: "jev-1.13.0" });
+    for (const [, reply] of wrongShapes) {
+      const { decisions, ran } = await jevel("run-gate", { jevels: [FIXTURES], home, client }).run(JSON.parse(state({ reply })), {
+        flaky: () => "flaky ran",
+        fall_back: (d) => `fell back on ${d.error?.code}`,
+      });
+      expect(decisions.error?.code).toBe("unreadable_answer");
+      expect(ran).toEqual({ option: null, decision: "fall_back", confirmed: null, result: "fell back on unreadable_answer" });
+    }
+    const asks = (await readLog(home)).filter((l) => l.kind === "ask") as Array<{ error?: unknown }>;
+    expect(asks.every((a) => a.error !== undefined)).toBe(true);
+  });
+});
+
+describe("names from a jevel or an answer find only own properties", () => {
+  it("runs the command of an option named toString, in a program with shell: true and through a handler", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "jevelry-ctor-"));
+    mkdirSync(join(dir, "ctor"));
+    writeFileSync(join(dir, "ctor", "JEVEL.md"), `---\nname: ctor\nversion: 1\nquestions:\n  cause:\n    type: choice\n    instructions: x\n    criteria: { toString: x, other: x }\n    run:\n      toString: 'echo toString > "$RUN_OUT/ctor"'\nfall_back: 'echo fell back > "$RUN_OUT/fall_back"'\n---\n`);
+    const client = new TypeSafeClient({ apiKey: "test-key", baseURL: server.url, retry: { maxRetries: 0 }, defaultModel: "jev-1.13.0" });
+    const ctor = jevel("ctor", { jevels: [dir], home: mkdtempSync(join(tmpdir(), "jevelry-ctor-home-")), client });
+    process.env.RUN_OUT = out;
+    try {
+      const { ran } = await ctor.run({ reply: { cause: choiceOf("toString") } }, {}, { shell: true });
+      expect(ran).toMatchObject({ option: "toString", decision: "act", result: { exit: 0 } });
+      expect(readFileSync(join(out, "ctor"), "utf8")).toBe("toString\n");
+      // A handler map without a toString of its own: Object.prototype.toString is never called as one.
+      expect((await ctor.run({ reply: { cause: choiceOf("toString") } }, { other: () => "other" })).ran).toBeNull();
+      expect((await ctor.run({ reply: { cause: choiceOf("toString") } }, { toString: () => "mine" })).ran?.result).toBe("mine");
+    } finally {
+      delete process.env.RUN_OUT;
+    }
+  });
+});
+
+/** Started, not awaited: the caller signals the child while the command sleeps. */
+const start = (args: string[]) => {
+  const home = mkdtempSync(join(tmpdir(), "jevelry-run-home-"));
+  const child = spawn("node", [join(process.cwd(), "bin/jevelry.js"), ...args], {
+    cwd: out,
+    env: { PATH: process.env.PATH, HOME: home, TYPESAFE_API_KEY: "test-key", TYPESAFE_BASE_URL: server.url, JEVELRY_KEY_STORE: "file", JEVELRY_HOME: home, JEVELRY_JEVELS: FIXTURES, RUN_OUT: out },
+  });
+  let stdout = "";
+  child.stdout.setEncoding("utf8").on("data", (c: string) => { stdout += c; });
+  child.stderr.resume();
+  const done = new Promise<{ status: number | null; stdout: string }>((resolve) => child.on("close", (status) => resolve({ status, stdout })));
+  return { child, home, done };
+};
+const until = async (check: () => boolean): Promise<void> => {
+  for (let i = 0; i < 100 && !check(); i++) await new Promise((r) => setTimeout(r, 50));
+  expect(check()).toBe(true);
+};
+
+describe("a signal to jevelry while the command runs", () => {
+  for (const [sig, code] of [["SIGTERM", 143], ["SIGINT", 130]] as const) {
+    it(`${sig}: stops the command, removes the state file, logs the run, prints the document and exits ${code}`, async () => {
+      const { child, home, done } = start(["run", "run-gate", "--state", state({ secret: "customer text", reply: { cause: choiceOf("defect"), retries: choiceOf("1"), loud: { type: "noul", noul: 0.99 } } })]);
+      await until(() => existsSync(join(out, "path")));
+      const stateFile = readFileSync(join(out, "path"), "utf8").trim();
+      expect(existsSync(stateFile)).toBe(true);
+      child.kill(sig);
+      const r = await done;
+      expect(r.status).toBe(code);
+      expect(existsSync(stateFile), "the state file is gone").toBe(false);
+      const doc = JSON.parse(r.stdout) as { run: Record<string, unknown> };
+      expect(validate(doc), JSON.stringify(validate.errors)).toBe(true);
+      expect(doc.run).toMatchObject({ option: "defect", signal: sig, exit: code });
+      expect((await runLines(home))[0]).toMatchObject({ option: "defect", signal: sig, exit: code });
+    });
+  }
+});
+
+describe("the mark prompt on a terminal", () => {
+  // `script` gives jevelry a terminal. It refuses a socket on its own stdio, which is what Node's pipes
+  // are, so the keys go in through a FIFO and `cat`, and the screen (stderr and stdout together) to a file.
+  for (const [label, key] of [["Ctrl-D", "\u0004"], ["Ctrl-C", "\u0003"]] as const) {
+    it(`${label} at the prompt is a no: nothing runs, the document prints and the exit is 9`, async () => {
+      const home = mkdtempSync(join(tmpdir(), "jevelry-run-home-"));
+      const [fifo, screenFile] = [join(home, "keys"), join(home, "screen")];
+      execFileSync("mkfifo", [fifo]);
+      const bin = join(process.cwd(), "bin/jevelry.js");
+      const markState = state({ confidence: { cause: 0.95, retries: 0.75 } });
+      const child = spawn("/bin/sh", ["-c", 'cat "$2" | script -q /dev/null node "$0" run run-gate --state "$1" > "$3" 2>&1', bin, markState, fifo, screenFile], {
+        cwd: out,
+        stdio: ["ignore", "ignore", "ignore"],
+        env: { PATH: process.env.PATH, HOME: home, TYPESAFE_API_KEY: "test-key", TYPESAFE_BASE_URL: server.url, JEVELRY_KEY_STORE: "file", JEVELRY_HOME: home, JEVELRY_JEVELS: FIXTURES, RUN_OUT: out },
+      });
+      const closed = new Promise<number | null>((resolve) => child.on("close", resolve));
+      const keys = createWriteStream(fifo);
+      const screen = (): string => (existsSync(screenFile) ? readFileSync(screenFile, "utf8") : "");
+      await until(() => screen().includes("[y/N]"));
+      keys.end(key);
+      const status = await closed;
+      expect(screen()).toContain(`(from ${join(FIXTURES, "run-gate", "JEVEL.md")})? [y/N]`);
+      expect(status, screen()).toBe(9);
+      const text = screen().replace(/\r/g, "");
+      const doc = JSON.parse(text.slice(text.indexOf("{\n"), text.lastIndexOf("}") + 1)) as { run: Record<string, unknown> };
+      expect(doc.run).toMatchObject({ decision: "mark", confirmed: false, exit: null });
+      expect(existsSync(join(out, "args"))).toBe(false);
+    });
+  }
 });

@@ -24,6 +24,9 @@ export async function startServer(): Promise<TestServer> {
       const fail = (body.state as { fail?: number } | null)?.fail;
       if (fail === 429) return json(429, { error: "slow down" }, { "retry-after-ms": "10" });
       if (fail !== undefined) return json(fail, { error: `failing with ${fail}` });
+      // A state may carry the answers verbatim, so a test can send any shape the network could.
+      const reply = (body.state as { reply?: Record<string, unknown> } | null)?.reply;
+      if (reply !== undefined) return json(200, { model: "jev-1.13.0", answers: reply, usage: { input_tokens: 1, output_tokens: 1 } });
       const answers: Record<string, unknown> = {};
       for (const [name, q] of Object.entries(body.questions)) {
         if (q.type === "noul") answers[name] = { type: "noul", noul: name.startsWith("worth") ? 0.08 : 0.97 };

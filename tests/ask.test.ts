@@ -116,6 +116,24 @@ describe("ask with a jevel", () => {
     const result = await ask({ client: client(fetch), state, jevel });
     expect(result).toMatchObject({ ok: false, error: { exit: 7, code: "unreadable_answer", field: "answers.depth" } });
   });
+  // `run` puts a picked option into a command, and every caller reads an answer as its question's
+  // type, so an answer of another type or naming no option is unreadable, never passed on.
+  it("refuses an answer of another type than its question, in both directions", async () => {
+    const questions = { c: { type: "choice", instructions: "x", criteria: { a: "x", b: "x" } }, n: { type: "noul", instructions: "x" } } as never;
+    const choice = { type: "choice", choice: "a", probabilities: { a: 1, b: 0 }, confidence: 0.95 };
+    const score = { type: "score", score: 1, legend: { "0": "a" }, probabilities: { "0": 1 }, confidence: 0.95 };
+    for (const [answers, field] of [[{ c: score, n: { type: "noul", noul: 0.9 } }, "answers.c"], [{ c: choice, n: { ...choice, choice: "$(touch /tmp/x)" } }, "answers.n"]] as const) {
+      const { fetch } = scriptedFetch([() => jsonResponse(200, { model: "jev-1.13.0", answers, usage: { input_tokens: 1, output_tokens: 1 } })]);
+      expect(await ask({ client: client(fetch), state, questions }), field).toMatchObject({ ok: false, error: { exit: 7, code: "unreadable_answer", field } });
+    }
+  });
+  it("refuses a choice that names no option of its question, an inherited name included", async () => {
+    const questions = { c: { type: "choice", instructions: "x", criteria: { a: "x", b: "x" } } } as never;
+    for (const picked of ["2; touch /tmp/x", "toString", "constructor"]) {
+      const { fetch } = scriptedFetch([() => jsonResponse(200, { model: "jev-1.13.0", answers: { c: { type: "choice", choice: picked, probabilities: { a: 1 }, confidence: 0.95 } }, usage: { input_tokens: 1, output_tokens: 1 } })]);
+      expect(await ask({ client: client(fetch), state, questions }), picked).toMatchObject({ ok: false, error: { exit: 7, code: "unreadable_answer", field: "answers.c.choice" } });
+    }
+  });
   it("refuses a noul outside [0, 1] instead of clamping it", async () => {
     const { fetch } = scriptedFetch([() => jsonResponse(200, { model: "jev-1.13.0", answers: { ...answers, worth_a_turn: { type: "noul", noul: 1.5 } }, usage: { input_tokens: 1, output_tokens: 1 } })]);
     const result = await ask({ client: client(fetch), state, jevel });

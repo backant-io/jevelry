@@ -142,7 +142,7 @@ A choice question can name a command for each of its options, and `jevelry run` 
         thresholds: { act: 0.9, mark: 0.7 }
         run:
           flaky: "npm test -- --retry={{retries}}"
-          environment: "gh issue create --label ci --title 'The sandbox blocked the test run' --body-file -"
+          environment: "gh issue create --label ci --title 'The sandbox blocked the test run' --body 'See the CI log of this run'"
       retries:
         type: choice
         instructions: { question: "...", focus: "..." }
@@ -150,7 +150,7 @@ A choice question can name a command for each of its options, and `jevelry run` 
         thresholds: { act: 0.8, mark: 0.6 }
     fall_back: "echo 'Jev is unsure, look at the failing test yourself'"
 
-An option you leave out of `run` runs nothing when Jev picks it, which is what you want for `other`. `{{retries}}` is an argument: it names another choice question of the jevel and gets the option Jev picked there, or it names a noul and gets `true` or `false`. That is the only thing jevelry puts into a command, so the option names of an argument may only use letters, digits, dot, underscore and hyphen, and `check` refuses the jevel otherwise. Your state reaches the command as data, as JSON on stdin and in a file whose path is in `JEVELRY_STATE`, next to `JEVELRY_DECISION`, `JEVELRY_OPTION` and `JEVELRY_LOG_ID`.
+An option you leave out of `run` runs nothing when Jev picks it, which is what you want for `other`. `{{retries}}` is an argument: it names another choice question of the jevel and gets the option Jev picked there, or it names a noul and gets `true` or `false`. That is the only thing jevelry puts into a command, so the option names of an argument may only use letters, digits, dot, underscore and hyphen, and `check` refuses the jevel otherwise. Your state reaches the command as data, as JSON on stdin and in a file whose path is in `JEVELRY_STATE`, next to `JEVELRY_DECISION` (`act`, `mark` or `fall_back`), `JEVELRY_OPTION` and `JEVELRY_LOG_ID`. What the command reads on stdin is your whole state, customer text included, so only pass it on to places where that text may go. An option name that starts with `-` reads like a flag to most commands, so start the options of an argument with a letter or a digit.
 
 The call is as sure as the least sure answer behind it. When Jev picks `flaky` at 0.97 and 2 retries at 0.72, the call is 0.72, and the thresholds of `cause` turn that into the decision: `act` runs the command, `mark` asks you first or runs with `--yes`, and `fall_back` runs the top-level `fall_back` command when the jevel has one. So give every argument clear criteria of its own, because one unsure argument pulls the whole call down to `mark`.
 

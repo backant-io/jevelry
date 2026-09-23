@@ -5,7 +5,7 @@ import { type Jevel, JevelError, type JevelQuestion, checkState, discoveryDirs, 
 import { resolveKey } from "./key.js";
 import { jevelryHome, logAsk, logStateFromEnv } from "./log.js";
 import type { Answer, ChoiceAnswer, ErrorBody, FallBackAnswer, NoulAnswer, ScoreAnswer, Usage } from "./protocol.js";
-import { type RunArgs, dispatcherOf, execute, logRun, planCall } from "./run.js";
+import { type Call, type RunArgs, dispatcherOf, execute, logRun, planCall } from "./run.js";
 
 /**
  * The SDK resolves its own `logLevel` from `TYPESAFE_LOG_LEVEL` and logs through `console` by
@@ -130,7 +130,11 @@ export function jevel<N extends string>(
     if (META.includes(id)) throw new JevelError(`questions.${id}`, `a question named ${id} collides with the ${id} field of decide(); rename it`);
   }
   let client = options.client;
-  const decide = async (state: unknown): Promise<Decisions> => {
+  /**
+   * `plan` runs on Jev's answers before anything is logged; when it throws, the ask is logged and
+   * returned as a failure like any other, so the log never holds a clean decision nobody could act on.
+   */
+  const decideWith = async (state: unknown, plan?: (answers: Record<string, Answer>) => void): Promise<Decisions> => {
     // The caller's own bugs: thrown, because no amount of retrying Jev fixes them.
     if (!isEntry(state)) throw new JevelError("state", "state must be a string, a JSON object or an array");
     checkState(loaded, state);
@@ -141,6 +145,13 @@ export function jevel<N extends string>(
       result = await ask({ client, state: state as EntryType, jevel: loaded, ...(options.model ? { model: options.model } : {}) });
     } catch (error) {
       result = { ok: false, error: errorBody(error) };
+    }
+    if (result.ok && plan) {
+      try {
+        plan(result.document.answers);
+      } catch (error) {
+        result = { ok: false, error: errorBody(error) };
+      }
     }
     const jevelRef = { name: loaded.name, version: loaded.version };
     const logged = (options.logState ?? logStateFromEnv(process.env)) ? { state } : {};
@@ -158,15 +169,18 @@ export function jevel<N extends string>(
       : await logAsk(home, { jevel: jevelRef, model: null, state_hash: stateHash(state), ...logged, answers: fallen, usage: null, error }, warn);
     return { logId, error, model: null, usage: null, ...fallen } as never;
   };
+  const decide = (state: unknown): Promise<Decisions> => decideWith(state);
   return {
     name: loaded.name,
     version: loaded.version,
     decide: decide as never,
     async run(state: unknown, handlers: RunHandlers = {}, runOptions: RunOptions = {}) {
       dispatcherOf(loaded);
-      const decisions = await decide(state);
-      const call = planCall(loaded, decisions.error ? null : decisions);
-      const handler = handlers[call.decision === "fall_back" ? "fall_back" : call.option!];
+      let planned: Call | null = null;
+      const decisions = await decideWith(state, (answers) => { planned = planCall(loaded, answers); });
+      const call = decisions.error ? planCall(loaded, null) : planned!;
+      const key = call.decision === "fall_back" ? "fall_back" : call.option!;
+      const handler = Object.hasOwn(handlers, key) ? handlers[key] : undefined;
       const command = runOptions.shell === true && !handler ? call.command : null;
       if (!handler && command === null) return { decisions, ran: null } as never;
       let confirmed: boolean | null = null;
@@ -175,12 +189,14 @@ export function jevel<N extends string>(
       let exit: number | null = null;
       let ms: number | null = null;
       let signal: string | undefined;
+      let interrupted: NodeJS.Signals | undefined;
       if (confirmed !== false) {
         if (command !== null) {
           const done = await execute(command, state, { decision: call.decision, option: call.option, logId: decisions.logId });
           ({ exit, ms } = done);
           if (done.signal) signal = done.signal;
-          result = done;
+          interrupted = done.interrupted;
+          result = { exit: done.exit, ms: done.ms, ...(signal ? { signal } : {}) };
         } else {
           const started = Date.now();
           result = call.decision === "fall_back" ? await handlers.fall_back!(decisions) : await handler!(call.args, decisions);
@@ -188,6 +204,9 @@ export function jevel<N extends string>(
         }
       }
       if (decisions.logId !== null) await logRun(home, decisions.logId, { option: call.option, command, decision: call.decision, exit, ms, confirmed, ...(signal ? { signal } : {}) }, warn);
+      // The command was stopped because this process got a signal. With no handler of the host's own
+      // left, the signal is raised again, now that the state file is gone and the run is logged.
+      if (interrupted && process.listenerCount(interrupted) === 0) process.kill(process.pid, interrupted);
       return { decisions, ran: { option: call.option, decision: call.decision, confirmed, result } } as never;
     },
   };

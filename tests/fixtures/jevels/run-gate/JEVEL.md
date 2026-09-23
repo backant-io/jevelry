@@ -13,7 +13,7 @@ questions:
     thresholds: { act: 0.85, mark: 0.7 }
     run:
       flaky: 'printf "%s %s %s" "$JEVELRY_DECISION" "$JEVELRY_OPTION" "{{retries}} {{loud}}" > "$RUN_OUT/args"; cat > "$RUN_OUT/stdin.json"; cp "$JEVELRY_STATE" "$RUN_OUT/file.json"; echo "$JEVELRY_STATE" > "$RUN_OUT/path"; echo ran; exit 3'
-      defect: "echo defect"
+      defect: 'echo "$JEVELRY_STATE" > "$RUN_OUT/path"; sleep 5' 
   retries:
     type: choice
     instructions: "How many reruns would `test` need?"

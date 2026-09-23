@@ -100,7 +100,8 @@ function checkMarkUnderAct(layers: Array<Partial<Thresholds>>, field: string): v
 
 function questionOf(id: string, raw: unknown, jevelThresholds: Partial<Thresholds>): JevelQuestion {
   const field = `questions.${id}`;
-  if (!QUESTION_ID.test(id)) throw new JevelError(field, `question id \`${id}\` must match [a-z0-9_]+`);
+  // `__proto__` would set a prototype, not a key, wherever answers are collected by name.
+  if (!QUESTION_ID.test(id) || id === "__proto__") throw new JevelError(field, `question id \`${id}\` must match [a-z0-9_]+`);
   if (!isRecord(raw)) throw new JevelError(field, `${field} must be an object`);
   refuseRenamedKey(raw, `${field}.`);
   const type = raw.type;
@@ -182,7 +183,8 @@ function checkRun(jevel: Jevel): void {
     for (const [option, command] of Object.entries(q.run!)) {
       const at = `questions.${id}.run.${option}`;
       for (const [, name] of command.matchAll(PLACEHOLDER)) {
-        const arg = jevel.questions[name!];
+        // Own properties only: `{{constructor}}` must never find Object.prototype.constructor.
+        const arg = Object.hasOwn(jevel.questions, name!) ? jevel.questions[name!] : undefined;
         if (!arg || arg.type === "score") throw new JevelError(at, `${at}: {{${name}}} must name a choice or noul question of this jevel`);
         if (arg.repeat) throw new JevelError(at, `${at}: {{${name}}} is a repeat question, which has one answer per element and cannot be one argument`);
         if (arg.type === "choice") {
@@ -344,7 +346,7 @@ export function checkState(jevel: Jevel, state: unknown): void {
     throw new JevelError("state.required", `this jevel requires the keys ${jevel.state.required.join(", ")}, so the state must be an object`);
   }
   for (const key of jevel.state.required) {
-    if (!(key in state)) throw new JevelError("state.required", `state is missing the required key \`${key}\``);
+    if (!Object.hasOwn(state, key)) throw new JevelError("state.required", `state is missing the required key \`${key}\``);
   }
 }
 
@@ -358,7 +360,7 @@ export function getPath(value: unknown, path: string): unknown {
       if (!Number.isInteger(index)) return undefined;
       current = current[index];
     } else if (isRecord(current)) {
-      current = current[step];
+      current = Object.hasOwn(current, step) ? current[step] : undefined;
     } else {
       return undefined;
     }

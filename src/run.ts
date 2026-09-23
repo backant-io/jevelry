@@ -44,23 +44,25 @@ export function planCall(jevel: Jevel, answers: Answers | null): Call {
   const id = dispatcherOf(jevel);
   const q = jevel.questions[id]!;
   const fallBack: Call = { option: null, command: jevel.fall_back ?? null, args: {}, certainty: 0, decision: "fall_back" };
-  const picked = answers?.[id];
-  if (!answered(picked) || picked.type !== "choice") return fallBack;
+  if (answers === null) return fallBack;
+  // ask() already refuses an answer of the wrong type or naming no option; this is the second check,
+  // keyed on the jevel's own types, right before a value goes into a command.
+  const answerOf = (name: string): Answer => {
+    const a = Object.hasOwn(answers, name) ? answers[name] : undefined;
+    if (!answered(a) || a.type !== jevel.questions[name]!.type) throw new UnreadableAnswer(`answers.${name}`, `answers.${name} is no ${jevel.questions[name]!.type} answer`);
+    if (a.type === "choice" && (!Object.hasOwn(jevel.questions[name]!.criteria as object, a.choice) || (name !== id && !SAFE_VALUE.test(a.choice)))) {
+      throw new UnreadableAnswer(`answers.${name}.choice`, `answers.${name} picked a value that is no option of ${name}`);
+    }
+    return a;
+  };
+  const picked = answerOf(id) as Answer & { type: "choice" };
   const option = picked.choice;
-  if (!Object.hasOwn(q.criteria as object, option)) throw new UnreadableAnswer(`answers.${id}.choice`, `answers.${id} picked ${option}, which is no option of ${id}`);
   const template = Object.hasOwn(q.run!, option) ? q.run![option]! : null;
   const args: RunArgs = {};
   let certainty = picked.certainty;
   for (const [, name] of template?.matchAll(PLACEHOLDER) ?? []) {
-    const a = answers?.[name!];
-    if (!answered(a)) return fallBack;
-    if (a.type === "choice") {
-      const options = Object.keys(jevel.questions[name!]!.criteria as Record<string, unknown>);
-      if (!options.includes(a.choice) || !SAFE_VALUE.test(a.choice)) throw new UnreadableAnswer(`answers.${name}.choice`, `answers.${name} picked a value that is no option of ${name}`);
-      args[name!] = a.choice;
-    } else if (a.type === "noul") {
-      args[name!] = a.yes;
-    }
+    const a = answerOf(name!);
+    args[name!] = a.type === "choice" ? a.choice : a.type === "noul" ? a.yes : String(a.score);
     certainty = Math.min(certainty, a.certainty);
   }
   const decision = decisionOf(certainty, mergeThresholds(jevel.thresholds, q.thresholds));
@@ -69,37 +71,58 @@ export function planCall(jevel: Jevel, answers: Answers | null): Call {
   return { option, command, args, certainty, decision };
 }
 
+/** Signals jevelry passes on to a running command, so the command stops and the state file is removed. */
+const FORWARDED = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
+
 /**
  * `/bin/sh -c` with the fixed command. The state goes in only as data: JSON on stdin and in the file
  * `JEVELRY_STATE` names, removed afterwards. The command's output goes to stderr, so a caller's stdout
  * stays one document.
  */
-export async function execute(command: string, state: unknown, meta: { decision: Decision; option: string | null; logId: string | null }): Promise<{ exit: number; ms: number; signal?: string }> {
+export async function execute(
+  command: string,
+  state: unknown,
+  meta: { decision: Decision; option: string | null; logId: string | null },
+): Promise<{ exit: number; ms: number; signal?: string; interrupted?: NodeJS.Signals }> {
   const dir = mkdtempSync(join(tmpdir(), "jevelry-state-"));
   const file = join(dir, "state.json");
   const json = JSON.stringify(state);
-  writeFileSync(file, json, { mode: 0o600 });
-  const started = Date.now();
   // A jevel command is arbitrary shell, so it gets the environment minus the TypeSafe key.
   const { TYPESAFE_API_KEY: _key, ...env } = process.env;
+  const listeners: Array<[NodeJS.Signals, () => void]> = [];
+  let interrupted: NodeJS.Signals | undefined;
+  const started = Date.now();
   try {
-    const { exit, signal } = await new Promise<{ exit: number; signal?: string }>((resolve, reject) => {
+    writeFileSync(file, json, { mode: 0o600 });
+    const { exit, signal } = await new Promise<{ exit: number; signal?: string }>((resolve) => {
+      // Its own process group, so a forwarded signal reaches the command's children too.
       const child = spawn("/bin/sh", ["-c", command], {
         cwd: process.cwd(),
+        detached: true,
         stdio: ["pipe", "pipe", "pipe"],
         env: { ...env, JEVELRY_STATE: file, JEVELRY_DECISION: meta.decision, JEVELRY_OPTION: meta.option ?? "", JEVELRY_LOG_ID: meta.logId ?? "" },
       });
+      for (const sig of FORWARDED) {
+        const forward = (): void => {
+          interrupted = sig;
+          try { process.kill(-child.pid!, sig); } catch { child.kill(sig); }
+        };
+        listeners.push([sig, forward]);
+        process.on(sig, forward);
+      }
       child.stdout.on("data", (chunk: Buffer) => process.stderr.write(chunk));
       child.stderr.on("data", (chunk: Buffer) => process.stderr.write(chunk));
       // A command that never reads stdin closes it early; that is its business, never an error here.
       child.stdin.on("error", () => undefined);
       child.stdin.end(json);
-      child.on("error", reject);
+      // The shell could not start at all: the shell's own code for a command that is not there.
+      child.on("error", () => resolve({ exit: 127 }));
       // Killed by a signal: the shell's convention, 128 plus the signal number, and the name for the log.
       child.on("close", (code, sig) => resolve(sig ? { exit: 128 + (constants.signals[sig] ?? 0), signal: sig } : { exit: code ?? 1 }));
     });
-    return { exit, ms: Date.now() - started, ...(signal ? { signal } : {}) };
+    return { exit, ms: Date.now() - started, ...(signal ? { signal } : {}), ...(interrupted ? { interrupted } : {}) };
   } finally {
+    for (const [sig, forward] of listeners) process.off(sig, forward);
     rmSync(dir, { recursive: true, force: true });
   }
 }

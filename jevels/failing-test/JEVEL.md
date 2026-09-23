@@ -86,7 +86,7 @@ When a test fails in CI or on your machine and you want the next step to happen 
 
 ## Decisions
 
-`cause` picks the command, and `retries` is the argument of the `flaky` command, so a `flaky` call is only as sure as the less sure of the two answers. On `act` the command runs, on `mark` `jevelry run` asks you first or runs it with `--yes`, and on `fall_back` the `fall_back` command runs, which here tells you to read the output yourself. The commands only print what they would do, so you replace them with your own, like `npm test -- --retry={{retries}}` for `flaky`.
+`cause` picks the command, and `retries` is the argument of the `flaky` command, so a `flaky` call is only as sure as the less sure of the two answers. On `act` the command runs, on `mark` `jevelry run` asks you first or runs it with `--yes`, and on `fall_back` the `fall_back` command runs, which here tells you to read the output yourself. The commands only print what they would do, so you replace them with your own, like `npm test -- --retry={{retries}}` for `flaky`. Jev answers `retries` on every ask, also when the cause it picks has a command that leaves it out, because every question goes in the one request.
 
 ## Example
 
