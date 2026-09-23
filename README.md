@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT">
 </p>
 
-<p align="center"><b>Let Jev make the small calls in your code and your coding agent, with a decision your code can act on.</b></p>
+<p align="center"><b>Use Jev everywhere to make &amp; track decisions.</b></p>
 
 Your code and your coding agent make the same small calls every day: is this ticket urgent, which team should get it, is this bug a duplicate, did this test fail because of the code or because of the machine it ran on. Today each of those is usually a prompt that returns text you parse, and you don't learn how sure the model was.
 
@@ -257,7 +257,7 @@ Currently jevelry asks Jev questions and hands you the answers, and that is the 
 
 ## How do we know you can trust it
 
-203 tests run offline against recorded answers from TypeSafe's API reference and against the sixteen jevels and their cases. 90 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself and one routes the `ticket-triage` example through `decide` in your program. One of those tests reads the log afterwards and checks that your key stays out of it.
+205 tests run offline against recorded answers from TypeSafe's API reference and against the sixteen jevels and their cases. 90 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself and one routes the `ticket-triage` example through `decide` in your program. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## Environment
 

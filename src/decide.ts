@@ -13,10 +13,9 @@ import type { Answer, ChoiceAnswer, ErrorBody, FallBackAnswer, NoulAnswer, Score
  * to stderr instead, so the one-document protocol holds whatever the environment asks for.
  */
 export function defaultClient(home: string): TypeSafeClient {
-  // The SDK reads the key from the environment itself, so a key that lives in the keychain or in
-  // `$JEVELRY_HOME/env` is put there before the client is built. A key the host exported wins.
+  // The key goes to the client directly: writing it into `process.env` would hand it to every child
+  // process the host program starts. A key the host exported wins, as `resolveKey` reads it first.
   const key = resolveKey(process.env, home);
-  if (key !== undefined && (process.env.TYPESAFE_API_KEY ?? "").trim() === "") process.env.TYPESAFE_API_KEY = key;
   const timeout = Number(process.env.JEVELRY_TIMEOUT_MS ?? 30000);
   const model = process.env.JEVELRY_MODEL;
   // An extra argument is usually an object: `String` would render it `[object Object]` and lose the
@@ -24,7 +23,12 @@ export function defaultClient(home: string): TypeSafeClient {
   const render = (a: unknown): string => { try { return JSON.stringify(a) ?? String(a); } catch { return String(a); } };
   const toStderr = (m: string, ...a: unknown[]): void => { process.stderr.write(`jevelry: sdk: ${[m, ...a.map(render)].join(" ")}\n`); };
   const logger = { debug: toStderr, info: toStderr, warn: toStderr, error: toStderr };
-  return new TypeSafeClient(model && model.trim() !== "" ? { timeout, defaultModel: model, logger } : { timeout, logger });
+  return new TypeSafeClient({
+    timeout,
+    logger,
+    ...(key !== undefined ? { apiKey: key } : {}),
+    ...(model && model.trim() !== "" ? { defaultModel: model } : {}),
+  });
 }
 
 export type ChoiceDecision<O extends string = string> = (Omit<ChoiceAnswer, "choice"> & { choice: O; answer: O }) | FallBackAnswer<"choice">;
@@ -149,7 +153,7 @@ export function renderTypes(jevels: Jevel[]): string {
   for (const j of jevels) {
     lines.push(`export interface ${pascal(j.name)} {`);
     for (const [id, q] of Object.entries(j.questions)) {
-      const key = q.repeat ? `[key: \`${id}[\${number}]\`]` : id;
+      const key = q.repeat ? `[key: \`${id}[\${number}]\`]` : JSON.stringify(id);
       lines.push(`  ${key}: ${answerType(q)};`);
     }
     lines.push("}", "");

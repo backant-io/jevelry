@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TypeSafeClient } from "@typesafe-ai/sdk";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { jevel } from "../src/decide.js";
+import { defaultClient, jevel, renderTypes } from "../src/decide.js";
 import { JevelError } from "../src/jevel.js";
 import { type AskLine, outcomeOf, readLog } from "../src/log.js";
 import { report } from "../src/report.js";
@@ -199,5 +199,30 @@ describe("jevelry types", () => {
     const tsc = spawnSync("node", [join(process.cwd(), "node_modules", "typescript", "bin", "tsc"), "-p", join(dir, "tsconfig.json")], { encoding: "utf8" });
     expect(tsc.stdout + tsc.stderr).toBe("");
     expect(tsc.status).toBe(0);
+  });
+});
+
+describe("review fixes", () => {
+  it("hands a stored key to the client and leaves the host's environment alone", () => {
+    const home = mkdtempSync(join(tmpdir(), "jevelry-key-"));
+    writeFileSync(join(home, "env"), "TYPESAFE_API_KEY=sk-from-file\n", { mode: 0o600 });
+    const before = process.env.TYPESAFE_API_KEY;
+    const store = process.env.JEVELRY_KEY_STORE;
+    delete process.env.TYPESAFE_API_KEY;
+    process.env.JEVELRY_KEY_STORE = "file";
+    try {
+      defaultClient(home);
+      // A key written into process.env would reach every child process the host program starts.
+      expect(process.env.TYPESAFE_API_KEY).toBeUndefined();
+    } finally {
+      if (before !== undefined) process.env.TYPESAFE_API_KEY = before;
+      if (store === undefined) delete process.env.JEVELRY_KEY_STORE;
+      else process.env.JEVELRY_KEY_STORE = store;
+    }
+  });
+
+  it("quotes question ids, so an id starting with a digit is still valid TypeScript", () => {
+    const out = renderTypes([{ name: "login-check", questions: { "2fa": { type: "noul" } } } as never]);
+    expect(out).toContain('  "2fa": NoulDecision;');
   });
 });
