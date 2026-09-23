@@ -131,7 +131,7 @@ Every ask your program or your agent makes goes into `~/.jevelry/log.jsonl`, and
       09-22 09:00 ticket-triage frustration    level 1    0.62 mark      -
     j/k move  enter open  f decision  J jevel  o no outcome  r report  q quit
 
-You see one row per question with the time, the jevel, the answer, how sure Jev was and the decision, newest first. Press `f` until it shows `mark` and `o` to keep only the ones nobody has looked at yet, and you have the list of decisions Jev flagged for a person. Press enter on one and you see every option with its probability, the thresholds of the jevel and the state Jev was asked about. The state is only there when you ask for it with `--log-state`, `jevel(name, { logState: true })` in your program or `JEVELRY_LOG_STATE=1`, because states often hold customer text. Pressing `a` tells jevelry that Jev was right, and `d` tells it Jev was wrong and asks you for the right answer, which is what `jevelry report` then counts.
+You see one row per question with the time, the jevel, the answer, how sure Jev was and the decision, newest first. Press `f` until it shows `mark` and `o` to keep only the ones nobody has looked at yet, and you have the list of decisions Jev flagged for a person. Press enter on one and you see every option with its probability, the thresholds of the jevel and the state Jev was asked about. The state is only there when you ask for it with `--log-state`, `jevel(name, { logState: true })` in your program or `JEVELRY_LOG_STATE=1`, because states often hold customer text. Pressing `c` tells jevelry that Jev was correct, and `w` tells it Jev was wrong and asks you for the right answer, which is what `jevelry report` then counts.
 
 ## What is underneath
 

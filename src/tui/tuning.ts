@@ -181,13 +181,26 @@ export function setActThreshold(text: string, question: string, act: number): { 
   return { text: out, changes, version: next };
 }
 
-/** Where a jevel file sits, as far as tuning is concerned. */
-export type Place = { kind: "project" } | { kind: "shipped" } | { kind: "home" };
+/**
+ * Where a jevel file sits, as far as tuning is concerned. `source` is a shipped jevel inside a git checkout of
+ * jevelry itself: that file is the one to change, so it is edited in place like a project's own.
+ */
+export type Place = { kind: "project" } | { kind: "shipped" } | { kind: "home" } | { kind: "source" };
+
+/** The folder that holds the shipped jevels is a git working tree of the jevelry package, so not an installed copy. */
+export function isSource(shipped: string): boolean {
+  const root = dirname(shipped);
+  try {
+    return existsSync(join(root, ".git")) && (JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { name?: unknown }).name === "jevelry";
+  } catch {
+    return false;
+  }
+}
 
 export function placeOf(path: string, dirs: { shipped?: string; home: string }): Place {
-  dirs = { shipped: SHIPPED_JEVELS, ...dirs };
-  const under = (dir: string | undefined): boolean => dir !== undefined && path.startsWith(dir.endsWith(sep) ? dir : dir + sep);
-  if (under(dirs.shipped)) return { kind: "shipped" };
+  const shipped = dirs.shipped ?? SHIPPED_JEVELS;
+  const under = (dir: string): boolean => path.startsWith(dir.endsWith(sep) ? dir : dir + sep);
+  if (under(shipped)) return isSource(shipped) ? { kind: "source" } : { kind: "shipped" };
   if (under(join(dirs.home, "jevels"))) return { kind: "home" };
   return { kind: "project" };
 }

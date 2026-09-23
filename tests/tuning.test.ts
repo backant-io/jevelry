@@ -1,6 +1,6 @@
 process.env.TZ = "UTC";
 
-import { cpSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { render } from "ink-testing-library";
@@ -12,6 +12,14 @@ import { App } from "../src/tui/app.js";
 import { placeOf, proposeAct, setActThreshold, tallies } from "../src/tui/tuning.js";
 
 const SHIPPED = join(process.cwd(), "jevels");
+/** A jevelry package with ticket-triage in its jevels folder: a git checkout of the source, or an installed copy. The jevels folder. */
+const fakePackage = (checkout: boolean): string => {
+  const root = mkdtempSync(join(tmpdir(), "jevelry-pkg-"));
+  writeFileSync(join(root, "package.json"), JSON.stringify({ name: "jevelry" }));
+  if (checkout) mkdirSync(join(root, ".git"));
+  cpSync(join(SHIPPED, "ticket-triage"), join(root, "jevels", "ticket-triage"), { recursive: true });
+  return join(root, "jevels");
+};
 const FIXTURES = join(process.cwd(), "tests", "fixtures", "jevels");
 const hash = `sha256:${"0".repeat(64)}`;
 const tick = (ms = 60) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -156,6 +164,10 @@ describe("setting the act threshold in the file", () => {
     expect(placeOf("/h/jevels/x/JEVEL.md", { shipped: "/pkg/jevels", home: "/h" })).toEqual({ kind: "home" });
     expect(placeOf("/proj/jevels/x/JEVEL.md", { shipped: "/pkg/jevels", home: "/h" })).toEqual({ kind: "project" });
     expect(placeOf("/pkg/jevels-extra/x/JEVEL.md", { shipped: "/pkg/jevels", home: "/h" })).toEqual({ kind: "project" });
+    // A git checkout of jevelry itself is where its jevels are written, so their files are edited in place.
+    const source = fakePackage(true);
+    expect(placeOf(join(source, "ticket-triage", "JEVEL.md"), { shipped: source, home: "/h" })).toEqual({ kind: "source" });
+    expect(placeOf(join(fakePackage(false), "ticket-triage", "JEVEL.md"), { shipped: fakePackage(false), home: "/h" })).toEqual({ kind: "project" });
   });
 });
 
@@ -237,18 +249,20 @@ describe("jevel screen", () => {
     unmount();
   });
 
-  // The shipped file is jevelry's, and a JEVELRY_HOME one is shared; tuning either would change it for everyone.
-  it("offers to copy a shipped jevel into the project, and tunes the copy", async () => {
+  // An installed jevel is jevelry's: the next update would overwrite a change made there, so the copy is tuned.
+  it("offers to copy an installed shipped jevel into the project, says why, and tunes the copy", async () => {
     const { home, lines } = setup();
+    const installed = fakePackage(false);
     const project = join(mkdtempSync(join(tmpdir(), "jevelry-proj-")), "jevels");
-    const shippedPath = join(SHIPPED, "ticket-triage", "JEVEL.md");
+    const shippedPath = join(installed, "ticket-triage", "JEVEL.md");
     const before = readFileSync(shippedPath, "utf8");
-    const { stdin, lastFrame, unmount } = render(createElement(App, { home, dirs: [project, SHIPPED], project, lines, size: { columns: 100, rows: 30 }, screen: "jevel", jevel: "ticket-triage" }));
+    const { stdin, lastFrame, unmount } = render(createElement(App, { home, dirs: [project, installed], shipped: installed, project, lines, size: { columns: 100, rows: 30 }, screen: "jevel", jevel: "ticket-triage" }));
     await tick();
     expect(lastFrame()).toContain("ships with jevelry: ");
     await press(stdin, "T");
-    expect(lastFrame()).toContain("Copy the jevel and set its threshold");
-    expect(lastFrame()).toContain("ticket-triage ships with jevelry, so tune your own copy.");
+    const frame = (lastFrame() ?? "").replace(/\s+/g, " ");
+    expect(frame).toContain("Copy the jevel and set its threshold");
+    expect(frame).toContain(`This jevel came with jevelry. An update would undo a change made here. Enter copies it to ${project}/ticket-triage and tunes the copy:`.replace(/\s+/g, " "));
     expect(lastFrame()).toContain("enter copy and set");
     expect((lastFrame() ?? "").split("\n").at(-1)).toMatch(/^ enter copy and set {2}esc cancel/);
     await press(stdin, ENTER);
@@ -260,20 +274,22 @@ describe("jevel screen", () => {
     unmount();
   });
 
-  // Inside the jevelry repo ./jevels is the shipped folder itself: there is nowhere to copy to, and the dialog says only that.
-  it("says whole why it cannot tune a shipped jevel from inside the repo, and offers only esc", async () => {
+  // Inside a checkout of jevelry the shipped file is the source: the person working there means to change it.
+  it("tunes a shipped jevel in place inside jevelry's own git checkout", async () => {
     const { home, lines } = setup();
-    const before = readFileSync(join(SHIPPED, "ticket-triage", "JEVEL.md"), "utf8");
-    const { stdin, lastFrame, unmount } = render(createElement(App, { home, dirs: [SHIPPED], project: SHIPPED, lines, size: { columns: 80, rows: 24 }, screen: "jevel", jevel: "ticket-triage" }));
+    const source = fakePackage(true);
+    const path = join(source, "ticket-triage", "JEVEL.md");
+    const before = readFileSync(path, "utf8");
+    const { stdin, lastFrame, unmount } = render(createElement(App, { home, dirs: [source], shipped: source, project: source, lines, size: { columns: 80, rows: 24 }, screen: "jevel", jevel: "ticket-triage" }));
     await tick();
+    expect(lastFrame()).toContain("jevelry's own source file: ");
     await press(stdin, "T");
-    const frame = lastFrame() ?? "";
-    expect(frame).toContain("Cannot tune here");
-    expect(frame.replace(/\s+/g, " ")).toContain("Run jevelry tui in your project to copy it there and tune it.");
-    expect(frame).not.toContain("enter copies");
-    expect(frame.split("\n").at(-1)).toMatch(/^ esc close/);
+    expect(lastFrame()).toContain("Set the act threshold");
+    expect(lastFrame()).not.toContain("Cannot");
+    expect((lastFrame() ?? "").split("\n").at(-1)).toMatch(/^ enter set it {2}esc cancel/);
     await press(stdin, ENTER);
-    expect(readFileSync(join(SHIPPED, "ticket-triage", "JEVEL.md"), "utf8")).toBe(before);
+    expect(readFileSync(path, "utf8")).toBe(before.replace("version: 3", "version: 4").replace("thresholds: { act: 0.8, mark: 0.6 }", "thresholds: { act: 0.7, mark: 0.6 }"));
+    expect(existsSync(join(source, "ticket-triage", "ticket-triage"))).toBe(false);
     unmount();
   });
 

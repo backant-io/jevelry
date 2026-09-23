@@ -41,7 +41,7 @@ const agreedB: OutcomeLine = { kind: "outcome", id: B.id, question: "team", outc
 const LOG: LogLine[] = [A, B, C, D, agreedB];
 
 const tick = (ms = 60) => new Promise((resolve) => setTimeout(resolve, ms));
-/** A card takes a, d and s only once it has been on screen this long (SETTLE_MS plus slack). */
+/** A card takes c, w and s only once it has been on screen this long (SETTLE_MS plus slack). */
 const SETTLE = 520;
 /** The same verdict key again this soon after the last verdict is a held key (HELD_MS plus slack). */
 const HELD = 1200;
@@ -104,7 +104,7 @@ describe("review", () => {
       expect(frame.replace(/\s+/g, " ")).toContain("account: Logging in, a password, a seat");
       expect(frame).toContain("certainty 0.75  (act 0.80, mark 0.60)");
       expect(frame).toContain("decision  mark  fairly sure, check it");
-      expect(frame).toMatch(/Was Jev right\? {3}a right {2}d wrong, then pick {2}n note {2}s skip {2}m review acts/);
+      expect(frame).toMatch(/Jev says: team = account\s*\n\s*Is Jev right\? {2}c correct {2}w wrong {2}s skip {2}n note {2}m review acts/);
       // How this question has done so far, so the reviewer knows how much to trust the pick.
       // The so-far block fits whole at both sizes: its last line is never cut.
       expect(frame).toContain("so far  4 decisions of this question");
@@ -114,11 +114,11 @@ describe("review", () => {
     }
   });
 
-  // The whole job: a, d or s moves on, and each a or d is one outcome line the report counts.
-  it("a, d and s record or skip and bring the next card, newest first, and the end says what was done", async () => {
+  // The whole job: c, w or s moves on, and each c or w is one outcome line the report counts.
+  it("c, w and s record or skip and bring the next card, newest first, and the end says what was done", async () => {
     const { home, stdin, lastFrame, unmount } = review(LOG);
     await tick(SETTLE);
-    await press(stdin, "a");
+    await press(stdin, "c");
     await tick(150);
     expect(lastFrame()).toContain("Review 2 of 3");
     expect(lastFrame()).toMatch(/> yes\s+\S+\s+0\.78/);
@@ -128,7 +128,7 @@ describe("review", () => {
     expect(lastFrame()).toContain("Review 3 of 3");
     expect(lastFrame()).toMatch(/> 1 annoyed\s+\S+\s+0\.62/);
     await tick(SETTLE);
-    await press(stdin, "d", "j", "\r");
+    await press(stdin, "w", "j", "\r");
     await tick(150);
     expect(lastFrame()).toContain("All reviewed");
     expect(lastFrame()).toContain("2 outcomes recorded, 1 skipped on this visit.");
@@ -144,18 +144,18 @@ describe("review", () => {
   });
 
   // A held key must not hand out verdicts on cards nobody saw: that is exactly what the tuning rule reads.
-  it("records one outcome for a held a, ten presses 30 ms apart, and for a key repeat's first delay", async () => {
+  it("records one outcome for a held c, ten presses 30 ms apart, and for a key repeat's first delay", async () => {
     const { home, stdin, lastFrame, unmount } = review(LOG);
     await tick(SETTLE);
-    for (let i = 0; i < 10; i++) { stdin.write("a"); await tick(30); }
+    for (let i = 0; i < 10; i++) { stdin.write("c"); await tick(30); }
     await tick(200);
     expect(await outcomes(home)).toEqual([agreedB, expect.objectContaining({ id: D.id, question: "team", outcome: "agree" })]);
     expect(lastFrame()).toContain("Review 2 of 3");
     // A terminal's key repeat: the press, 400 ms, then repeats 33 ms apart. One press, one outcome.
     await tick(HELD);
-    stdin.write("a");
+    stdin.write("c");
     await tick(400);
-    for (let i = 0; i < 9; i++) { stdin.write("a"); await tick(33); }
+    for (let i = 0; i < 9; i++) { stdin.write("c"); await tick(33); }
     await tick(200);
     expect((await outcomes(home)).slice(1)).toEqual([
       expect.objectContaining({ id: D.id, question: "team" }),
@@ -167,13 +167,13 @@ describe("review", () => {
 
   // A key repeat's first delay is 300 ms on macOS, about 500 on Windows, 660 on X11 and up to 1000: every one of them
   // outlasts or nearly outlasts the next card's settle time, and the first repeat must still not be a second verdict.
-  it("records exactly one outcome for a held a whatever the terminal's first repeat delay", async () => {
+  it("records exactly one outcome for a held c whatever the terminal's first repeat delay", async () => {
     for (const delay of [300, 500, 660, 1000]) {
       const { home, stdin, lastFrame, unmount } = review(LOG);
       await tick(SETTLE);
-      stdin.write("a");
+      stdin.write("c");
       await tick(delay);
-      for (let i = 0; i < 9; i++) { stdin.write("a"); await tick(33); }
+      for (let i = 0; i < 9; i++) { stdin.write("c"); await tick(33); }
       await tick(200);
       expect((await outcomes(home)).length, `delay ${delay} ms`).toBe(2);
       expect(lastFrame()).toContain("Review 2 of 3");
@@ -185,16 +185,16 @@ describe("review", () => {
   it("takes the same verdict key again after a pause, or right after another key", async () => {
     const { home, stdin, lastFrame, unmount } = review(LOG);
     await tick(SETTLE);
-    stdin.write("a");
+    stdin.write("c");
     await tick(HELD);
-    stdin.write("a");
+    stdin.write("c");
     await tick(150);
     expect(await outcomes(home)).toHaveLength(3);
     expect(lastFrame()).toContain("Review 3 of 3");
     await tick(SETTLE);
     stdin.write("j");
     await tick(30);
-    stdin.write("a");
+    stdin.write("c");
     await tick(150);
     expect(await outcomes(home)).toHaveLength(4);
     expect(lastFrame()).toContain("All reviewed");
@@ -208,21 +208,21 @@ describe("review", () => {
     expect(lastFrame()).toContain("reading…");
     await tick(SETTLE);
     expect(lastFrame()).not.toContain("reading…");
-    stdin.write("a");
+    stdin.write("c");
     await tick(100);
     expect(lastFrame()).toContain("Review 2 of 3");
     expect(lastFrame()).toContain("reading…");
     unmount();
   });
 
-  it("takes no a, d or s in the first moments a card is up, and handles keys that arrive in one read", async () => {
+  it("takes no c, w or s in the first moments a card is up, and handles keys that arrive in one read", async () => {
     const { home, stdin, lastFrame, unmount } = review(LOG);
     await tick(60);
-    stdin.write("a");
+    stdin.write("c");
     await tick(SETTLE);
     expect(await outcomes(home)).toEqual([agreedB]);
-    // "sa" in one read: skip, then (the next card not yet settled) nothing.
-    stdin.write("sa");
+    // "sc" in one read: skip, then (the next card not yet settled) nothing.
+    stdin.write("sc");
     await tick(150);
     expect(lastFrame()).toContain("Review 2 of 3");
     expect(await outcomes(home)).toEqual([agreedB]);
@@ -230,12 +230,12 @@ describe("review", () => {
   });
 
   // On a noul there is one other value, so "wrong" is the whole answer; a picker with one row is a wasted key.
-  it("d on a noul records the opposite value at once, and the keys say right and wrong", async () => {
+  it("w on a noul records the opposite value at once, and every card asks the same question with the same keys", async () => {
     const { home, stdin, lastFrame, unmount } = review([A, B, agreedB]);
     await tick(SETTLE);
     expect(lastFrame()).toMatch(/question {2}urgent/);
-    expect(lastFrame()).toContain("d wrong (it was no)");
-    stdin.write("d");
+    expect(lastFrame()).toMatch(/Jev says: urgent = yes\s*\n\s*Is Jev right\? {2}c correct {2}w wrong \(it was no\) {2}s skip/);
+    stdin.write("w");
     await tick(200);
     expect((await outcomes(home)).at(-1)).toMatchObject({ id: A.id, question: "urgent", outcome: "disagree", value: "no" });
     expect(lastFrame()).not.toContain("What was right?");

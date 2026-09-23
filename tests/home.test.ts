@@ -156,7 +156,7 @@ describe("home screen", () => {
     await tick();
     stdin.write("\r");
     await tick();
-    expect(lastFrame()).toMatch(/Was Jev right\?|reading…/);
+    expect(lastFrame()).toMatch(/Is Jev right\?|reading…/);
     stdin.write("h");
     await tick();
     stdin.write("j");

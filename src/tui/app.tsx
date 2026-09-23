@@ -131,6 +131,8 @@ export function App(props: {
   project?: string;
   /** The jevel the Jevel screen, or Try, opens on. */
   jevel?: string;
+  /** Where the shipped jevels are; tests point it at a copy. */
+  shipped?: string;
   /** What Try asks Jev through; tests pass one that talks to a local server. */
   client?: TypeSafeClient;
 }): React.JSX.Element {
@@ -193,7 +195,7 @@ export function App(props: {
   const project = props.project ?? join(process.cwd(), "jevels");
   /** Where esc from History goes: Home, or the Jevel screen that opened it. */
   const [historyBack, setHistoryBack] = useState<Screen>("home");
-  const place = (j: Jevel): Place => placeOf(j.path, { home: props.home });
+  const place = (j: Jevel): Place => placeOf(j.path, { home: props.home, ...(props.shipped ? { shipped: props.shipped } : {}) });
   const tuneKeys: Hint[] = dialog !== "tune" || tuning === null || jevel === null || loaded(jevel) === null ? []
     : ((plan) => (plan.blocked !== null ? [["esc", "close"]] : [["enter", plan.copy ? "copy and set" : "set it"], ["esc", "cancel"]]))(tunePlan(loaded(jevel)!, place(loaded(jevel)!), tuning, project));
   const toastTimer = useRef<NodeJS.Timeout | undefined>(undefined);

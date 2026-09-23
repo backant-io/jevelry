@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { join, relative } from "node:path";
 import { Box, Text, useInput } from "ink";
 import { useMemo, useRef, useState } from "react";
 import { mergeThresholds, type Thresholds } from "../decision.js";
@@ -17,6 +17,8 @@ export function shown(path: string): string {
   if (rel !== "" && !rel.startsWith("..")) return rel;
   return path.startsWith(homedir()) ? `~${path.slice(homedir().length)}` : path;
 }
+/** A folder under the working directory as `./jevels/x`, so it reads as a place and not a name. */
+const dotted = (path: string): string => { const s = shown(path); return s.startsWith("/") || s.startsWith("~") ? s : `./${s}`; };
 /** A threshold as written: two decimals when it has two, the reviewed certainty itself otherwise. */
 export const th = (x: number): string => (Math.abs(x * 100 - Math.round(x * 100)) < 1e-9 ? x.toFixed(2) : String(x));
 const pct = (n: number): string => `${Math.round(n * 100)}%`;
@@ -134,7 +136,7 @@ export function JevelView(props: {
   const below = views.length - top - visible.length;
   const histWidth = Math.max(20, Math.min(50, inner - 30));
   const where = props.jevel ? shown(props.jevel.path) : null;
-  const whose = props.place?.kind === "shipped" ? "ships with jevelry" : props.place?.kind === "home" ? "in JEVELRY_HOME, shared by every project" : "your project's file";
+  const whose = props.place?.kind === "shipped" ? "ships with jevelry" : props.place?.kind === "home" ? "in JEVELRY_HOME, shared by every project" : props.place?.kind === "source" ? "jevelry's own source file" : "your project's file";
   // ponytail: the path goes last so a long one is what gets cut at the right edge.
   const totals = views.reduce((n, v) => n + (v.tally ? v.tally.act + v.tally.mark + v.tally.fallBack : 0), 0);
   return (
@@ -190,11 +192,8 @@ export function JevelView(props: {
 
 /** What `T` would do: the edit, or why it cannot be done here. The dialog and the footer both read it. */
 export function tunePlan(jevel: Jevel, place: Place, view: QuestionView, project: string): { edited: ReturnType<typeof setActThreshold> | null; blocked: string | null; copy: boolean; target: string } {
-  const copy = place.kind !== "project";
+  const copy = place.kind === "shipped" || place.kind === "home";
   const target = join(project, jevel.name);
-  if (copy && resolve(target) === resolve(dirname(jevel.path))) {
-    return { edited: null, copy, target, blocked: `${jevel.name} here is jevelry's own shipped copy, and ./jevels is jevelry's own folder. Run jevelry tui in your project to copy it there and tune it.` };
-  }
   try {
     return { edited: setActThreshold(readFileSync(jevel.path, "utf8"), view.name, view.proposal!.act), blocked: null, copy, target };
   } catch (e) {
@@ -249,8 +248,9 @@ export function TuneDialog(props: {
   } else {
     if (copy) {
       lines.push(
-        { text: props.place.kind === "shipped" ? `${props.jevel.name} ships with jevelry, so tune your own copy.` : `${props.jevel.name} is in JEVELRY_HOME, shared by every project.`, color: theme.text },
-        { text: `enter copies its folder to ${shown(target)}, then:`, color: theme.text },
+        ...wrapLine(props.place.kind === "shipped"
+          ? `This jevel came with jevelry. An update would undo a change made here. Enter copies it to ${dotted(target)} and tunes the copy:`
+          : `${props.jevel.name} is in JEVELRY_HOME, shared by every project. Enter copies it to ${dotted(target)} and tunes the copy:`, width - 4).map((text) => ({ text, color: theme.text })),
       );
     }
     lines.push({ text: `in ${copy ? shown(join(target, "JEVEL.md")) : shown(props.jevel.path)}`, color: theme.muted });
@@ -261,7 +261,7 @@ export function TuneDialog(props: {
     }
     lines.push({ text: "Every other byte of the file stays as it is.", color: theme.muted });
   }
-  const title = blocked !== null ? "Cannot tune here" : copy ? "Copy the jevel and set its threshold" : "Set the act threshold";
+  const title = blocked !== null ? "Cannot set the threshold" : copy ? "Copy the jevel and set its threshold" : "Set the act threshold";
   return (
     <Dialog title={title} width={width} columns={props.columns} rows={props.rows} height={8 + lines.length}>
       <Text> </Text>

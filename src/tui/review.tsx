@@ -135,7 +135,10 @@ export function decidedLines(row: Row, found: Found | null, width: number, room:
       { text: `        act ${pc(sofar.act)} mark ${pc(sofar.mark)} fall_back ${pc(sofar.fallBack)}`, tone: "muted" },
       { text: `right   act ${right(sofar.actRight, sofar.actReviewed)}, mark ${right(sofar.markRight, sofar.markReviewed)}`, tone: "muted" },
     ];
-    if (block.every((l) => l.text.length <= width) && out.length + block.length <= room) out.push(...block);
+    // Without its blank line first when that is what makes it fit.
+    const fits = (b: Line[]): boolean => b.every((l) => l.text.length <= width) && out.length + b.length <= room;
+    if (fits(block)) out.push(...block);
+    else if (fits(block.slice(1))) out.push(...block.slice(1));
   }
   return out;
 }
@@ -152,9 +155,9 @@ function sawLines(row: Row, width: number): string[] {
 }
 
 /**
- * One decision as a card: what Jev saw on the left, what it decided on the right, and a for right, d for wrong.
+ * One decision as a card: what Jev saw on the left, what it decided on the right, and c for correct, w for wrong.
  * Review shows the queue through it and History opens any decision in it. One outcome per card: after the first
- * a or d nothing more is written, and the caller moves on.
+ * c or w nothing more is written, and the caller moves on.
  */
 export function Card(props: {
   row: Row;
@@ -198,12 +201,12 @@ export function Card(props: {
   useChrome(
     mode === "pick" ? [["j/k", "move"], ["enter", "record"], ["esc", "cancel"]]
       : mode === "note" ? [["enter", "keep note"], ["esc", "drop note"]]
-        : answered ? [["a", "Jev was right"], ["d", "Jev was wrong"], ...(props.keys ?? []), ["n", "note"], ["j/k", "scroll"], ["esc", "back"]]
+        : answered ? [["c", "correct"], ["w", "wrong"], ...(props.keys ?? []), ["n", "note"], ["j/k", "scroll"], ["esc", "back"]]
           : [...(props.keys ?? []).filter(([k]) => k !== "s"), ["j/k", "scroll"], ["esc", "back"]],
     mode === "note",
   );
   // The handler reads the mode from a ref: keys typed right after n or d arrive before the next render,
-  // and must already count as note text or a pick, never as a or d.
+  // and must already count as note text or a pick, never as c or w.
   const chrome = useContext(ChromeContext);
   // Kept by the shell, so a held key's repeats stay repeats across the change of card.
   const { last: lastKey, verdict: lastVerdict } = chrome.keys;
@@ -213,7 +216,7 @@ export function Card(props: {
   const pickRef = useRef(0);
   const to = (m: "view" | "pick" | "note"): void => { modeRef.current = m; setMode(m); chrome.captureNow(m === "note"); };
   const pickAt = (i: number): void => { pickRef.current = i; setPick(i); };
-  // A verdict needs a card someone has seen: a, d and s count only once the card has been up for SETTLE_MS,
+  // A verdict needs a card someone has seen: c, w and s count only once the card has been up for SETTLE_MS,
   // and a key that repeats within REPEAT_MS is a held key, not a second decision.
   const shownAt = useRef(Date.now());
   const [settled, setSettled] = useState(false);
@@ -242,15 +245,15 @@ export function Card(props: {
     const repeated = lastKey.key === input && now - lastKey.at < REPEAT_MS;
     lastKey.key = input;
     lastKey.at = now;
-    const verdict = input === "a" || input === "d" || input === "s";
+    const verdict = input === "c" || input === "w" || input === "s";
     // Once a verdict or a skip is given, this card is done: the next key belongs to the next card.
     const held = lastVerdict.key === input && now - lastVerdict.at < HELD_MS;
     if (verdict && (repeated || held || now - shownAt.current < SETTLE_MS || recording.current || skipped.current)) return;
     if (verdict) { lastVerdict.key = input; lastVerdict.at = now; }
     if (key.escape) props.onBack();
     else if (moves(input, key as Key) !== 0) { const step = moves(input, key as Key); setScroll((s) => Math.max(s + step, 0)); }
-    else if (input === "a" && answered) record("agree");
-    else if (input === "d" && answered) {
+    else if (input === "c" && answered) record("agree");
+    else if (input === "w" && answered) {
       // One other value (a noul) is the answer itself: record it, no picker.
       if (choices.length <= 1) record(choices[0] ?? "disagree");
       else { pickAt(0); to("pick"); }
@@ -273,13 +276,14 @@ export function Card(props: {
   const bottom: Line[] = mode === "pick"
     ? [{ text: "What was right? j/k to move, enter to record, esc to cancel", tone: "accent" }, ...choices.map((c, i): Line => ({ text: `${i === pick ? ">" : " "} ${pickName(c)}`, tone: i === pick ? "accent" : "text", bold: i === pick }))]
     : mode === "note"
-      ? [{ text: `note: ${note}_`, tone: "text" }, { text: "enter keeps the note for the next a or d, esc drops it", tone: "muted" }]
+      ? [{ text: `note: ${note}_`, tone: "text" }, { text: "enter keeps the note for the next c or w, esc drops it", tone: "muted" }]
       : [
-        ...(note !== "" ? [{ text: `note for the next a or d: ${note}`, tone: "muted" } as Line] : []),
+        ...(note !== "" ? [{ text: `note for the next c or w: ${note}`, tone: "muted" } as Line] : []),
         ...(message !== "" ? wrapLine(message, inner).map((text): Line => ({ text, tone: "error" })) : []),
       ];
   // Title, meta line, blank and the column headings; the footer belongs to the shell.
-  const room = Math.max(3, props.height - 5 - bottom.length);
+  // One more row on an answered card: Jev's answer in words, right above the question.
+  const room = Math.max(3, props.height - 5 - bottom.length - (answered && mode === "view" ? 1 : 0));
   const saw = sawLines(row, left);
   const top = Math.min(scroll, Math.max(saw.length - room, 0));
   const below = saw.length - top - room;
@@ -287,16 +291,19 @@ export function Card(props: {
   const decided = decidedLines(row, props.found, right, room, props.sofar).slice(0, room);
   const tone = (t: Line["tone"]): string => (t === "act" || t === "mark" || t === "fall_back" ? decisionColor(theme, t) : theme[t]);
   // The question the screen asks, with its keys, right above the footer: the one line a reviewer needs.
+  // The same three keys on every card: c correct, w wrong, s skip; the rest follow as far as the line allows.
+  const keys = props.keys ?? [];
   const ask: Hint[] = answered
-    ? [["a", "right"], ["d", choices.length === 1 ? `wrong (it was ${choices[0]})` : "wrong, then pick"], ["n", "note"], ...(props.keys ?? [])]
-    : (props.keys ?? []).filter(([k]) => k !== "s");
+    ? [["c", "correct"], ["w", choices.length === 1 ? `wrong (it was ${choices[0]})` : "wrong"], ...keys.filter(([k]) => k === "s"), ["n", "note"], ...keys.filter(([k]) => k !== "s")]
+    : keys.filter(([k]) => k !== "s");
   const prompt = mode !== "view" ? null : (
-    <Box width={inner} backgroundColor={theme.panel}>
+    <Box width={inner} backgroundColor={theme.panel} flexDirection="column">
+      {answered ? <Text wrap="truncate" color={theme.accent} bold>{` Jev says: ${row.question} = ${answerWord(row.answer)}`}</Text> : null}
       <Text wrap="truncate">
         {/* While the card settles its keys do nothing, so the line says so, dim, in the same width. */}
         {answered && !settled
-          ? <Text color={theme.muted}>{" reading…".padEnd(16)}</Text>
-          : <Text color={answered ? theme.text : theme.muted} bold>{answered ? " Was Jev right? " : " Jev could not answer, so there is nothing to judge. "}</Text>}
+          ? <Text color={theme.muted}>{" reading…".padEnd(14)}</Text>
+          : <Text color={answered ? theme.text : theme.muted} bold>{answered ? " Is Jev right?" : " Jev could not answer, so there is nothing to judge. "}</Text>}
         {ask.map(([k, what]) => (
           <Text key={k}><Text color={answered && !settled ? theme.muted : theme.accent} bold>{`  ${k}`}</Text><Text color={answered && !settled ? theme.muted : theme.text}>{` ${what}`}</Text></Text>
         ))}

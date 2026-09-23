@@ -61,7 +61,7 @@ const ENTER = "\r";
 const CTRL_P = "\u0010";
 const ESC = "\u001B";
 const DOWN = "\u001B[B";
-/** A card takes a, d and s only once it has been on screen this long (SETTLE_MS plus slack). */
+/** A card takes c, w and s only once it has been on screen this long (SETTLE_MS plus slack). */
 const SETTLE = 520;
 
 const homeWith = (lines: LogLine[]): string => {
@@ -201,7 +201,7 @@ describe("recording outcomes from the review queue", () => {
     await tick();
     stdin.write(ENTER);
     await tick(SETTLE);
-    stdin.write("a");
+    stdin.write("c");
     await tick(200);
     // One outcome per visit: the detail closes and the queue shows the next mark.
     expect(lastFrame()).toContain("1 marked decision to review");
@@ -211,7 +211,7 @@ describe("recording outcomes from the review queue", () => {
     await tick();
     expect(lastFrame()).toMatch(/question {2}frustration/);
     await tick(SETTLE);
-    stdin.write("d");
+    stdin.write("w");
     await tick();
     expect(lastFrame()).toContain("What was right?");
     stdin.write(DOWN);
@@ -225,19 +225,19 @@ describe("recording outcomes from the review queue", () => {
     unmount();
   });
 
-  // A double key press, or a then d to correct a slip, would write two lines and report would count both.
-  it("writes one outcome per visit, however fast a and d are pressed", async () => {
+  // A double key press, or c then w to correct a slip, would write two lines and report would count both.
+  it("writes one outcome per visit, however fast c and w are pressed", async () => {
     const home = homeWith(LOG);
     const { stdin, lastFrame, unmount } = render(createElement(App, { home, dirs: [], lines: LOG, filters: ALL, screen: "history", size: SIZE }));
     await tick();
     for (const key of ["j", "j", ENTER]) { stdin.write(key); await tick(20); }
     expect(lastFrame()).toMatch(/question {2}team/);
     await tick(SETTLE);
-    stdin.write("a");
-    stdin.write("a");
-    stdin.write("d");
+    stdin.write("c");
+    stdin.write("c");
+    stdin.write("w");
     await tick(200);
-    stdin.write("a");
+    stdin.write("c");
     await tick(200);
     expect(lastFrame()).toContain("8 decisions");
     expect(lastFrame()).toContain("Saved: Jev was right on ticket-triage team");
@@ -249,8 +249,8 @@ describe("recording outcomes from the review queue", () => {
     const home = homeWith(LOG);
     const r = rowsOf(LOG, ALL).find((x) => x.ask.id === C.id)!;
     const { stdin, lastFrame } = render(createElement(DetailView, { row: r, home, thresholds: null, height: 60, width: 120, onBack: noop, onRecorded: noop }));
-    stdin.write("a");
-    stdin.write("d");
+    stdin.write("c");
+    stdin.write("w");
     await tick(200);
     expect(lastFrame()).toContain("Jev could not answer, so there is nothing to judge.");
     expect(lastFrame()).not.toContain("What was right?");
@@ -404,7 +404,7 @@ describe("the shell", () => {
     await tick();
     await press(stdin, "v");
     expect(lastFrame()).toContain("Review 1 of 2");
-    expect(lastFrame()).toMatch(/Was Jev right\?|reading…/);
+    expect(lastFrame()).toMatch(/Is Jev right\?|reading…/);
     // t opens the jevel picker; esc closes it where you were.
     await press(stdin, "t");
     expect(lastFrame()).toContain("Try a jevel");
@@ -449,7 +449,7 @@ describe("the shell", () => {
     await press(stdin, CTRL_P, "y", "q");
     expect(lastFrame()).toContain("Commands");
     await press(stdin, ESC);
-    expect(lastFrame()).toMatch(/Was Jev right\?|reading…/);
+    expect(lastFrame()).toMatch(/Is Jev right\?|reading…/);
     expect(lastFrame()).not.toContain("8 decisions");
     unmount();
   });
@@ -527,7 +527,7 @@ describe("review fixes", () => {
     await tick();
     await press(stdin, ENTER);
     await tick(SETTLE);
-    await press(stdin, "a");
+    await press(stdin, "c");
     await tick(200);
     const lines = (lastFrame() ?? "").split("\n");
     expect(lines[1]).toMatch(/^ decision mark {3}jevel all {3}outcome none yet\s*$/);
@@ -606,12 +606,12 @@ describe("review fixes", () => {
     unmount();
   });
 
-  it("offers no a or d on an ask Jev could not answer", async () => {
+  it("offers no c or w on an ask Jev could not answer", async () => {
     const { stdin, lastFrame, unmount } = app({ screen: "history" });
     await tick();
     await press(stdin, ENTER);
     expect(lastFrame()).toContain("Jev could not answer");
-    expect(lastFrame()).not.toContain("Jev was right");
+    expect(lastFrame()).not.toContain("c correct");
     unmount();
   });
 
