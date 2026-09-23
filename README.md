@@ -79,6 +79,27 @@ switch (d.team?.decision) {
 
 `decide` asks Jev, writes the ask to your log and hands you every question with its `decision` and its `answer`, so here `d.team.answer` is `"billing"` and `d.urgent.answer` is `true`. When Jev cannot answer, because TypeSafe is busy or your network is down, every question comes back `fall_back` with the reason in `d.error`, so your code just keeps its old path. Run `npx jevelry types --out src/jevels.d.ts` once and your editor knows the options of every jevel, so `d.team.answer` is typed as `"billing" | "technical" | "account" | "other"` and you can drop the `?.`. The lower level functions are importable as well, `import { ask, loadJevel, discoveryDirs } from "jevelry"`, when you want to build the call yourself.
 
+## See every decision
+
+Every ask your program or your agent makes goes into `~/.jevelry/log.jsonl`, and you can look through all of them in your terminal:
+
+    npx jevelry tui
+
+    8 decisions
+    decision: all   jevel: all   outcome: any
+      time        jevel         question       answer     cert decision  outcome
+    > 09-22 10:00 wake-gate     worth_a_turn   error      0.00 fall_back -
+      09-22 10:00 wake-gate     depth          error      0.00 fall_back -
+      09-22 09:30 ticket-triage team           technical  0.72 mark      agree
+      09-22 09:30 ticket-triage urgent         no         0.90 act       -
+      09-22 09:30 ticket-triage frustration    level 0    0.90 act       -
+      09-22 09:00 ticket-triage team           billing    0.91 act       -
+      09-22 09:00 ticket-triage urgent         yes        0.78 mark      -
+      09-22 09:00 ticket-triage frustration    level 1    0.62 mark      -
+    j/k move  enter open  f decision  J jevel  o no outcome  r report  q quit
+
+You see one row per question with the time, the jevel, the answer, how sure Jev was and the decision, newest first. Press `f` until it shows `mark` and `o` to keep only the ones nobody has looked at yet, and you have the list of decisions Jev flagged for a person. Press enter on one and you see every option with its probability, the thresholds of the jevel and the state Jev was asked about. The state is only there when you ask for it with `--log-state`, `jevel(name, { logState: true })` in your program or `JEVELRY_LOG_STATE=1`, because states often hold customer text. Pressing `a` tells jevelry that Jev was right, and `d` tells it Jev was wrong and asks you for the right answer, which is what `jevelry report` then counts.
+
 ## What is underneath
 
 Jev takes a state (a support ticket, a bug report, the form somebody just filled in) and typed questions, and it answers each one with a calibrated probability. There are three kinds of questions:
@@ -236,7 +257,7 @@ Currently jevelry asks Jev questions and hands you the answers, and that is the 
 
 ## How do we know you can trust it
 
-184 tests run offline against recorded answers from TypeSafe's API reference and against the sixteen jevels and their cases. 90 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself and one routes the `ticket-triage` example through `decide` in your program. One of those tests reads the log afterwards and checks that your key stays out of it.
+209 tests run offline against recorded answers from TypeSafe's API reference and against the sixteen jevels and their cases. 90 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself and one routes the `ticket-triage` example through `decide` in your program. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## Environment
 
@@ -249,6 +270,7 @@ Currently jevelry asks Jev questions and hands you the answers, and that is the 
 | `JEVELRY_HOME` | where the log lives | `~/.jevelry` |
 | `JEVELRY_JEVELS` | more jevel folders, colon separated | none |
 | `JEVELRY_TIMEOUT_MS` | per attempt | `30000` |
+| `JEVELRY_LOG_STATE` | `1` writes the state itself into each ask line, for `ask` and `decide` | off, only the hash |
 
 ## Start
 

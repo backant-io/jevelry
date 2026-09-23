@@ -50,6 +50,19 @@ describe("append and read", () => {
       write.mockRestore();
     }
   });
+  it("hands skipped lines to the caller's callback instead of stderr, so a TUI can count them", async () => {
+    const home = mkdtempSync(join(tmpdir(), "jevelry-"));
+    writeFileSync(join(home, "log.jsonl"), `${JSON.stringify(ask)}\nnot json\nnull\n`);
+    const write = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    const skipped: string[] = [];
+    try {
+      expect(await readLog(home, (m) => skipped.push(m))).toHaveLength(1);
+      expect(write).not.toHaveBeenCalled();
+    } finally {
+      write.mockRestore();
+    }
+    expect(skipped).toEqual(["skipped line 2 of log.jsonl: not JSON", "skipped line 3 of log.jsonl: not a log line"]);
+  });
   it("skips a JSON line that is not an object, so findAsk cannot crash on it", async () => {
     const home = mkdtempSync(join(tmpdir(), "jevelry-"));
     writeFileSync(join(home, "log.jsonl"), `${JSON.stringify(ask)}\nnull\n`);
