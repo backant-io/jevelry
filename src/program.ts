@@ -1,15 +1,15 @@
-import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Questions, TypeSafeClient } from "@typesafe-ai/sdk";
+import type { Questions, TypeSafeClient } from "@typesafe-ai/sdk";
 import { Command } from "commander";
 import { ask, errorBody } from "./ask.js";
 import { installSkill, knownAgents, promptForKey, unknownAgents, whereToPutTheKey } from "./install.js";
 import { JevelError, discoveryDirs, listJevels, loadJevel } from "./jevel.js";
+import { defaultClient } from "./decide.js";
 import { resolveKey, storeKey } from "./key.js";
-import { appendLine, findAsk, jevelryHome, outcomeOf, readLog } from "./log.js";
+import { appendLine, findAsk, jevelryHome, logAsk, outcomeOf, readLog } from "./log.js";
 import { type AskDocument, type ErrorBody, type ErrorDocument, PROTOCOL } from "./protocol.js";
 import { renderReport, report } from "./report.js";
 
@@ -67,27 +67,6 @@ function readSource(source: string, field: string): unknown {
   }
 }
 
-/**
- * The SDK resolves its own `logLevel` from `TYPESAFE_LOG_LEVEL` and logs through `console` by
- * default, whose `debug` and `info` go to stdout: that would put SDK lines in front of the one
- * document a host parses (and at `debug` the request body, which is the state). Every level goes
- * to stderr instead, so the one-document protocol holds whatever the environment asks for.
- */
-function client(): TypeSafeClient {
-  // The SDK reads the key from the environment itself, so a key that lives in the keychain or in
-  // `$JEVELRY_HOME/env` is put there before the client is built. A key the host exported wins.
-  const key = resolveKey(process.env, home());
-  if (key !== undefined && (process.env.TYPESAFE_API_KEY ?? "").trim() === "") process.env.TYPESAFE_API_KEY = key;
-  const timeout = Number(process.env.JEVELRY_TIMEOUT_MS ?? 30000);
-  const model = process.env.JEVELRY_MODEL;
-  // An extra argument is usually an object: `String` would render it `[object Object]` and lose the
-  // line's content, so it is JSON, and `String` only for what JSON cannot hold (a cycle, undefined).
-  const render = (a: unknown): string => { try { return JSON.stringify(a) ?? String(a); } catch { return String(a); } };
-  const toStderr = (m: string, ...a: unknown[]): void => { say(`sdk: ${[m, ...a.map(render)].join(" ")}`); };
-  const logger = { debug: toStderr, info: toStderr, warn: toStderr, error: toStderr };
-  return new TypeSafeClient(model && model.trim() !== "" ? { timeout, defaultModel: model, logger } : { timeout, logger });
-}
-
 /** The one exit for a failed `ask`: the error document on stdout, the sentence on stderr, the code. */
 function failAsk(error: ErrorBody): never {
   out({ protocol: PROTOCOL, error } satisfies ErrorDocument);
@@ -135,7 +114,7 @@ export function buildProgram(): Command {
       }
       let typesafe: TypeSafeClient;
       try {
-        typesafe = client();
+        typesafe = defaultClient(home());
       } catch (error) {
         failAsk(errorBody(error));
       }
@@ -144,25 +123,8 @@ export function buildProgram(): Command {
       if (!result.ok) failAsk(result.error);
       const document = result.document;
       if (opts.log) {
-        const id = randomUUID();
-        // The answer is the product and the log is this runtime's own record, never the host's truth:
-        // a log that cannot be written costs a warning and a null log_id, never the paid answer.
-        try {
-          await appendLine(home(), {
-            kind: "ask",
-            id,
-            at: new Date().toISOString(),
-            jevel: document.jevel,
-            model: document.model,
-            state_hash: document.state_hash,
-            answers: document.answers,
-            usage: document.usage,
-            cwd: process.cwd(),
-          });
-          document.log_id = id;
-        } catch (error) {
-          say(`warning: the ask was answered but could not be logged: ${error instanceof Error ? error.message : String(error)}`);
-        }
+        const { jevel: j, model, state_hash, answers, usage } = document;
+        document.log_id = await logAsk(home(), { jevel: j, model, state_hash, answers, usage }, (m) => say(`warning: ${m}`));
       }
       out(document);
     });
@@ -246,7 +208,7 @@ export function buildProgram(): Command {
     .description("the model names the account may send, from GET /v1/models")
     .action(async () => {
       try {
-        const models = await client().models.list();
+        const models = await defaultClient(home()).models.list();
         for (const m of models) process.stdout.write(`${m.name}\t${m.release_date}\t${m.description}\n`);
       } catch (error) {
         failCommand(error);

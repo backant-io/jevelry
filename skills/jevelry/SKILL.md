@@ -99,7 +99,24 @@ The values come from a live ask of `ticket-triage` on its `example.json`, trimme
 
 On failure the document is `{ "protocol": 2, "error": { "exit": 3, "code": "rate_limited", "message": "...", "retry_after_ms": 1200 } }` and the exit code says what happened: 2 the jevel or state is wrong (the document names the field), 3 rate limited or overloaded, 4 the key is missing or refused, 5 over the token budget, 6 network, 7 an answer this build cannot read. 4 and 5 make no request. Branch on the exit code, show the message to a person.
 
-From TypeScript or JavaScript the same functions are importable: `import { ask, loadJevel, discoveryDirs } from "jevelry"`. Every other language spawns the CLI and parses stdout.
+From TypeScript or JavaScript, install jevelry in the project, load the jevel once when the program starts and call `decide` where the code decides:
+
+    npm install jevelry
+
+```ts
+import { jevel } from "jevelry";
+
+const triage = jevel("ticket-triage");
+
+const d = await triage.decide({ ticket });
+switch (d.team.decision) {
+  case "act": route(ticket, d.team.answer); break;
+  case "mark": route(ticket, d.team.answer); flagForQueueOwner(ticket); break;
+  case "fall_back": leaveInGeneralQueue(ticket); break;
+}
+```
+
+`decide` asks Jev, writes the ask to the log and hands back every question with its `decision` and its `answer` (the option for a choice, `true` or `false` for a noul, the level for a score). When Jev cannot answer, every question comes back `fall_back` with the reason in `d.error`, so the code keeps its old path. The lower level functions are importable too, `import { ask, loadJevel, discoveryDirs } from "jevelry"`, and every other language spawns the CLI and parses stdout.
 
 ## Rules
 

@@ -58,6 +58,27 @@ Every jevel ships with a `cases.json`, a few realistic states with the answer a 
     npx jevelry outcome <log_id> urgent yes
     npx jevelry report --jevel ticket-triage
 
+## In your program
+
+When the decision happens inside your own code, you install jevelry in the project, load the jevel once when your program starts and call `decide` at the point where your code decides today:
+
+    npm install jevelry
+
+```ts
+import { jevel } from "jevelry";
+
+const triage = jevel("ticket-triage");
+
+const d = await triage.decide({ ticket });
+switch (d.team.decision) {
+  case "act": route(ticket, d.team.answer); break;
+  case "mark": route(ticket, d.team.answer); flagForQueueOwner(ticket); break;
+  case "fall_back": leaveInGeneralQueue(ticket); break;
+}
+```
+
+`decide` asks Jev, writes the ask to your log and hands you every question with its `decision` and its `answer`, so here `d.team.answer` is `"billing"` and `d.urgent.answer` is `true`. When Jev cannot answer, because TypeSafe is busy or your network is down, every question comes back `fall_back` with the reason in `d.error`, so your code just keeps its old path.
+
 ## What is underneath
 
 Jev takes a state (a support ticket, a bug report, the form somebody just filled in) and typed questions, and it answers each one with a calibrated probability. There are three kinds of questions:

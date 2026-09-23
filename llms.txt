@@ -14,6 +14,27 @@ This installs the jevelry skill into every coding agent it finds and asks for yo
 
 The state is a JSON file with the keys the jevel names, and the answer is one JSON document on stdout with an answer per question.
 
+## In your program
+
+When the decision happens inside your own code, install jevelry in the project, load the jevel once when the program starts and call `decide` where the code decides:
+
+    npm install jevelry
+
+```ts
+import { jevel } from "jevelry";
+
+const triage = jevel("ticket-triage");
+
+const d = await triage.decide({ ticket });
+switch (d.team.decision) {
+  case "act": route(ticket, d.team.answer); break;
+  case "mark": route(ticket, d.team.answer); flagForQueueOwner(ticket); break;
+  case "fall_back": leaveInGeneralQueue(ticket); break;
+}
+```
+
+When Jev cannot answer, every question comes back `fall_back` with the reason in `d.error`, so the code keeps its old path.
+
 ## Decisions
 
 - `act`: Jev is sure, so go ahead with the answer.
