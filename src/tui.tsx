@@ -85,6 +85,8 @@ export function DecisionsView(props: {
   lines: LogLine[];
   filters: Filters;
   height?: number;
+  /** Log lines readLog could not read, shown in the header so nothing prints over the screen. */
+  skipped?: number;
   onFilters: (f: Filters) => void;
   onOpen: (row: Row) => void;
   onReport: () => void;
@@ -111,7 +113,7 @@ export function DecisionsView(props: {
     : `${rows.length} decision${rows.length === 1 ? "" : "s"}`;
   return (
     <Box flexDirection="column">
-      <Text bold>{title}</Text>
+      <Text bold>{title}{props.skipped ? `   ${props.skipped} unreadable log line${props.skipped === 1 ? "" : "s"} skipped` : ""}</Text>
       <Text>{filterLine(filters)}</Text>
       <Text dimColor>{`  ${listLine(["time", "jevel", "question", "answer", "cert", "decision", "outcome"])}`}</Text>
       {rows.length === 0 ? <Text>no decisions match these filters</Text> : null}
@@ -214,7 +216,7 @@ export function DetailView(props: {
   const [message, setMessage] = useState("");
   const choices = hasAnswer(row.answer) ? otherValues(row.answer) : [];
   const record = (value: string): void => {
-    recordOutcome(props.home, row.ask.id, row.question, value, note === "" ? null : note)
+    recordOutcome(props.home, row.ask.id, row.question, value, note === "" ? null : note, () => undefined)
       .then((line) => {
         setMessage(`recorded ${line.outcome}${line.value !== null ? ` ${line.value}` : ""}`);
         setNote("");
@@ -306,7 +308,14 @@ function thresholdsLookup(dirs: string[]): (row: Row) => { thresholds: Threshold
   };
 }
 
-export function App(props: { home: string; dirs: string[]; lines: LogLine[]; filters: Filters }): React.JSX.Element {
+/** The log and how many of its lines could not be read, counted instead of printed. */
+async function readCounted(home: string): Promise<{ lines: LogLine[]; skipped: number }> {
+  let skipped = 0;
+  const lines = await readLog(home, () => { skipped += 1; });
+  return { lines, skipped };
+}
+
+export function App(props: { home: string; dirs: string[]; lines: LogLine[]; skipped?: number; filters: Filters }): React.JSX.Element {
   const { exit } = useApp();
   const { stdout } = useStdout();
   const [lines, setLines] = useState(props.lines);
@@ -314,7 +323,10 @@ export function App(props: { home: string; dirs: string[]; lines: LogLine[]; fil
   const [view, setView] = useState<"list" | "detail" | "report">("list");
   const [open, setOpen] = useState<{ id: string; question: string } | null>(null);
   const [lookup] = useState(() => thresholdsLookup(props.dirs));
-  const reload = (): void => { readLog(props.home).then(setLines, () => undefined); };
+  const [skipped, setSkipped] = useState(props.skipped ?? 0);
+  const reload = (): void => {
+    readCounted(props.home).then((read) => { setLines(read.lines); setSkipped(read.skipped); }, () => undefined);
+  };
   useEffect(() => {
     // The directory, not the file: the file may not exist yet, and an append can replace its inode on some editors.
     let timer: NodeJS.Timeout | undefined;
@@ -342,6 +354,7 @@ export function App(props: { home: string; dirs: string[]; lines: LogLine[]; fil
       lines={lines}
       filters={filters}
       height={height}
+      skipped={skipped}
       onFilters={setFilters}
       onOpen={(r) => { setOpen({ id: r.ask.id, question: r.question }); setView("detail"); }}
       onReport={() => setView("report")}
@@ -351,8 +364,8 @@ export function App(props: { home: string; dirs: string[]; lines: LogLine[]; fil
 }
 
 export async function runTui(input: { home: string; dirs: string[]; jevel?: string; since?: string }): Promise<void> {
-  const lines = await readLog(input.home);
+  const { lines, skipped } = await readCounted(input.home);
   const filters: Filters = { decision: "all", jevel: input.jevel ?? null, noOutcome: false, since: input.since ?? null };
-  const app = render(<App home={input.home} dirs={input.dirs} lines={lines} filters={filters} />);
+  const app = render(<App home={input.home} dirs={input.dirs} lines={lines} skipped={skipped} filters={filters} />);
   await app.waitUntilExit();
 }

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { render } from "ink-testing-library";
 import { createElement } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { type AskLine, type LogLine, type OutcomeLine, readLog } from "../src/log.js";
 import { App, DecisionsView, DetailView, type Filters, ReportView, rowsOf } from "../src/tui.js";
 
@@ -215,6 +215,27 @@ describe("live log", () => {
     await tick(500);
     expect(lastFrame()).toContain("6 decisions");
     unmount();
+  });
+});
+
+describe("unreadable log lines", () => {
+  // Printing "skipped line N" to stderr would draw over the Ink screen, so the TUI counts them into its header.
+  it("counts them in the header and writes nothing to stderr, also when a new broken line arrives", async () => {
+    const home = homeWith([A]);
+    appendFileSync(join(home, "log.jsonl"), "not json\nnull\n");
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      const { lastFrame, unmount } = render(createElement(App, { home, dirs: [], lines: [A], skipped: 2, filters: ALL }));
+      await tick();
+      expect(lastFrame()).toContain("3 decisions   2 unreadable log lines skipped");
+      appendFileSync(join(home, "log.jsonl"), "{broken\n");
+      await tick(500);
+      expect(lastFrame()).toContain("3 unreadable log lines skipped");
+      unmount();
+      expect(stderr).not.toHaveBeenCalled();
+    } finally {
+      stderr.mockRestore();
+    }
   });
 });
 
