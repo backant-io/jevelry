@@ -349,8 +349,11 @@ describe("names from a jevel or an answer find only own properties", () => {
 /** Started, not awaited: the caller signals the child while the command sleeps. */
 const start = (args: string[]) => {
   const home = mkdtempSync(join(tmpdir(), "jevelry-run-home-"));
+  // Its own process group, standing in for the foreground group of a terminal, so a test can send a
+  // signal the way Ctrl-C does (to the whole group) or the way `kill <pid>` does (to jevelry alone).
   const child = spawn("node", [join(process.cwd(), "bin/jevelry.js"), ...args], {
     cwd: out,
+    detached: true,
     env: { PATH: process.env.PATH, HOME: home, TYPESAFE_API_KEY: "test-key", TYPESAFE_BASE_URL: server.url, JEVELRY_KEY_STORE: "file", JEVELRY_HOME: home, JEVELRY_JEVELS: FIXTURES, RUN_OUT: out },
   });
   let stdout = "";
@@ -365,13 +368,16 @@ const until = async (check: () => boolean): Promise<void> => {
 };
 
 describe("a signal to jevelry while the command runs", () => {
-  for (const [sig, code] of [["SIGTERM", 143], ["SIGINT", 130]] as const) {
-    it(`${sig}: stops the command, removes the state file, logs the run, prints the document and exits ${code}`, async () => {
+  // SIGTERM with `kill <jevelry pid>`, which jevelry passes on to the command; SIGINT as a terminal's
+  // Ctrl-C sends it, to jevelry and the command together.
+  for (const [sig, code, send] of [["SIGTERM", 143, "jevelry"], ["SIGINT", 130, "group"]] as const) {
+    it(`${sig} to the ${send}: stops the command, removes the state file, logs the run, prints the document and exits ${code}`, async () => {
       const { child, home, done } = start(["run", "run-gate", "--state", state({ secret: "customer text", reply: { cause: choiceOf("defect"), retries: choiceOf("1"), loud: { type: "noul", noul: 0.99 } } })]);
       await until(() => existsSync(join(out, "path")));
       const stateFile = readFileSync(join(out, "path"), "utf8").trim();
       expect(existsSync(stateFile)).toBe(true);
-      child.kill(sig);
+      if (send === "group") process.kill(-child.pid!, sig);
+      else child.kill(sig);
       const r = await done;
       expect(r.status).toBe(code);
       expect(existsSync(stateFile), "the state file is gone").toBe(false);
@@ -412,4 +418,70 @@ describe("the mark prompt on a terminal", () => {
       expect(existsSync(join(out, "args"))).toBe(false);
     });
   }
+});
+
+describe("a command keeps the terminal", () => {
+  it("reads what was typed from /dev/tty, so sudo, ssh and git prompts work inside a command", async () => {
+    const home = mkdtempSync(join(tmpdir(), "jevelry-run-home-"));
+    const [fifo, screenFile] = [join(home, "keys"), join(home, "screen")];
+    execFileSync("mkfifo", [fifo]);
+    const other = state({ reply: { cause: choiceOf("other"), retries: choiceOf("1"), loud: { type: "noul", noul: 0.99 } } });
+    const child = spawn("/bin/sh", ["-c", 'cat "$2" | script -q /dev/null node "$0" run run-gate --state "$1" > "$3" 2>&1', join(process.cwd(), "bin/jevelry.js"), other, fifo, screenFile], {
+      cwd: out,
+      stdio: ["ignore", "ignore", "ignore"],
+      env: { PATH: process.env.PATH, HOME: home, TYPESAFE_API_KEY: "test-key", TYPESAFE_BASE_URL: server.url, JEVELRY_KEY_STORE: "file", JEVELRY_HOME: home, JEVELRY_JEVELS: FIXTURES, RUN_OUT: out },
+    });
+    const closed = new Promise<number | null>((resolve) => child.on("close", resolve));
+    const keys = createWriteStream(fifo);
+    const screen = (): string => (existsSync(screenFile) ? readFileSync(screenFile, "utf8") : "");
+    await until(() => screen().includes("jevelry: running other from"));
+    keys.end("typed\n");
+    expect(await closed, screen()).toBe(0);
+    expect(readFileSync(join(out, "tty"), "utf8")).toBe("typed");
+  });
+});
+
+describe("the jevel's path is named before anything runs", () => {
+  const where = `from ${join(FIXTURES, "run-gate", "JEVEL.md")}: printf`;
+  it("on stderr before the command's own output", async () => {
+    const r = await cli(["run", "run-gate", "--state", state()]);
+    const line = r.stderr.indexOf(`jevelry: running flaky ${where}`);
+    expect(line).toBeGreaterThanOrEqual(0);
+    expect(line).toBeLessThan(r.stderr.indexOf("ran\n"));
+  });
+  it("on --dry-run, where nothing runs", async () => {
+    const r = await cli(["run", "run-gate", "--dry-run", "--state", state()]);
+    expect(r.stderr).toContain(`jevelry: act: would run flaky ${where}`);
+  });
+});
+
+describe("a signal to a program while run() has a command going", () => {
+  it("stops the command, removes the state file and hands {exit, signal} back; the program keeps running", async () => {
+    const script = `
+      import { jevel } from ${JSON.stringify(join(process.cwd(), "dist", "index.js"))};
+      import { TypeSafeClient } from "@typesafe-ai/sdk";
+      const client = new TypeSafeClient({ apiKey: "test-key", baseURL: process.env.URL, retry: { maxRetries: 0 }, defaultModel: "jev-1.13.0" });
+      const j = jevel("run-gate", { jevels: [process.env.FIXTURES], home: process.env.HOME, client });
+      const { ran } = await j.run(JSON.parse(process.env.STATE), {}, { shell: true });
+      console.log(JSON.stringify(ran.result));
+      console.log("host still running");
+    `;
+    const home = mkdtempSync(join(tmpdir(), "jevelry-run-host-"));
+    const child = spawn("node", ["--input-type=module", "-e", script], {
+      cwd: process.cwd(),
+      env: { PATH: process.env.PATH, HOME: home, URL: server.url, FIXTURES, RUN_OUT: out, STATE: state({ reply: { cause: choiceOf("defect"), retries: choiceOf("1"), loud: { type: "noul", noul: 0.99 } } }) },
+    });
+    let stdout = "";
+    child.stdout.setEncoding("utf8").on("data", (c: string) => { stdout += c; });
+    child.stderr.resume();
+    const closed = new Promise<number | null>((resolve) => child.on("close", resolve));
+    await until(() => existsSync(join(out, "path")));
+    const stateFile = readFileSync(join(out, "path"), "utf8").trim();
+    child.kill("SIGTERM");
+    expect(await closed, stdout).toBe(0);
+    const [result, alive] = stdout.trim().split("\n");
+    expect(JSON.parse(result ?? "")).toMatchObject({ exit: 143, signal: "SIGTERM" });
+    expect(alive).toBe("host still running");
+    expect(existsSync(stateFile)).toBe(false);
+  });
 });

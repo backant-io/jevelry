@@ -165,7 +165,7 @@ const { ran } = await failing.run({ test }, {
 }, { confirm: (option, certainty) => askTheOnCall(option, certainty) });
 ```
 
-When you leave out `confirm`, a `mark` runs nothing and `ran.confirmed` is `false`, and with `{ shell: true }` the jevel's own commands run for every option you gave no handler.
+When you leave out `confirm`, a `mark` runs nothing and `ran.confirmed` is `false`, and with `{ shell: true }` the jevel's own commands run for every option you gave no handler. When your program gets SIGINT, SIGTERM or SIGHUP while such a command runs, jevelry passes the signal on to the command, removes the state file and returns `{ exit, ms, signal }` in `ran.result`, and your program decides whether to stop. A command keeps your terminal, so a `sudo` or `git` prompt in it works the way it does in your shell.
 
 ## Prove it
 

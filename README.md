@@ -291,7 +291,7 @@ Currently jevelry asks Jev questions and hands you the answers, and that is the 
 
 ## How do we know you can trust it
 
-254 tests run offline against recorded answers from TypeSafe's API reference and against the seventeen jevels and their cases. 98 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
+258 tests run offline against recorded answers from TypeSafe's API reference and against the seventeen jevels and their cases. 98 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## Environment
 

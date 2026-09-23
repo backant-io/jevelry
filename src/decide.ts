@@ -67,7 +67,11 @@ export interface Ran {
   decision: Answer["decision"];
   /** On mark: whether `confirm` said yes. Null when nobody was asked. */
   confirmed: boolean | null;
-  /** What the handler returned, `{ exit, ms }` for a shell command, undefined when nothing ran. */
+  /**
+   * What the handler returned, `{ exit, ms }` for a shell command, undefined when nothing ran. When the
+   * program gets SIGINT, SIGTERM or SIGHUP while a command runs, the command gets it too, the state file is
+   * removed and `result` carries `signal`; `run` never ends the program, that is the host's call.
+   */
   result: unknown;
 }
 
@@ -189,13 +193,11 @@ export function jevel<N extends string>(
       let exit: number | null = null;
       let ms: number | null = null;
       let signal: string | undefined;
-      let interrupted: NodeJS.Signals | undefined;
       if (confirmed !== false) {
         if (command !== null) {
           const done = await execute(command, state, { decision: call.decision, option: call.option, logId: decisions.logId });
           ({ exit, ms } = done);
           if (done.signal) signal = done.signal;
-          interrupted = done.interrupted;
           result = { exit: done.exit, ms: done.ms, ...(signal ? { signal } : {}) };
         } else {
           const started = Date.now();
@@ -204,9 +206,6 @@ export function jevel<N extends string>(
         }
       }
       if (decisions.logId !== null) await logRun(home, decisions.logId, { option: call.option, command, decision: call.decision, exit, ms, confirmed, ...(signal ? { signal } : {}) }, warn);
-      // The command was stopped because this process got a signal. With no handler of the host's own
-      // left, the signal is raised again, now that the state file is gone and the run is logged.
-      if (interrupted && process.listenerCount(interrupted) === 0) process.kill(process.pid, interrupted);
       return { decisions, ran: { option: call.option, decision: call.decision, confirmed, result } } as never;
     },
   };

@@ -95,17 +95,19 @@ export async function execute(
   try {
     writeFileSync(file, json, { mode: 0o600 });
     const { exit, signal } = await new Promise<{ exit: number; signal?: string }>((resolve) => {
-      // Its own process group, so a forwarded signal reaches the command's children too.
+      // Same session and process group as jevelry, so the command keeps the terminal (sudo, ssh and git
+      // prompts read /dev/tty) and a Ctrl-C in the terminal reaches it directly.
       const child = spawn("/bin/sh", ["-c", command], {
         cwd: process.cwd(),
-        detached: true,
         stdio: ["pipe", "pipe", "pipe"],
         env: { ...env, JEVELRY_STATE: file, JEVELRY_DECISION: meta.decision, JEVELRY_OPTION: meta.option ?? "", JEVELRY_LOG_ID: meta.logId ?? "" },
       });
       for (const sig of FORWARDED) {
+        // A signal sent to jevelry alone (kill <pid>) goes on to the shell; a process the shell started
+        // in the background can outlive it, which is the cost of keeping the terminal.
         const forward = (): void => {
           interrupted = sig;
-          try { process.kill(-child.pid!, sig); } catch { child.kill(sig); }
+          child.kill(sig);
         };
         listeners.push([sig, forward]);
         process.on(sig, forward);
@@ -118,7 +120,16 @@ export async function execute(
       // The shell could not start at all: the shell's own code for a command that is not there.
       child.on("error", () => resolve({ exit: 127 }));
       // Killed by a signal: the shell's convention, 128 plus the signal number, and the name for the log.
-      child.on("close", (code, sig) => resolve(sig ? { exit: 128 + (constants.signals[sig] ?? 0), signal: sig } : { exit: code ?? 1 }));
+      const settle = (code: number | null, sig: NodeJS.Signals | null): void => resolve(sig ? { exit: 128 + (constants.signals[sig] ?? 0), signal: sig } : { exit: code ?? 1 });
+      child.on("close", settle);
+      // Stopped by a forwarded signal: done when the shell is, even if a process it started still holds
+      // the output pipes open, which would otherwise keep jevelry waiting for that process.
+      child.on("exit", (code, sig) => {
+        if (interrupted === undefined) return;
+        child.stdout.destroy();
+        child.stderr.destroy();
+        settle(code, sig);
+      });
     });
     return { exit, ms: Date.now() - started, ...(signal ? { signal } : {}), ...(interrupted ? { interrupted } : {}) };
   } finally {
