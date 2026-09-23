@@ -82,8 +82,8 @@ const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" 
 function columns(width: number): number[] {
   // The screen's side padding and the cursor column come off first.
   const rest = Math.max(20, width - 4 - (11 + 10 + 4 + 9 + 8) - 6);
-  const jevel = Math.ceil(rest * 0.45);
-  return [11, jevel, rest - jevel, 10, 4, 9, 8];
+  const jevel = Math.min(22, Math.ceil(rest * 0.45));
+  return [11, jevel, Math.min(26, rest - jevel), 10, 4, 9, 8];
 }
 const listCells = (cells: string[], widths: number[]): string[] => cells.map((c, i) => (i === cells.length - 1 ? c : cell(c, widths[i]!)));
 

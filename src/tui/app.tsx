@@ -6,6 +6,7 @@ import { listJevels } from "../jevel.js";
 import { LOG_FILE, type LogLine, readLog } from "../log.js";
 import { ChromeContext, Dialog, type Hint, SelectDialog, type SelectItem, useChrome } from "./dialog.js";
 import { ALL, DecisionsView, DetailView, type Filters, NO_JEVEL, ReportView, jevelNames, rowsOf, thresholdsLookup } from "./history.js";
+import { HomeView } from "./home.js";
 import { THEMES, ThemeContext, type ThemeName, loadThemeName, saveThemeName, useTheme } from "./theme.js";
 
 /** The TUI is the one place that imports ink and react: `jevelry tui` loads this file with a dynamic import, so no other command pays for them. */
@@ -136,6 +137,7 @@ export function App(props: {
   const [historyView, setHistoryView] = useState<"list" | "detail" | "report">("list");
   const [open, setOpen] = useState<{ id: string; question: string } | null>(null);
   const [cursor, setCursor] = useState(0);
+  const [homeCursor, setHomeCursor] = useState(0);
   const [jevel, setJevel] = useState<string | null>(null);
   const [lookup] = useState(() => thresholdsLookup(props.dirs));
   const toastTimer = useRef<NodeJS.Timeout | undefined>(undefined);
@@ -217,7 +219,15 @@ export function App(props: {
   } else if (screen === "try") {
     content = <Placeholder title={`Try ${jevel ?? "a jevel"}`} purpose="Ask Jev live with an example state and see how it decides." meanwhile="Meanwhile: npx jevelry ask ticket-triage --state @jevels/ticket-triage/example.json" height={body} />;
   } else {
-    content = <Placeholder title="Home" purpose="Is Jev deciding well, and what needs you?" meanwhile="Meanwhile y opens History." height={body} />;
+    content = (
+      <HomeView lines={lines} now={(props.now ?? (() => new Date()))()} version={version} width={columns} height={body} active={active} cursor={homeCursor} onCursor={setHomeCursor}
+        onTry={(name) => { setJevel(name); go("try"); }}
+        onOpen={(target) => {
+          if (target.kind === "review") go("review");
+          else if (target.kind === "jevel") { setJevel(target.name); go("jevel"); }
+          else { setFilters({ ...ALL, ...target.filters }); setCursor(0); go("history"); }
+        }} />
+    );
   }
 
   const jevelItems = (): SelectItem<Command>[] => {
