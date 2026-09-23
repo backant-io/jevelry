@@ -20,7 +20,10 @@
 
 <p align="center"><b>Use Jev everywhere to make &amp; track decisions.</b></p>
 
-<p align="center"><img src="docs/assets/tui.png" alt="jevelry tui: today's decisions, what needs you, every jevel and the latest decisions, with the Try a jevel picker open" width="100%"></p>
+<p align="center"><img src="docs/assets/jevelry.gif" alt="jevelry tui: the start screen, a live ask of ticket-triage, the dashboard and Review" width="100%"></p>
+
+> [!WARNING]
+> **Early development:** jevelry is young and changes fast. Commands, the jevel format and the answer document may change between minor versions until 1.0, so pin the version you depend on.
 
 jevelry lets your code and your coding agent ask Jev, the decision model from TypeSafe, a small typed question and get back a decision it can act on, and it keeps every decision so you can see how often Jev was right.
 
@@ -54,14 +57,15 @@ npx jevelry ask review-comment-kind --state '{"comment": {"author": "ci-bot", "t
 
 ## Features
 
-- **Seventeen jevels ship with the package**: support tickets, messages, issues, pull requests, logs, alerts, failing tests and meeting notes, each with an example state and tested cases.
-- **Typed decisions in your code**: `jevel("ticket-triage").decide({ ticket })` gives you every question with its `decision` and its `answer`.
-- **Commands Jev picks**: `jevelry run` runs the command a jevel names for the option Jev picked, and asks you first on a `mark`.
-- **A full-screen view**: `jevelry tui` opens on a start screen and has a dashboard, Review, a Jevel screen per jevel with threshold tuning, Try and History.
-- **Every decision in one log**: each ask goes into `~/.jevelry/log.jsonl`, and `jevelry report` shows you how often each question was right.
-- **Cases proven live**: every shipped jevel has a `cases.json`, and our live tests ask every case against the real API.
-- **A skill for your coding agent**: `jevelry install` puts the skill into Claude Code, Codex, Cursor, opencode and pi.
-- **Typed answers**: `jevelry types` writes a declaration file, so your editor knows the options of every jevel.
+- **Interactive TUI**: Built with [Ink](https://github.com/vadimdemedes/ink) for a full-screen terminal experience
+- **Ready-made jevels**: Seventeen decisions for tickets, messages, issues, pull requests, logs, alerts and failing tests
+- **Typed decisions in code**: Load a jevel once and get a typed decision wherever your code asks
+- **Commands Jev runs**: Jev picks the command to run and asks you first when it is only fairly sure
+- **Review and tuning**: Mark whether Jev was right and move thresholds based on real outcomes
+- **Persistent log**: Every decision in one local log, with a report per question
+- **Tested jevels**: Every shipped jevel is checked against the real API on its own cases
+- **Agent skill**: One install for Claude Code, Codex, Cursor, opencode and pi
+- **Typed answers**: Your editor knows the options of every jevel
 
 ## Installation
 
