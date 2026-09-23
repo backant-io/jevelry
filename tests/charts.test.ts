@@ -13,7 +13,7 @@ describe("spark", () => {
 
   it("is all floor when every value is zero, and empty for no values", () => {
     expect(spark([0, 0, 0], 3)).toBe("▁▁▁");
-    expect(spark([], 5)).toBe("");
+    expect(spark([], 5)).toBe("     ");
   });
 
   it("sums into buckets when there are more values than cells, so no decision is dropped", () => {
@@ -60,5 +60,38 @@ describe("histogram", () => {
 
   it("puts a certainty of exactly 1 in the last column", () => {
     expect(histogram([1], 4, []).split("\n")[0]).toBe("▁▁▁█");
+  });
+});
+
+describe("chart edges", () => {
+  it("draws nothing at width 0 or below", () => {
+    expect(spark([3, 4, 5], 0)).toBe("");
+    expect(bar(0.5, 0)).toBe("");
+    expect(mix(1, 2, 3, 0)).toBe("");
+    expect(histogram([0.5], 0, [0.5])).toBe("\n");
+  });
+
+  it("draws one cell at width 1", () => {
+    expect(spark([1, 2, 3], 1)).toBe("█");
+    expect(bar(1, 1)).toBe("█");
+    expect(mix(1, 1, 1, 1)).toHaveLength(1);
+    expect(histogram([0.2, 0.9], 1, [0.7])).toBe("█\n│");
+  });
+
+  // A column of sparklines only lines up when every one is exactly as wide as asked.
+  it("pads a single value, or any shorter series, to the width", () => {
+    expect(spark([5], 4)).toBe("█   ");
+    expect(spark([], 3)).toBe("   ");
+  });
+
+  it("treats NaN and infinities as nothing, never as text", () => {
+    expect(bar(Number.NaN, 4)).toBe("    ");
+    expect(spark([Number.NaN, 2], 2)).toBe("▁█");
+    expect(mix(Number.NaN, 1, 0, 4)).toBe("▓▓▓▓");
+    expect(histogram([Number.NaN, 0.5], 4, [Number.NaN]).split("\n")).toEqual(["▁▁█▁", ""]);
+  });
+
+  it("draws an empty histogram as a flat floor with its threshold marks", () => {
+    expect(histogram([], 5, [0.7])).toBe("▁▁▁▁▁\n   │");
   });
 });

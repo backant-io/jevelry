@@ -1,3 +1,6 @@
+// Times show in the terminal's own zone; pin it so the fixture's times read the same everywhere.
+process.env.TZ = "UTC";
+
 import { spawn } from "node:child_process";
 import { appendFileSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -49,7 +52,7 @@ const C: AskLine = {
 const agreedB: OutcomeLine = { kind: "outcome", id: B.id, question: "team", outcome: "agree", value: null, note: null, at: "2026-09-22T11:00:00.000Z" };
 const LOG: LogLine[] = [A, B, C, agreedB];
 
-const ALL: Filters = { decision: "all", jevel: null, noOutcome: false, since: null };
+const ALL: Filters = { decision: "all", jevel: null, noOutcome: false, failed: false, since: null };
 const SIZE = { columns: 80, rows: 24 };
 const noop = (): void => undefined;
 const tick = (ms = 60) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -168,7 +171,7 @@ describe("recording outcomes from the review queue", () => {
   // The whole point of the TUI: a reviewed mark becomes an outcome line that `jevelry report` counts.
   it("a records agree with the note, d records disagree with the picked value, through the outcome writer", async () => {
     const home = homeWith(LOG);
-    const queue: Filters = { decision: "mark", jevel: null, noOutcome: true, since: null };
+    const queue: Filters = { decision: "mark", jevel: null, noOutcome: true, failed: false, since: null };
     const { stdin, lastFrame, unmount } = render(createElement(App, { home, dirs: [FIXTURES, SHIPPED], lines: LOG, filters: queue, screen: "history", size: SIZE }));
     await tick();
     expect(lastFrame()).toContain("2 marked decisions to review");
@@ -187,7 +190,7 @@ describe("recording outcomes from the review queue", () => {
     await tick(200);
     // One outcome per visit: the detail closes and the queue shows the next mark.
     expect(lastFrame()).toContain("1 marked decision to review");
-    expect(lastFrame()).toContain("recorded agree on urgent");
+    expect(lastFrame()).toContain("Saved: Jev was right on ticket-triage urgent");
     expect(await outcomesIn(home)).toEqual([agreedB, expect.objectContaining({ id: A.id, question: "urgent", outcome: "agree", value: null, note: "late reply" })]);
     stdin.write(ENTER);
     await tick();
@@ -202,7 +205,7 @@ describe("recording outcomes from the review queue", () => {
     const recorded = await outcomesIn(home);
     expect(recorded.at(-1)).toMatchObject({ id: A.id, question: "frustration", outcome: "disagree", value: "2", note: null });
     expect(lastFrame()).toContain("0 marked decisions to review");
-    expect(lastFrame()).toContain("recorded disagree 2 on frustration");
+    expect(lastFrame()).toContain("Saved: Jev was wrong on ticket-triage frustration, it was level 2");
     unmount();
   });
 
@@ -220,7 +223,7 @@ describe("recording outcomes from the review queue", () => {
     stdin.write("a");
     await tick(200);
     expect(lastFrame()).toContain("8 decisions");
-    expect(lastFrame()).toContain("recorded agree on team");
+    expect(lastFrame()).toContain("Saved: Jev was right on ticket-triage team");
     unmount();
     expect(await outcomesIn(home)).toEqual([agreedB, expect.objectContaining({ id: B.id, question: "team", outcome: "agree" })]);
   });
@@ -462,7 +465,7 @@ describe("the shell", () => {
     await press(stdin, CTRL_P, ..."theme", ENTER);
     expect(lastFrame()).toContain("Theme");
     await press(stdin, DOWN, ENTER);
-    expect(lastFrame()).toContain("theme set to light");
+    expect(lastFrame()).toContain("Saved: light theme");
     expect(JSON.parse(readFileSync(join(home, "tui.json"), "utf8"))).toEqual({ theme: "light" });
     expect(loadThemeName(home)).toBe("light");
     unmount();
@@ -489,5 +492,92 @@ describe("palette search", () => {
     expect(fuzzyFilter(items, "TICK").map((i) => i.value)).toEqual(["Jevel ticket-triage"]);
     expect(fuzzyFilter(items, "")).toHaveLength(5);
     expect(fuzzyFilter(items, "xyz")).toEqual([]);
+  });
+});
+
+describe("review fixes", () => {
+  const app = (extra: Record<string, unknown> = {}) =>
+    render(createElement(App, { home: homeWith(LOG), dirs: [FIXTURES], lines: LOG, version: "9.9.9", size: SIZE, ...extra }));
+  const press = async (stdin: { write: (s: string) => void }, ...keys: string[]) => { for (const k of keys) { stdin.write(k); await tick(30); } };
+
+  // The toast confirms the one action this TUI exists for; it must never hide the filter line that just changed.
+  it("shows the toast in the footer and leaves every content row as it was", async () => {
+    const home = homeWith(LOG);
+    const { stdin, lastFrame, unmount } = render(createElement(App, { home, dirs: [], lines: LOG, screen: "history", size: SIZE, filters: { ...ALL, decision: "mark", noOutcome: true } }));
+    await tick();
+    await press(stdin, ENTER, "a");
+    await tick(200);
+    const lines = (lastFrame() ?? "").split("\n");
+    expect(lines[1]).toMatch(/^ decision mark {3}jevel all {3}outcome none yet\s*$/);
+    expect(lines.at(-1)).toContain("┃ Saved: Jev was right on ticket-triage urgent");
+    unmount();
+  });
+
+  it("x keeps only the asks Jev could not answer, and x again shows everything", async () => {
+    const { stdin, lastFrame, unmount } = app({ screen: "history" });
+    await tick();
+    await press(stdin, "x");
+    expect(lastFrame()).toContain("2 failed decisions");
+    expect(lastFrame()).not.toContain("ticket-triage");
+    await press(stdin, "x");
+    expect(lastFrame()).toContain("8 decisions");
+    unmount();
+  });
+
+  // A held key or a slow terminal delivers "jjjj" as one chunk, and two arrows in one tick; each must count.
+  it("moves one row per j in a burst and per arrow in the same tick", async () => {
+    const { stdin, lastFrame, unmount } = app({ screen: "history" });
+    await tick();
+    const selected = () => (lastFrame() ?? "").split("\n").find((l) => l.trimStart().startsWith(">"));
+    stdin.write("jjjj");
+    await tick();
+    expect(selected()).toMatch(/09:30 ticket-triage frustration/);
+    stdin.write(`${DOWN}${DOWN}`);
+    await tick();
+    expect(selected()).toMatch(/09:00 ticket-triage urgent/);
+    unmount();
+  });
+
+  it("puts screens and commands before the 20 jevels, marks the active row, and says how many more there are", async () => {
+    const { stdin, lastFrame, unmount } = app({ dirs: [SHIPPED, FIXTURES] });
+    await tick();
+    await press(stdin, CTRL_P);
+    const frame = lastFrame() ?? "";
+    for (const item of ["Switch theme", "Help", "Quit"]) expect(frame).toContain(item);
+    expect(frame).toMatch(/>Home\s+h/);
+    expect(frame).toMatch(/↓ \d+ more/);
+    await press(stdin, ..."ticket", ENTER);
+    expect(lastFrame()).toContain("Jevel ticket-triage");
+    unmount();
+  });
+
+  it("explains act, mark and fall_back in the help overlay", async () => {
+    const { stdin, lastFrame, unmount } = app();
+    await tick();
+    await press(stdin, "?");
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("What the decisions mean");
+    expect(frame).toMatch(/act\s+Jev was sure: your code uses the answer/);
+    expect(frame).toMatch(/fall_back\s+unsure or failed: your code decides/);
+    // Keys that work everywhere are listed once, under Everywhere.
+    expect(frame.match(/y\s+history/g)).toHaveLength(1);
+    unmount();
+  });
+
+  it("offers no a or d on an ask Jev could not answer", async () => {
+    const { stdin, lastFrame, unmount } = app({ screen: "history" });
+    await tick();
+    await press(stdin, ENTER);
+    expect(lastFrame()).toContain("answer: none, Jev could not answer");
+    expect(lastFrame()).not.toContain("Jev was right");
+    unmount();
+  });
+
+  it("shows times in the terminal's zone, the detail with seconds", async () => {
+    const { stdin, lastFrame, unmount } = app({ screen: "history" });
+    await tick();
+    await press(stdin, "j", "j", ENTER);
+    expect(lastFrame()).toContain("2026-09-22 09:30:00 (local)");
+    unmount();
   });
 });

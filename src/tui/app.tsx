@@ -32,20 +32,26 @@ function Placeholder(props: { title: string; purpose: string; meanwhile: string;
   );
 }
 
-function Footer(props: { hints: Hint[]; home: string; version: string; width: number }): React.JSX.Element {
+/**
+ * Keys on the left; on the right the home directory and version, or for four seconds the toast in their place,
+ * so a message never covers what is on the screen.
+ */
+function Footer(props: { hints: Hint[]; home: string; version: string; width: number; toast: { text: string; error: boolean } | null; extra: Hint[] }): React.JSX.Element {
   const theme = useTheme();
-  const right = `${props.home}  v${props.version}`;
+  const right = props.toast ? `┃ ${props.toast.text}` : `${props.home}  v${props.version}`;
   const width = (h: Hint): number => h[0].length + h[1].length + 3;
-  const help: Hint = ["?", "help"];
-  // The screen's keys as far as they fit; "? help" always, since it lists the rest.
-  let room = props.width - right.length - 4 - width(help);
+  // The toast or the home directory keeps its whole length, then "? help" (it lists everything else),
+  // then the screen's own keys, then the rest of the shell's keys, as far as they fit.
+  let room = props.width - Math.min(right.length, props.width - 4) - 4;
+  const help = props.extra.filter(([k]) => k === "?");
+  for (const h of help) room -= width(h);
   const shown: Hint[] = [];
-  for (const h of [...props.hints, ["ctrl+p", "commands"] as Hint]) {
+  for (const h of [...props.hints, ...props.extra.filter(([k]) => k !== "?")]) {
     if (width(h) > room) break;
     shown.push(h);
     room -= width(h);
   }
-  shown.push(help);
+  shown.push(...help);
   return (
     <Box width={props.width} paddingX={1} justifyContent="space-between" backgroundColor={theme.panel}>
       <Text wrap="truncate">
@@ -56,21 +62,22 @@ function Footer(props: { hints: Hint[]; home: string; version: string; width: nu
           </Text>
         ))}
       </Text>
-      <Text color={theme.muted}>{right}</Text>
+      {props.toast ? (
+        <Text wrap="truncate">
+          <Text color={props.toast.error ? theme.error : theme.accent}>┃ </Text>
+          <Text color={props.toast.error ? theme.error : theme.text} bold>{props.toast.text}</Text>
+        </Text>
+      ) : <Text color={theme.muted}>{right}</Text>}
     </Box>
   );
 }
 
-function Toast(props: { text: string; error: boolean; columns: number }): React.JSX.Element {
-  const theme = useTheme();
-  const width = Math.min(props.text.length + 5, 60, props.columns - 4);
-  return (
-    <Box position="absolute" top={1} left={props.columns - width - 2} width={width} backgroundColor={theme.element}>
-      <Text color={props.error ? theme.error : theme.accent}>┃ </Text>
-      <Text color={theme.text} wrap="truncate">{props.text}</Text>
-    </Box>
-  );
-}
+/** What the three decisions mean, for someone who has never seen them. */
+export const WORDS: Hint[] = [
+  ["act", "Jev was sure: your code uses the answer"],
+  ["mark", "fairly sure: your code uses it, check it"],
+  ["fall_back", "unsure or failed: your code decides"],
+];
 
 function HelpDialog(props: { hints: Hint[]; columns: number; rows: number; onClose: () => void }): React.JSX.Element {
   const theme = useTheme();
@@ -86,14 +93,24 @@ function HelpDialog(props: { hints: Hint[]; columns: number; rows: number; onClo
     Array.from({ length: Math.ceil(hints.length / 2) }, (_, i) => (
       <Text key={i}>{cell(hints[2 * i]!)}{hints[2 * i + 1] ? cell(hints[2 * i + 1]!) : null}</Text>
     ));
+  const own = props.hints.filter(([k]) => !GLOBAL.some(([g]) => g === k));
+  const height = 17 + Math.max(1, Math.ceil(own.length / 2));
   return (
-    <Dialog title="Keys" width={56} columns={props.columns} rows={props.rows}>
+    <Dialog title="Keys" width={56} columns={props.columns} rows={props.rows} height={height}>
       <Text> </Text>
       <Text color={theme.accent}>This screen</Text>
-      {props.hints.length === 0 ? <Text color={theme.muted}>none</Text> : rows(props.hints)}
+      {own.length === 0 ? <Text color={theme.muted}>none</Text> : rows(own)}
       <Text> </Text>
       <Text color={theme.accent}>Everywhere</Text>
       {rows(GLOBAL)}
+      <Text> </Text>
+      <Text color={theme.accent}>What the decisions mean</Text>
+      {WORDS.map(([word, meaning]) => (
+        <Text key={word} wrap="truncate">
+          <Text color={word === "act" ? theme.act : word === "mark" ? theme.mark : theme.fallBack} bold>{word.padEnd(10)}</Text>
+          <Text color={theme.text}>{meaning}</Text>
+        </Text>
+      ))}
     </Dialog>
   );
 }
@@ -137,6 +154,12 @@ export function App(props: {
   const [historyView, setHistoryView] = useState<"list" | "detail" | "report">("list");
   const [open, setOpen] = useState<{ id: string; question: string } | null>(null);
   const [cursor, setCursor] = useState(0);
+  /** A detail opened from Home's feed goes back to Home. */
+  const [fromHome, setFromHome] = useState(false);
+  const [fresh, setFresh] = useState<ReadonlySet<string>>(new Set());
+  const freshTimer = useRef<NodeJS.Timeout | undefined>(undefined);
+  // Jevel names for the palette: read once, then again when a jevels folder changes.
+  const [shipped, setShipped] = useState(() => listJevels(props.dirs).map((j) => j.name));
   const [homeCursor, setHomeCursor] = useState(0);
   const [jevel, setJevel] = useState<string | null>(null);
   const [lookup] = useState(() => thresholdsLookup(props.dirs));
@@ -149,7 +172,19 @@ export function App(props: {
   };
   const reload = (): void => {
     readCounted(props.home).then(
-      (read) => { setLines(read.lines); setSkipped(read.skipped); },
+      (read) => {
+        setLines((before) => {
+          const seen = new Set(before.filter((l) => l.kind === "ask").map((l) => l.id));
+          const arrived = read.lines.filter((l) => l.kind === "ask" && !seen.has(l.id)).map((l) => l.id);
+          if (arrived.length > 0) {
+            setFresh(new Set(arrived));
+            clearTimeout(freshTimer.current);
+            freshTimer.current = setTimeout(() => setFresh(new Set()), 5000);
+          }
+          return read.lines;
+        });
+        setSkipped(read.skipped);
+      },
       (error: unknown) => say(`log could not be read: ${error instanceof Error ? error.message : String(error)}`, true),
     );
   };
@@ -166,12 +201,18 @@ export function App(props: {
     } catch {
       // No home directory yet: nothing to watch, the screens stay as read.
     }
-    return () => { clearTimeout(timer); clearTimeout(toastTimer.current); watcher?.close(); };
+    return () => { clearTimeout(timer); clearTimeout(toastTimer.current); clearTimeout(freshTimer.current); watcher?.close(); };
   }, [props.home]);
+  useEffect(() => {
+    const watchers = props.dirs.flatMap((dir) => {
+      try { return [watch(dir, () => setShipped(listJevels(props.dirs).map((j) => j.name)))]; } catch { return []; }
+    });
+    return () => { for (const w of watchers) w.close(); };
+  }, [props.dirs.join("\n")]);
 
   const go = (next: Screen): void => {
     setScreen(next);
-    if (next === "history") setHistoryView("list");
+    if (next === "history") { setHistoryView("list"); setFromHome(false); }
   };
   const run = (c: Command): void => {
     setDialog(null);
@@ -200,7 +241,7 @@ export function App(props: {
     if (row) {
       content = (
         <DetailView row={row} home={props.home} thresholds={lookup(row)} height={body} width={columns} active={active}
-          onBack={() => setHistoryView("list")} onRecorded={(message) => { say(message); setHistoryView("list"); reload(); }} />
+          onBack={() => (fromHome ? go("home") : setHistoryView("list"))} onRecorded={(message) => { say(message); if (fromHome) go("home"); else setHistoryView("list"); reload(); }} />
       );
     } else if (historyView === "report") {
       content = <ReportView lines={lines} filters={filters} height={body} active={active} onFilters={setFilters} onBack={() => setHistoryView("list")} />;
@@ -208,7 +249,7 @@ export function App(props: {
       content = (
         <DecisionsView lines={lines} filters={filters} height={body} width={columns} active={active} skipped={skipped} cursor={cursor} onCursor={setCursor}
           onFilters={(f) => { setFilters(f); setCursor(0); }}
-          onOpen={(r) => { setOpen({ id: r.ask.id, question: r.question }); setHistoryView("detail"); }}
+          onOpen={(r) => { setOpen({ id: r.ask.id, question: r.question }); setFromHome(false); setHistoryView("detail"); }}
           onReport={() => setHistoryView("report")} onBack={() => go("home")} />
       );
     }
@@ -220,29 +261,28 @@ export function App(props: {
     content = <Placeholder title={`Try ${jevel ?? "a jevel"}`} purpose="Ask Jev live with an example state and see how it decides." meanwhile="Meanwhile: npx jevelry ask ticket-triage --state @jevels/ticket-triage/example.json" height={body} />;
   } else {
     content = (
-      <HomeView lines={lines} now={(props.now ?? (() => new Date()))()} version={version} width={columns} height={body} active={active} cursor={homeCursor} onCursor={setHomeCursor}
+      <HomeView lines={lines} now={(props.now ?? (() => new Date()))()} version={version} width={columns} height={body} rows={rows} fresh={fresh} active={active} cursor={homeCursor} onCursor={setHomeCursor}
         onTry={(name) => { setJevel(name); go("try"); }}
         onOpen={(target) => {
           if (target.kind === "review") go("review");
           else if (target.kind === "jevel") { setJevel(target.name); go("jevel"); }
+          else if (target.kind === "decision") { setOpen({ id: target.id, question: target.question }); setFromHome(true); setScreen("history"); setHistoryView("detail"); }
           else { setFilters({ ...ALL, ...target.filters }); setCursor(0); go("history"); }
         }} />
     );
   }
 
-  const jevelItems = (): SelectItem<Command>[] => {
-    const names = new Set([...listJevels(props.dirs).map((j) => j.name), ...jevelNames(lines).filter((n) => n !== NO_JEVEL)]);
-    return [...names].sort().map((name) => ({ label: `Jevel ${name}`, value: { jevel: name }, hint: "jevel" }));
-  };
-  const palette: SelectItem<Command>[] = [
+  // Screens and commands first, so they stay on screen however many jevels follow.
+  const palette = (): SelectItem<Command>[] => [
     { label: "Home", value: { go: "home" }, hint: "h" },
     { label: "Review marked decisions", value: { go: "review" }, hint: "v" },
     { label: "History", value: { go: "history" }, hint: "y" },
     { label: "Try a jevel", value: { go: "try" }, hint: "t" },
-    ...jevelItems(),
     { label: "Switch theme", value: { theme: true }, hint: themeName },
     { label: "Help", value: { help: true }, hint: "?" },
     { label: "Quit", value: { quit: true }, hint: "q" },
+    ...[...new Set([...shipped, ...jevelNames(lines).filter((n) => n !== NO_JEVEL)])].sort()
+      .map((name) => ({ label: `Jevel ${name}`, value: { jevel: name } as Command, hint: "jevel" })),
   ];
   const tilde = props.home.startsWith(homedir()) ? `~${props.home.slice(homedir().length)}` : props.home;
   const home = tilde.length > 24 ? `...${tilde.slice(-21)}` : tilde;
@@ -251,9 +291,11 @@ export function App(props: {
       <ChromeContext.Provider value={{ setHints, setCapture }}>
         <Root columns={columns} rows={rows}>
           <Box height={body} flexDirection="column" overflow="hidden">{content}</Box>
-          <Footer hints={hints} home={home} version={version} width={columns} />
-          {toast ? <Toast text={toast.text} error={toast.error} columns={columns} /> : null}
-          {dialog === "palette" ? <SelectDialog title="Commands" items={palette} columns={columns} rows={rows} onSelect={run} onClose={() => setDialog(null)} /> : null}
+          <Footer
+            hints={dialog === null ? hints : []}
+            extra={dialog === "help" ? [["esc", "close"]] : dialog !== null ? [["↑↓", "move"], ["enter", "choose"], ["esc", "close"]] : capture ? [] : [["ctrl+p", "commands"], ["?", "help"]]}
+            home={home} version={version} width={columns} toast={toast} />
+          {dialog === "palette" ? <SelectDialog title="Commands" items={palette()} columns={columns} rows={rows} onSelect={run} onClose={() => setDialog(null)} /> : null}
           {dialog === "theme" ? (
             <SelectDialog<ThemeName>
               title="Theme"
@@ -264,7 +306,7 @@ export function App(props: {
               onSelect={(n) => {
                 setDialog(null);
                 setThemeName(n);
-                try { saveThemeName(props.home, n); say(`theme set to ${n}`); } catch (e) { say(`theme not saved: ${e instanceof Error ? e.message : String(e)}`, true); }
+                try { saveThemeName(props.home, n); say(`Saved: ${n} theme`); } catch (e) { say(`theme not saved: ${e instanceof Error ? e.message : String(e)}`, true); }
               }}
             />
           ) : null}

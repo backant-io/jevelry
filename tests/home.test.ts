@@ -108,13 +108,15 @@ describe("home screen", () => {
     expect(lines).toHaveLength(24);
     for (const l of lines) expect(l.length).toBeLessThanOrEqual(80);
     expect(frame).toContain("◆ JEVELRY  Use Jev everywhere to make & track decisions  v9.9.9");
-    expect(frame).toContain("Today  8 decisions in 3 asks   cost $0.000033");
+    expect(frame).toContain("Today  8 decisions · 3 asks · $0.000033");
+    expect(frame).toContain("act: Jev was sure · mark: fairly sure, check it");
+    expect(frame).toContain("fall_back: unsure, your code decides");
     expect(frame).toMatch(/[█▓░]+ act 38% mark 38% fall_back 25%/);
-    expect(frame).toContain("per hour, last 24h");
+    expect(frame).toContain("24h · peak 5/h");
     expect(frame).toContain("Needs you");
     expect(frame).toContain("● 3 marked decisions to review");
-    expect(frame).toContain("● 1 ask failed today, mostly rate_limited");
-    expect(frame).toMatch(/ticket-triage\s+9\s+0%\s+[▁-█]{14}/);
+    expect(frame).toContain("● 1 ask failed today (rate_limited)");
+    expect(frame).toMatch(/ticket-triage\s+9\s+0% of 1\s+[▁-█]{14}  peak 6\/day/);
     expect(frame).toMatch(/wake-gate\s+2\s+-\s+[▁-█]{14}/);
     unmount();
   });
@@ -127,12 +129,28 @@ describe("home screen", () => {
     for (const l of frame.split("\n")) expect(l.length).toBeLessThanOrEqual(120);
     expect(frame).toContain("█▀▀▀ █    █▀▀█");
     expect(frame).not.toContain("◆ JEVELRY");
-    expect(frame).toContain("mark right");
-    expect(frame).toMatch(/ticket-triage\s+9\s+0%\s+100%\s+█+▓+\s+[▁-█]{14}/);
+    // The side column shows the selected jevel per question, and the rest of the height is the live feed.
+    expect(frame).toMatch(/ticket-triage {2}per question/);
+    expect(frame).toMatch(/frustration\s+[█▓░]+ -/);
+    expect(frame).toContain("Latest decisions");
+    expect(frame).toMatch(/09-22 10:00 wake-gate\s+worth_a_turn\s+error\s+fall_back/);
     unmount();
   });
 
-  it("enter on the marked decisions opens Review, on the failed asks History with fall_back, on a jevel its screen", async () => {
+  it("fits 100x30 whole: block logo, the cost, the enter mark, and the mix column", async () => {
+    const { lastFrame, unmount } = app(LOG, { columns: 100, rows: 30 });
+    await tick();
+    const frame = lastFrame() ?? "";
+    expect(frame.split("\n")).toHaveLength(30);
+    expect(frame).toContain("█▀▀▀ █    █▀▀█");
+    expect(frame).toContain("8 decisions · 3 asks · $0.000033");
+    expect(frame).toContain("3 marked decisions to review  ⏎");
+    expect(frame).toMatch(/ticket-triage\s+9\s+0% of 1\s+█+▓+\s+[▁-█]{14}  peak 6\/day/);
+    expect(frame).not.toContain("…");
+    unmount();
+  });
+
+  it("enter on the marked decisions opens Review, on the failed asks History with only today's failed asks, on a jevel its screen", async () => {
     const { stdin, lastFrame, unmount } = app(LOG);
     await tick();
     stdin.write("\r");
@@ -144,8 +162,12 @@ describe("home screen", () => {
     await tick();
     stdin.write("\r");
     await tick();
-    expect(lastFrame()).toContain("decision fall_back");
-    expect(lastFrame()).toContain("2 decisions");
+    // Only the failed ask of today: its two questions, not every fall_back in the log.
+    expect(lastFrame()).toContain("2 failed decisions");
+    expect(lastFrame()).toContain("failed only");
+    expect(lastFrame()).toContain("since 09-22 00:00");
+    expect(lastFrame()).toMatch(/wake-gate\s+worth_a_turn\s+error/);
+    expect(lastFrame()).not.toContain("ticket-triage");
     stdin.write("h");
     await tick();
     stdin.write("j");
@@ -166,7 +188,7 @@ describe("home screen", () => {
   it("shows cost unknown when an ask carries no usage", async () => {
     const { lastFrame, unmount } = app([{ ...A, usage: null }]);
     await tick();
-    expect(lastFrame()).toContain("Today  3 decisions in 1 ask   cost unknown");
+    expect(lastFrame()).toContain("Today  3 decisions · 1 ask · cost unknown");
     unmount();
   });
 
@@ -184,5 +206,23 @@ describe("home screen", () => {
       expect(lastFrame()).toContain("coming in the next task");
       unmount();
     }
+  });
+});
+
+describe("home feed", () => {
+  it("enter on a feed row opens that decision, and esc comes back to Home", async () => {
+    const { stdin, lastFrame, unmount } = app(LOG, { columns: 120, rows: 40 });
+    await tick();
+    // Two needs, two jevels, then the feed, newest first.
+    stdin.write("jjjj");
+    await tick();
+    stdin.write("\r");
+    await tick();
+    expect(lastFrame()).toContain("wake-gate v1");
+    expect(lastFrame()).toContain("question: worth_a_turn");
+    stdin.write("\u001B");
+    await tick();
+    expect(lastFrame()).toContain("Latest decisions");
+    unmount();
   });
 });
