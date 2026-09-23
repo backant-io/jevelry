@@ -1,13 +1,13 @@
-import { watch } from "node:fs";
-import { Box, Text, render, useApp, useInput, useStdout } from "ink";
-import { useEffect, useRef, useState } from "react";
-import { type Thresholds, mergeThresholds } from "./decision.js";
-import { loadJevel } from "./jevel.js";
-import { type AskLine, LOG_FILE, type LogLine, type OutcomeLine, type RunLine, readLog, recordOutcome } from "./log.js";
-import type { Answer, FallBackAnswer } from "./protocol.js";
-import { recordedDecision, report } from "./report.js";
-
-/** The one module that imports ink and react: `jevelry tui` loads it with a dynamic import, so no other command pays for them. */
+import { Box, Text, useInput } from "ink";
+import { useRef, useState } from "react";
+import { type Thresholds, mergeThresholds } from "../decision.js";
+import { loadJevel } from "../jevel.js";
+import { type AskLine, type LogLine, type OutcomeLine, type RunLine, recordOutcome } from "../log.js";
+import type { Answer, FallBackAnswer } from "../protocol.js";
+import { recordedDecision, report } from "../report.js";
+import { bar } from "./charts.js";
+import { useChrome } from "./dialog.js";
+import { decisionColor, useTheme } from "./theme.js";
 
 export interface Filters {
   decision: "all" | "act" | "mark" | "fall_back";
@@ -15,6 +15,8 @@ export interface Filters {
   noOutcome: boolean;
   since: string | null;
 }
+
+export const ALL: Filters = { decision: "all", jevel: null, noOutcome: false, since: null };
 
 export interface Row {
   ask: AskLine;
@@ -26,8 +28,8 @@ export interface Row {
 }
 
 const DECISIONS: Filters["decision"][] = ["all", "act", "mark", "fall_back"];
-const NO_JEVEL = "(questions)";
-const jevelOf = (ask: AskLine): string => ask.jevel?.name ?? NO_JEVEL;
+export const NO_JEVEL = "(questions)";
+export const jevelOf = (ask: AskLine): string => ask.jevel?.name ?? NO_JEVEL;
 const baseName = (name: string): string => name.replace(/\[\d+\]$/, "");
 
 /** Newest ask first, one row per question, every outcome recorded for it attached. */
@@ -74,40 +76,59 @@ const cell = (text: string, width: number): string => (text.length > width ? `${
 const time = (iso: string): string => iso.slice(5, 16).replace("T", " ");
 const lastOutcome = (row: Row): string => row.outcomes.at(-1)?.outcome ?? "-";
 const next = <T,>(list: T[], current: T): T => list[(list.indexOf(current) + 1) % list.length] as T;
+const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-/** Fits 80 columns: 2 + 11 + 13 + 14 + 10 + 4 + 9 + 8 plus the gaps. */
-const listLine = (cells: [string, string, string, string, string, string, string]): string =>
-  [cell(cells[0], 11), cell(cells[1], 13), cell(cells[2], 14), cell(cells[3], 10), cell(cells[4], 4), cell(cells[5], 9), cells[6]].join(" ");
-
-const filterLine = (f: Filters): string =>
-  `decision: ${f.decision}   jevel: ${f.jevel ?? "all"}   outcome: ${f.noOutcome ? "none yet" : "any"}${f.since ? `   since ${f.since}` : ""}`;
+/** Column widths for a list `width` wide: time, answer, certainty, decision and outcome are fixed, jevel and question share the rest. */
+function columns(width: number): number[] {
+  // The screen's side padding and the cursor column come off first.
+  const rest = Math.max(20, width - 4 - (11 + 10 + 4 + 9 + 8) - 6);
+  const jevel = Math.ceil(rest * 0.45);
+  return [11, jevel, rest - jevel, 10, 4, 9, 8];
+}
+const listCells = (cells: string[], widths: number[]): string[] => cells.map((c, i) => (i === cells.length - 1 ? c : cell(c, widths[i]!)));
 
 function cycleJevel(lines: LogLine[], filters: Filters): Filters {
   return { ...filters, jevel: next<string | null>([null, ...jevelNames(lines)], filters.jevel) };
+}
+
+function Chip(props: { label: string; value: string; on: boolean }): React.JSX.Element {
+  const theme = useTheme();
+  return (
+    <Text>
+      <Text color={theme.muted}>{`${props.label} `}</Text>
+      <Text color={props.on ? theme.accent : theme.text} bold={props.on}>{props.value}</Text>
+      <Text>{"   "}</Text>
+    </Text>
+  );
 }
 
 export function DecisionsView(props: {
   lines: LogLine[];
   filters: Filters;
   height?: number;
+  width?: number;
+  active?: boolean;
   /** Log lines readLog could not read, shown in the header so nothing prints over the screen. */
   skipped?: number;
-  /** Set when the log could not be re-read, or after an outcome was recorded. */
-  notice?: string;
   /** Held by App, so coming back from a detail lands on the same row. */
   cursor?: number;
   onCursor?: (cursor: number) => void;
   onFilters: (f: Filters) => void;
   onOpen: (row: Row) => void;
   onReport: () => void;
-  onQuit: () => void;
+  onBack?: () => void;
 }): React.JSX.Element {
+  const theme = useTheme();
   const { lines, filters } = props;
   const rows = rowsOf(lines, filters);
   const setCursor = props.onCursor ?? ((): void => undefined);
   const at = Math.min(props.cursor ?? 0, Math.max(rows.length - 1, 0));
-  const height = Math.max((props.height ?? 24) - 5, 3);
+  const width = props.width ?? 80;
+  // Title, filters, blank, column header; the footer belongs to the shell.
+  const height = Math.max((props.height ?? 23) - 4, 3);
   const top = Math.max(0, Math.min(at - Math.floor(height / 2), rows.length - height));
+  const widths = columns(width);
+  useChrome([["j/k", "move"], ["enter", "open"], ["f", "decision"], ["J", "jevel"], ["o", "no outcome"], ["r", "report"]]);
   useInput((input, key) => {
     if (key.downArrow || input === "j") setCursor(Math.min(at + 1, rows.length - 1));
     else if (key.upArrow || input === "k") setCursor(Math.max(at - 1, 0));
@@ -116,30 +137,41 @@ export function DecisionsView(props: {
     else if (input === "J") props.onFilters(cycleJevel(lines, filters));
     else if (input === "o") props.onFilters({ ...filters, noOutcome: !filters.noOutcome });
     else if (input === "r") props.onReport();
-    else if (input === "q") props.onQuit();
-  });
-  const title = filters.decision === "mark" && filters.noOutcome
-    ? `${rows.length} marked decision${rows.length === 1 ? "" : "s"} to review`
-    : `${rows.length} decision${rows.length === 1 ? "" : "s"}`;
+    else if (key.escape) props.onBack?.();
+  }, { isActive: props.active ?? true });
+  const title = filters.decision === "mark" && filters.noOutcome ? plural(rows.length, "marked decision") + " to review" : plural(rows.length, "decision");
   return (
-    <Box flexDirection="column">
-      <Text bold wrap="truncate">
-        {[title, props.skipped ? `${props.skipped} unreadable log line${props.skipped === 1 ? "" : "s"} skipped` : "", props.notice ?? ""].filter((t) => t !== "").join("   ")}
+    <Box flexDirection="column" paddingX={1}>
+      <Text wrap="truncate">
+        <Text bold color={theme.accent}>History  </Text>
+        <Text bold color={theme.text}>{title}</Text>
+        {props.skipped ? <Text color={theme.error}>{`   ${plural(props.skipped, "unreadable log line")} skipped`}</Text> : null}
+        <Text color={theme.muted}>{"   every logged decision, newest first"}</Text>
       </Text>
-      <Text>{filterLine(filters)}</Text>
-      <Text dimColor>{`  ${listLine(["time", "jevel", "question", "answer", "cert", "decision", "outcome"])}`}</Text>
-      {rows.length === 0 ? <Text>no decisions match these filters</Text> : null}
+      <Text wrap="truncate">
+        <Chip label="decision" value={filters.decision} on={filters.decision !== "all"} />
+        <Chip label="jevel" value={filters.jevel ?? "all"} on={filters.jevel !== null} />
+        <Chip label="outcome" value={filters.noOutcome ? "none yet" : "any"} on={filters.noOutcome} />
+        {filters.since ? <Chip label="since" value={filters.since} on /> : null}
+      </Text>
+      <Text> </Text>
+      <Text color={theme.muted} wrap="truncate">{`  ${listCells(["time", "jevel", "question", "answer", "cert", "decision", "outcome"], widths).join(" ")}`}</Text>
+      {rows.length === 0 ? <Text color={theme.muted}>{"  no decisions match these filters"}</Text> : null}
       {rows.slice(top, top + height).map((row, i) => {
         const d = recordedDecision(row.answer);
-        const line = listLine([time(row.ask.at), jevelOf(row.ask), row.question, answerWord(row.answer), row.answer.certainty.toFixed(2), d, lastOutcome(row)]);
+        const c = listCells([time(row.ask.at), jevelOf(row.ask), row.question, answerWord(row.answer), row.answer.certainty.toFixed(2), d, lastOutcome(row)], widths);
         const selected = top + i === at;
+        const bg = selected ? theme.element : theme.background;
         return (
-          <Text key={`${row.ask.id}\n${row.question}`} wrap="truncate" inverse={selected} color={d === "act" ? "green" : d === "mark" ? "yellow" : "red"}>
-            {`${selected ? ">" : " "} ${line}`}
+          <Text key={`${row.ask.id}\n${row.question}`} wrap="truncate" backgroundColor={bg}>
+            <Text color={theme.accent}>{selected ? "> " : "  "}</Text>
+            <Text color={theme.muted}>{`${c[0]} `}</Text>
+            <Text color={theme.text}>{`${c[1]} ${c[2]} ${c[3]} ${c[4]} `}</Text>
+            <Text color={decisionColor(theme, d)}>{`${c[5]} `}</Text>
+            <Text color={row.outcomes.length > 0 ? theme.text : theme.muted}>{c[6]}</Text>
           </Text>
         );
       })}
-      <Text dimColor>j/k move  enter open  f decision  J jevel  o no outcome  r report  q quit</Text>
     </Box>
   );
 }
@@ -147,15 +179,12 @@ export function DecisionsView(props: {
 const label = (v: unknown): string => (typeof v === "string" ? v : typeof v === "object" && v !== null && typeof (v as { what?: unknown }).what === "string" ? (v as { what: string }).what : JSON.stringify(v));
 
 function probabilityLines(a: Answer): string[] {
-  if (a.type === "noul") {
-    return [["yes", a.noul, a.yes], ["no", 1 - a.noul, !a.yes] as const].map(([name, p, picked]) => `  ${picked ? "*" : " "} ${cell(String(name), 12)} ${(p as number).toFixed(2)}${picked ? "  picked" : ""}`);
-  }
+  const line = (name: string, p: number, picked: boolean, legend = ""): string =>
+    `  ${picked ? "*" : " "} ${cell(name, 12)} ${p.toFixed(2)} ${bar(p, 10)} ${picked ? "picked" : "      "}${legend}`.trimEnd();
+  if (a.type === "noul") return [line("yes", a.noul, a.yes), line("no", 1 - a.noul, !a.yes)];
   const picked = a.type === "choice" ? a.choice : String(Math.round(a.score));
-  return Object.entries(a.probabilities).map(([name, p]) => {
-    const text = a.type === "score" ? `level ${name}` : name;
-    const legend = a.type === "score" && a.legend[name] !== undefined ? `  ${label(a.legend[name])}` : "";
-    return `  ${name === picked ? "*" : " "} ${cell(text, 12)} ${p.toFixed(2)}${name === picked ? "  picked" : ""}${legend}`;
-  });
+  return Object.entries(a.probabilities).map(([name, p]) =>
+    line(a.type === "score" ? `level ${name}` : name, p, name === picked, a.type === "score" && a.legend[name] !== undefined ? `  ${label(a.legend[name])}` : ""));
 }
 
 /** The values a person can say were right instead: every option or level but the one Jev picked. */
@@ -220,15 +249,20 @@ function wrapLine(line: string, width: number): string[] {
   return out;
 }
 
+const HEADINGS = /^(question|answer|certainty|decision|error|run|outcomes|state|note for the next outcome):/;
+
 export function DetailView(props: {
   row: Row;
   home: string;
   thresholds: { thresholds: Thresholds; version: number } | null;
   height?: number;
+  width?: number;
+  active?: boolean;
   onBack: () => void;
   /** Called once per visit: the detail closes after one outcome, so a second key press cannot write a second line. */
   onRecorded: (message: string) => void;
 }): React.JSX.Element {
+  const theme = useTheme();
   const { row } = props;
   const [scroll, setScroll] = useState(0);
   const [mode, setMode] = useState<"view" | "pick" | "note">("view");
@@ -248,6 +282,12 @@ export function DetailView(props: {
         setMessage(`not recorded: ${error instanceof Error ? error.message : String(error)}`);
       });
   };
+  useChrome(
+    mode === "pick" ? [["j/k", "move"], ["enter", "record"], ["esc", "cancel"]]
+      : mode === "note" ? [["enter", "keep note"], ["esc", "drop note"]]
+        : [["a", "Jev was right"], ["d", "Jev was wrong"], ["n", "note"], ["j/k", "scroll"], ["esc", "back"]],
+    mode === "note",
+  );
   useInput((input, key) => {
     if (mode === "note") {
       if (key.escape) { setNote(""); setMode("view"); }
@@ -271,21 +311,42 @@ export function DetailView(props: {
       if (choices.length === 0) record("disagree");
       else { setPick(0); setMode("pick"); }
     } else if (input === "n") setMode("note");
-  });
-  const { stdout } = useStdout();
-  const width = Math.min(Math.max(stdout.columns || 80, 40), 100) - 1;
+  }, { isActive: props.active ?? true });
+  const width = Math.min(Math.max(props.width ?? 80, 40), 100) - 3;
   const lines = detailLines(row, props.thresholds, mode === "note" ? "" : note).flatMap((l) => wrapLine(l, width));
-  const footer = mode === "pick"
-    ? ["What was right? up/down, enter to record, esc to cancel", ...choices.map((c, i) => `${i === pick ? ">" : " "} ${c}`)]
+  const bottom = mode === "pick"
+    ? ["What was right? j/k to move, enter to record, esc to cancel", ...choices.map((c, i) => `${i === pick ? ">" : " "} ${c}`)]
     : mode === "note"
       ? [`note: ${note}_`, "enter keeps the note for the next a or d, esc drops it"]
-      : [...wrapLine(message, width), "a agree (Jev was right)  d disagree  n note  up/down scroll  esc back"];
-  const height = Math.max((props.height ?? 24) - footer.length, 3);
+      : message === "" ? [] : wrapLine(message, width);
+  // The title line plus the bottom lines; the footer belongs to the shell.
+  const height = Math.max((props.height ?? 23) - 1 - bottom.length, 3);
   const top = Math.min(scroll, Math.max(lines.length - height, 0));
+  const d = recordedDecision(row.answer);
   return (
-    <Box flexDirection="column">
-      {lines.slice(top, top + height).map((l, i) => <Text key={i} wrap="truncate">{l === "" ? " " : l}</Text>)}
-      {footer.map((l, i) => <Text key={`f${i}`} wrap="truncate" dimColor={i === footer.length - 1}>{l === "" ? " " : l}</Text>)}
+    <Box flexDirection="column" paddingX={1}>
+      <Text wrap="truncate">
+        <Text bold color={theme.text}>Decision</Text>
+        <Text color={theme.muted}>{"  what Jev saw and decided, and whether it was right   "}</Text>
+        <Text color={decisionColor(theme, d)} bold>{d}</Text>
+      </Text>
+      {lines.slice(top, top + height).map((l, i) => {
+        const heading = HEADINGS.exec(l);
+        if (heading) {
+          return (
+            <Text key={i} wrap="truncate">
+              <Text color={theme.muted}>{heading[0]}</Text>
+              <Text color={l.startsWith("decision:") ? decisionColor(theme, d) : l.startsWith("error:") ? theme.error : theme.text}>{l.slice(heading[0].length)}</Text>
+            </Text>
+          );
+        }
+        return <Text key={i} wrap="truncate" color={l.startsWith("  * ") ? theme.accent : theme.text}>{l === "" ? " " : l}</Text>;
+      })}
+      {bottom.map((l, i) => (
+        <Text key={`b${i}`} wrap="truncate" color={mode === "view" ? theme.error : i === 0 ? theme.accent : theme.text} backgroundColor={mode === "pick" && i > 0 && i - 1 === pick ? theme.element : theme.background}>
+          {l === "" ? " " : l}
+        </Text>
+      ))}
     </Box>
   );
 }
@@ -294,38 +355,42 @@ const pct = (n: number | null): string => (n === null ? "-" : `${Math.round(n * 
 const reportLine = (c: string[]): string =>
   [cell(c[0] ?? "", 14), cell(c[1] ?? "", 14), ...[4, 4, 4, 4, 4, 6, 7].map((w, i) => (c[i + 2] ?? "").padStart(w)), (c[9] ?? "").padStart(4)].join(" ");
 
-export function ReportView(props: { lines: LogLine[]; filters: Filters; height?: number; onFilters: (f: Filters) => void; onBack: () => void }): React.JSX.Element {
+export function ReportView(props: { lines: LogLine[]; filters: Filters; height?: number; active?: boolean; onFilters: (f: Filters) => void; onBack: () => void }): React.JSX.Element {
+  const theme = useTheme();
   const { lines, filters } = props;
   const rows = report(lines, { ...(filters.jevel !== null ? { jevel: filters.jevel } : {}), ...(filters.since !== null ? { since: filters.since } : {}) });
-  // Title, filter line, column header and two footer lines stay put; one spare line keeps Ink off the last row.
-  const height = Math.max((props.height ?? 24) - 6, 3);
+  // Title, filter line, column header and the legend stay put; the footer belongs to the shell.
+  const height = Math.max((props.height ?? 23) - 4, 3);
   const [scroll, setScroll] = useState(0);
   const top = Math.min(scroll, Math.max(rows.length - height, 0));
+  useChrome([["j/k", "scroll"], ["J", "jevel"], ["esc", "back"]]);
   useInput((input, key) => {
     if (key.escape) props.onBack();
     else if (input === "J") props.onFilters(cycleJevel(lines, filters));
     else if (key.downArrow || input === "j") setScroll(Math.min(top + 1, Math.max(rows.length - height, 0)));
     else if (key.upArrow || input === "k") setScroll(Math.max(top - 1, 0));
-  });
+  }, { isActive: props.active ?? true });
   return (
-    <Box flexDirection="column">
-      <Text bold>report</Text>
-      <Text>{`jevel: ${filters.jevel ?? "all"}${filters.since ? `   since ${filters.since}` : ""}`}</Text>
-      <Text dimColor>{reportLine(["jevel", "question", "asks", "act", "mark", "fb", "outc", "act ok", "mark ok", "cert"])}</Text>
-      {rows.length === 0 ? <Text>no asks in the log</Text> : null}
+    <Box flexDirection="column" paddingX={1}>
+      <Text wrap="truncate">
+        <Text bold color={theme.text}>Report</Text>
+        <Text color={theme.muted}>{`  how often Jev was right, per question   jevel ${filters.jevel ?? "all"}${filters.since ? `   since ${filters.since}` : ""}`}</Text>
+        {rows.length > height ? <Text color={theme.muted}>{`   rows ${top + 1}-${Math.min(top + height, rows.length)} of ${rows.length}`}</Text> : null}
+      </Text>
+      <Text color={theme.muted} wrap="truncate">{reportLine(["jevel", "question", "asks", "act", "mark", "fb", "outc", "act ok", "mark ok", "cert"])}</Text>
+      {rows.length === 0 ? <Text color={theme.muted}>no asks in the log</Text> : null}
       {rows.slice(top, top + height).map((r) => (
-        <Text key={`${r.jevel}\n${r.question}`} wrap="truncate">
+        <Text key={`${r.jevel}\n${r.question}`} wrap="truncate" color={theme.text}>
           {reportLine([r.jevel, r.question, String(r.asks), String(r.decisions.act), String(r.decisions.mark), String(r.decisions.fall_back), String(r.outcomes), pct(r.agreement_act), pct(r.agreement_mark), r.mean_certainty.toFixed(2)])}
         </Text>
       ))}
-      <Text dimColor>fb fall_back, outc outcomes, act ok and mark ok how often Jev was right</Text>
-      <Text dimColor>{`j/k scroll  J jevel  esc back${rows.length > height ? `   rows ${top + 1}-${Math.min(top + height, rows.length)} of ${rows.length}` : ""}`}</Text>
+      <Text color={theme.muted} wrap="truncate">fb fall_back, outc outcomes, act ok and mark ok how often Jev was right</Text>
     </Box>
   );
 }
 
 /** Thresholds of the jevel as it is found now, per question; null when the jevel is not found. */
-function thresholdsLookup(dirs: string[]): (row: Row) => { thresholds: Thresholds; version: number } | null {
+export function thresholdsLookup(dirs: string[]): (row: Row) => { thresholds: Thresholds; version: number } | null {
   const cache = new Map<string, ReturnType<typeof loadJevel>["jevel"] | null>();
   return (row) => {
     const name = row.ask.jevel?.name;
@@ -338,74 +403,4 @@ function thresholdsLookup(dirs: string[]): (row: Row) => { thresholds: Threshold
     const base = baseName(row.question);
     return { thresholds: mergeThresholds(j.thresholds, Object.hasOwn(j.questions, base) ? j.questions[base]!.thresholds : undefined), version: j.version };
   };
-}
-
-/** The log and how many of its lines could not be read, counted instead of printed. */
-async function readCounted(home: string): Promise<{ lines: LogLine[]; skipped: number }> {
-  let skipped = 0;
-  const lines = await readLog(home, () => { skipped += 1; });
-  return { lines, skipped };
-}
-
-export function App(props: { home: string; dirs: string[]; lines: LogLine[]; skipped?: number; filters: Filters }): React.JSX.Element {
-  const { exit } = useApp();
-  const { stdout } = useStdout();
-  const [lines, setLines] = useState(props.lines);
-  const [filters, setFilters] = useState(props.filters);
-  const [view, setView] = useState<"list" | "detail" | "report">("list");
-  const [open, setOpen] = useState<{ id: string; question: string } | null>(null);
-  const [lookup] = useState(() => thresholdsLookup(props.dirs));
-  const [skipped, setSkipped] = useState(props.skipped ?? 0);
-  const [cursor, setCursor] = useState(0);
-  const [notice, setNotice] = useState("");
-  const reload = (): void => {
-    readCounted(props.home).then(
-      (read) => { setLines(read.lines); setSkipped(read.skipped); setNotice((n) => (n.startsWith("log could not be read") ? "" : n)); },
-      (error: unknown) => setNotice(`log could not be read: ${error instanceof Error ? error.message : String(error)}`),
-    );
-  };
-  useEffect(() => {
-    // The directory, not the file: the file may not exist yet, and an append can replace its inode on some editors.
-    let timer: NodeJS.Timeout | undefined;
-    let watcher: ReturnType<typeof watch> | undefined;
-    try {
-      watcher = watch(props.home, (_event, file) => {
-        if (file !== null && file !== LOG_FILE) return;
-        clearTimeout(timer);
-        timer = setTimeout(reload, 150);
-      });
-    } catch {
-      // No home directory yet: nothing to watch, the list stays as read.
-    }
-    return () => { clearTimeout(timer); watcher?.close(); };
-  }, [props.home]);
-  // A terminal that reports no size (0 or undefined) is drawn as the 80x24 the TUI is built for.
-  const height = stdout.rows || 24;
-  const row = open ? rowsOf(lines, { decision: "all", jevel: null, noOutcome: false, since: null }).find((r) => r.ask.id === open.id && r.question === open.question) : undefined;
-  if (view === "detail" && row) {
-    return <DetailView row={row} home={props.home} thresholds={lookup(row)} height={height} onBack={() => setView("list")} onRecorded={(message) => { setNotice(message); setView("list"); reload(); }} />;
-  }
-  if (view === "report") return <ReportView lines={lines} filters={filters} height={height} onFilters={setFilters} onBack={() => setView("list")} />;
-  return (
-    <DecisionsView
-      lines={lines}
-      filters={filters}
-      height={height}
-      skipped={skipped}
-      notice={notice}
-      cursor={cursor}
-      onCursor={setCursor}
-      onFilters={(f) => { setFilters(f); setCursor(0); }}
-      onOpen={(r) => { setNotice(""); setOpen({ id: r.ask.id, question: r.question }); setView("detail"); }}
-      onReport={() => setView("report")}
-      onQuit={exit}
-    />
-  );
-}
-
-export async function runTui(input: { home: string; dirs: string[]; jevel?: string; since?: string }): Promise<void> {
-  const { lines, skipped } = await readCounted(input.home);
-  const filters: Filters = { decision: "all", jevel: input.jevel ?? null, noOutcome: false, since: input.since ?? null };
-  const app = render(<App home={input.home} dirs={input.dirs} lines={lines} skipped={skipped} filters={filters} />);
-  await app.waitUntilExit();
 }

@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/npm-jevelry-3fb950" alt="npm">
-  <img src="https://img.shields.io/badge/node-%3E%3D20-3fb950" alt="Node 20">
+  <img src="https://img.shields.io/badge/node-%3E%3D22-3fb950" alt="Node 22">
   <img src="https://img.shields.io/badge/tests-offline%2C%20live%20on%20demand-3fb950" alt="Tests">
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT">
 </p>
@@ -307,6 +307,8 @@ Currently jevelry asks Jev questions and hands you the answers, and that is the 
 | `JEVELRY_LOG_STATE` | `1` writes the state itself into each ask line, for `ask` and `decide` | off, only the hash |
 
 ## Start
+
+jevelry runs on Node 22 or newer, so check `node --version` before you install it.
 
     npm install -g jevelry
     export TYPESAFE_API_KEY=...

@@ -6,7 +6,7 @@
 
     npx jevelry install
 
-This installs the jevelry skill into every coding agent it finds and asks for your TypeSafe key, or you set `TYPESAFE_API_KEY` in the environment.
+This installs the jevelry skill into every coding agent it finds and asks for your TypeSafe key, or you set `TYPESAFE_API_KEY` in the environment. jevelry runs on Node 22 or newer.
 
 ## Ask
 
