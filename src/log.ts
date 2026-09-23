@@ -121,3 +121,13 @@ export function outcomeOf(ask: AskLine, question: string, given: string): { outc
   }
   return { outcome: agrees ? "agree" : "disagree", value: given };
 }
+
+/** The one writer of outcome lines, for `jevelry outcome` and the TUI alike. Throws JevelError for an unknown id, question or value. */
+export async function recordOutcome(home: string, logId: string, question: string, given: string, note: string | null): Promise<OutcomeLine> {
+  const found = findAsk(await readLog(home), logId);
+  if (!found) throw new JevelError("log_id", `no ask with id ${logId} in the log`);
+  const { outcome, value } = outcomeOf(found, question, given);
+  const line: OutcomeLine = { kind: "outcome", id: logId, question, outcome, value, note, at: new Date().toISOString() };
+  await appendLine(home, line);
+  return line;
+}

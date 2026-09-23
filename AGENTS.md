@@ -41,6 +41,8 @@ When Jev cannot answer, every question comes back `fall_back` with the reason in
 - `mark`: Jev is fairly sure, so go ahead and flag it for a person to look at.
 - `fall_back`: Jev is unsure, so do what you did before, or look closer yourself.
 
+`npx jevelry tui` shows every logged decision in your terminal, and pressing `a` or `d` on a `mark` tells jevelry whether Jev was right.
+
 ## Links
 
 - [The sixteen jevels that ship with the package](https://github.com/backant-io/jevelry/blob/main/jevels/README.md): triage, urgency, duplicates, severity, risky changes, failing test causes and more, each with an `example.json` and a `cases.json`.

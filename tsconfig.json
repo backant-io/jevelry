@@ -9,6 +9,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "declaration": true,
+    "jsx": "react-jsx",
     "outDir": "dist",
     "types": ["node"]
   },

@@ -9,7 +9,7 @@ import { installSkill, knownAgents, promptForKey, unknownAgents, whereToPutTheKe
 import { JevelError, discoveryDirs, listJevels, loadJevel } from "./jevel.js";
 import { defaultClient, renderTypes } from "./decide.js";
 import { resolveKey, storeKey } from "./key.js";
-import { appendLine, findAsk, jevelryHome, logAsk, logStateFromEnv, outcomeOf, readLog } from "./log.js";
+import { jevelryHome, logAsk, logStateFromEnv, readLog, recordOutcome } from "./log.js";
 import { type AskDocument, type ErrorBody, type ErrorDocument, PROTOCOL } from "./protocol.js";
 import { renderReport, report } from "./report.js";
 
@@ -137,11 +137,7 @@ export function buildProgram(): Command {
     .option("--note <text>", "a sentence for the record")
     .action(async (logId: string, question: string, value: string, opts: { note?: string }) => {
       try {
-        const lines = await readLog(home());
-        const found = findAsk(lines, logId);
-        if (!found) throw new JevelError("log_id", `no ask with id ${logId} in the log`);
-        const { outcome, value: recorded } = outcomeOf(found, question, value);
-        await appendLine(home(), { kind: "outcome", id: logId, question, outcome, value: recorded, note: opts.note ?? null, at: new Date().toISOString() });
+        const { outcome } = await recordOutcome(home(), logId, question, value, opts.note ?? null);
         say(`${outcome}: ${question} on ${logId}`);
       } catch (error) {
         failCommand(error);
@@ -159,6 +155,25 @@ export function buildProgram(): Command {
         const rows = report(await readLog(home()), { ...(opts.jevel ? { jevel: opts.jevel } : {}), ...(opts.since ? { since: opts.since } : {}) });
         if (opts.json) out(rows);
         else process.stdout.write(renderReport(rows));
+      } catch (error) {
+        failCommand(error);
+      }
+    });
+
+  program
+    .command("tui")
+    .description("browse the logged decisions in the terminal, review the marked ones and record whether Jev was right")
+    .option("--jevel <name>")
+    .option("--since <iso>")
+    .option("--jevels <dir>", "a jevels directory searched first (repeatable)", (d: string, all: string[]) => [...all, d], [] as string[])
+    .action(async (opts: { jevel?: string; since?: string; jevels: string[] }) => {
+      if (!process.stdin.isTTY || !process.stdout.isTTY) {
+        say("tui needs an interactive terminal; use jevelry report for plain text");
+        process.exit(1);
+      }
+      try {
+        const { runTui } = await import("./tui.js");
+        await runTui({ home: home(), dirs: dirs(opts.jevels), ...(opts.jevel ? { jevel: opts.jevel } : {}), ...(opts.since ? { since: opts.since } : {}) });
       } catch (error) {
         failCommand(error);
       }
