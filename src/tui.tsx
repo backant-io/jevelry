@@ -1,6 +1,6 @@
 import { watch } from "node:fs";
 import { Box, Text, render, useApp, useInput, useStdout } from "ink";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type Thresholds, mergeThresholds } from "./decision.js";
 import { loadJevel } from "./jevel.js";
 import { type AskLine, LOG_FILE, type LogLine, type OutcomeLine, readLog, recordOutcome } from "./log.js";
@@ -87,6 +87,11 @@ export function DecisionsView(props: {
   height?: number;
   /** Log lines readLog could not read, shown in the header so nothing prints over the screen. */
   skipped?: number;
+  /** Set when the log could not be re-read, or after an outcome was recorded. */
+  notice?: string;
+  /** Held by App, so coming back from a detail lands on the same row. */
+  cursor?: number;
+  onCursor?: (cursor: number) => void;
   onFilters: (f: Filters) => void;
   onOpen: (row: Row) => void;
   onReport: () => void;
@@ -94,8 +99,8 @@ export function DecisionsView(props: {
 }): React.JSX.Element {
   const { lines, filters } = props;
   const rows = rowsOf(lines, filters);
-  const [cursor, setCursor] = useState(0);
-  const at = Math.min(cursor, Math.max(rows.length - 1, 0));
+  const setCursor = props.onCursor ?? ((): void => undefined);
+  const at = Math.min(props.cursor ?? 0, Math.max(rows.length - 1, 0));
   const height = Math.max((props.height ?? 24) - 5, 3);
   const top = Math.max(0, Math.min(at - Math.floor(height / 2), rows.length - height));
   useInput((input, key) => {
@@ -113,7 +118,9 @@ export function DecisionsView(props: {
     : `${rows.length} decision${rows.length === 1 ? "" : "s"}`;
   return (
     <Box flexDirection="column">
-      <Text bold>{title}{props.skipped ? `   ${props.skipped} unreadable log line${props.skipped === 1 ? "" : "s"} skipped` : ""}</Text>
+      <Text bold wrap="truncate">
+        {[title, props.skipped ? `${props.skipped} unreadable log line${props.skipped === 1 ? "" : "s"} skipped` : "", props.notice ?? ""].filter((t) => t !== "").join("   ")}
+      </Text>
       <Text>{filterLine(filters)}</Text>
       <Text dimColor>{`  ${listLine(["time", "jevel", "question", "answer", "cert", "decision", "outcome"])}`}</Text>
       {rows.length === 0 ? <Text>no decisions match these filters</Text> : null}
@@ -206,7 +213,8 @@ export function DetailView(props: {
   thresholds: { thresholds: Thresholds; version: number } | null;
   height?: number;
   onBack: () => void;
-  onRecorded: () => void;
+  /** Called once per visit: the detail closes after one outcome, so a second key press cannot write a second line. */
+  onRecorded: (message: string) => void;
 }): React.JSX.Element {
   const { row } = props;
   const [scroll, setScroll] = useState(0);
@@ -215,14 +223,17 @@ export function DetailView(props: {
   const [note, setNote] = useState("");
   const [message, setMessage] = useState("");
   const choices = hasAnswer(row.answer) ? otherValues(row.answer) : [];
+  // Set on the first key press, before the write resolves, so a fast second press is ignored too.
+  const recording = useRef(false);
   const record = (value: string): void => {
+    if (recording.current) return;
+    recording.current = true;
     recordOutcome(props.home, row.ask.id, row.question, value, note === "" ? null : note, () => undefined)
-      .then((line) => {
-        setMessage(`recorded ${line.outcome}${line.value !== null ? ` ${line.value}` : ""}`);
-        setNote("");
-        props.onRecorded();
-      })
-      .catch((error: unknown) => setMessage(`not recorded: ${error instanceof Error ? error.message : String(error)}`));
+      .then((line) => props.onRecorded(`recorded ${line.outcome}${line.value !== null ? ` ${line.value}` : ""} on ${row.question}`))
+      .catch((error: unknown) => {
+        recording.current = false;
+        setMessage(`not recorded: ${error instanceof Error ? error.message : String(error)}`);
+      });
   };
   useInput((input, key) => {
     if (mode === "note") {
@@ -249,12 +260,13 @@ export function DetailView(props: {
     } else if (input === "n") setMode("note");
   });
   const { stdout } = useStdout();
-  const lines = detailLines(row, props.thresholds, mode === "note" ? "" : note).flatMap((l) => wrapLine(l, Math.min(Math.max(stdout.columns || 80, 40), 100) - 1));
+  const width = Math.min(Math.max(stdout.columns || 80, 40), 100) - 1;
+  const lines = detailLines(row, props.thresholds, mode === "note" ? "" : note).flatMap((l) => wrapLine(l, width));
   const footer = mode === "pick"
     ? ["What was right? up/down, enter to record, esc to cancel", ...choices.map((c, i) => `${i === pick ? ">" : " "} ${c}`)]
     : mode === "note"
       ? [`note: ${note}_`, "enter keeps the note for the next a or d, esc drops it"]
-      : [message, "a agree (Jev was right)  d disagree  n note  up/down scroll  esc back"];
+      : [...wrapLine(message, width), "a agree (Jev was right)  d disagree  n note  up/down scroll  esc back"];
   const height = Math.max((props.height ?? 24) - footer.length, 3);
   const top = Math.min(scroll, Math.max(lines.length - height, 0));
   return (
@@ -269,12 +281,18 @@ const pct = (n: number | null): string => (n === null ? "-" : `${Math.round(n * 
 const reportLine = (c: string[]): string =>
   [cell(c[0] ?? "", 14), cell(c[1] ?? "", 14), ...[4, 4, 4, 4, 4, 6, 7].map((w, i) => (c[i + 2] ?? "").padStart(w)), (c[9] ?? "").padStart(4)].join(" ");
 
-export function ReportView(props: { lines: LogLine[]; filters: Filters; onFilters: (f: Filters) => void; onBack: () => void }): React.JSX.Element {
+export function ReportView(props: { lines: LogLine[]; filters: Filters; height?: number; onFilters: (f: Filters) => void; onBack: () => void }): React.JSX.Element {
   const { lines, filters } = props;
   const rows = report(lines, { ...(filters.jevel !== null ? { jevel: filters.jevel } : {}), ...(filters.since !== null ? { since: filters.since } : {}) });
+  // Title, filter line, column header and two footer lines stay put; one spare line keeps Ink off the last row.
+  const height = Math.max((props.height ?? 24) - 6, 3);
+  const [scroll, setScroll] = useState(0);
+  const top = Math.min(scroll, Math.max(rows.length - height, 0));
   useInput((input, key) => {
     if (key.escape) props.onBack();
     else if (input === "J") props.onFilters(cycleJevel(lines, filters));
+    else if (key.downArrow || input === "j") setScroll(Math.min(top + 1, Math.max(rows.length - height, 0)));
+    else if (key.upArrow || input === "k") setScroll(Math.max(top - 1, 0));
   });
   return (
     <Box flexDirection="column">
@@ -282,13 +300,13 @@ export function ReportView(props: { lines: LogLine[]; filters: Filters; onFilter
       <Text>{`jevel: ${filters.jevel ?? "all"}${filters.since ? `   since ${filters.since}` : ""}`}</Text>
       <Text dimColor>{reportLine(["jevel", "question", "asks", "act", "mark", "fb", "outc", "act ok", "mark ok", "cert"])}</Text>
       {rows.length === 0 ? <Text>no asks in the log</Text> : null}
-      {rows.map((r) => (
+      {rows.slice(top, top + height).map((r) => (
         <Text key={`${r.jevel}\n${r.question}`} wrap="truncate">
           {reportLine([r.jevel, r.question, String(r.asks), String(r.decisions.act), String(r.decisions.mark), String(r.decisions.fall_back), String(r.outcomes), pct(r.agreement_act), pct(r.agreement_mark), r.mean_certainty.toFixed(2)])}
         </Text>
       ))}
       <Text dimColor>fb fall_back, outc outcomes, act ok and mark ok how often Jev was right</Text>
-      <Text dimColor>J jevel  esc back</Text>
+      <Text dimColor>{`j/k scroll  J jevel  esc back${rows.length > height ? `   rows ${top + 1}-${Math.min(top + height, rows.length)} of ${rows.length}` : ""}`}</Text>
     </Box>
   );
 }
@@ -324,8 +342,13 @@ export function App(props: { home: string; dirs: string[]; lines: LogLine[]; ski
   const [open, setOpen] = useState<{ id: string; question: string } | null>(null);
   const [lookup] = useState(() => thresholdsLookup(props.dirs));
   const [skipped, setSkipped] = useState(props.skipped ?? 0);
+  const [cursor, setCursor] = useState(0);
+  const [notice, setNotice] = useState("");
   const reload = (): void => {
-    readCounted(props.home).then((read) => { setLines(read.lines); setSkipped(read.skipped); }, () => undefined);
+    readCounted(props.home).then(
+      (read) => { setLines(read.lines); setSkipped(read.skipped); setNotice((n) => (n.startsWith("log could not be read") ? "" : n)); },
+      (error: unknown) => setNotice(`log could not be read: ${error instanceof Error ? error.message : String(error)}`),
+    );
   };
   useEffect(() => {
     // The directory, not the file: the file may not exist yet, and an append can replace its inode on some editors.
@@ -346,17 +369,20 @@ export function App(props: { home: string; dirs: string[]; lines: LogLine[]; ski
   const height = stdout.rows || 24;
   const row = open ? rowsOf(lines, { decision: "all", jevel: null, noOutcome: false, since: null }).find((r) => r.ask.id === open.id && r.question === open.question) : undefined;
   if (view === "detail" && row) {
-    return <DetailView row={row} home={props.home} thresholds={lookup(row)} height={height} onBack={() => setView("list")} onRecorded={reload} />;
+    return <DetailView row={row} home={props.home} thresholds={lookup(row)} height={height} onBack={() => setView("list")} onRecorded={(message) => { setNotice(message); setView("list"); reload(); }} />;
   }
-  if (view === "report") return <ReportView lines={lines} filters={filters} onFilters={setFilters} onBack={() => setView("list")} />;
+  if (view === "report") return <ReportView lines={lines} filters={filters} height={height} onFilters={setFilters} onBack={() => setView("list")} />;
   return (
     <DecisionsView
       lines={lines}
       filters={filters}
       height={height}
       skipped={skipped}
-      onFilters={setFilters}
-      onOpen={(r) => { setOpen({ id: r.ask.id, question: r.question }); setView("detail"); }}
+      notice={notice}
+      cursor={cursor}
+      onCursor={setCursor}
+      onFilters={(f) => { setFilters(f); setCursor(0); }}
+      onOpen={(r) => { setNotice(""); setOpen({ id: r.ask.id, question: r.question }); setView("detail"); }}
       onReport={() => setView("report")}
       onQuit={exit}
     />

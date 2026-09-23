@@ -98,7 +98,7 @@ Every ask your program or your agent makes goes into `~/.jevelry/log.jsonl`, and
       09-22 09:00 ticket-triage frustration    level 1    0.62 mark      -
     j/k move  enter open  f decision  J jevel  o no outcome  r report  q quit
 
-You see one row per question with the time, the jevel, the answer, how sure Jev was and the decision, newest first. Press `f` until it shows `mark` and `o` to keep only the ones nobody has looked at yet, and you have the list of decisions Jev flagged for a person. Press enter on one and you see every option with its probability, the thresholds of the jevel and the state Jev was asked about. The state is only there when you ask for it with `--log-state` or `JEVELRY_LOG_STATE=1`, because states often hold customer text. Pressing `a` tells jevelry that Jev was right, and `d` tells it Jev was wrong and asks you for the right answer, which is what `jevelry report` then counts.
+You see one row per question with the time, the jevel, the answer, how sure Jev was and the decision, newest first. Press `f` until it shows `mark` and `o` to keep only the ones nobody has looked at yet, and you have the list of decisions Jev flagged for a person. Press enter on one and you see every option with its probability, the thresholds of the jevel and the state Jev was asked about. The state is only there when you ask for it with `--log-state`, `jevel(name, { logState: true })` in your program or `JEVELRY_LOG_STATE=1`, because states often hold customer text. Pressing `a` tells jevelry that Jev was right, and `d` tells it Jev was wrong and asks you for the right answer, which is what `jevelry report` then counts.
 
 ## What is underneath
 
@@ -257,7 +257,7 @@ Currently jevelry asks Jev questions and hands you the answers, and that is the 
 
 ## How do we know you can trust it
 
-205 tests run offline against recorded answers from TypeSafe's API reference and against the sixteen jevels and their cases. 90 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself and one routes the `ticket-triage` example through `decide` in your program. One of those tests reads the log afterwards and checks that your key stays out of it.
+209 tests run offline against recorded answers from TypeSafe's API reference and against the sixteen jevels and their cases. 90 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself and one routes the `ticket-triage` example through `decide` in your program. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## Environment
 
@@ -270,6 +270,7 @@ Currently jevelry asks Jev questions and hands you the answers, and that is the 
 | `JEVELRY_HOME` | where the log lives | `~/.jevelry` |
 | `JEVELRY_JEVELS` | more jevel folders, colon separated | none |
 | `JEVELRY_TIMEOUT_MS` | per attempt | `30000` |
+| `JEVELRY_LOG_STATE` | `1` writes the state itself into each ask line, for `ask` and `decide` | off, only the hash |
 
 ## Start
 

@@ -6,7 +6,8 @@ import { render } from "ink-testing-library";
 import { createElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { type AskLine, type LogLine, type OutcomeLine, readLog } from "../src/log.js";
-import { App, DecisionsView, DetailView, type Filters, ReportView, rowsOf } from "../src/tui.js";
+import type { Answer } from "../src/protocol.js";
+import { App, DecisionsView, DetailView, type Filters, ReportView, otherValues, rowsOf } from "../src/tui.js";
 
 const FIXTURES = join(process.cwd(), "tests", "fixtures", "jevels");
 const SHIPPED = join(process.cwd(), "jevels");
@@ -170,11 +171,9 @@ describe("recording outcomes from the review queue", () => {
     await tick();
     stdin.write("a");
     await tick(200);
-    expect(lastFrame()).toContain("recorded agree");
+    // One outcome per visit: the detail closes and the queue shows the next mark.
+    expect(lastFrame()).toContain("1 marked decision to review   recorded agree on urgent");
     expect(await outcomesIn(home)).toEqual([agreedB, expect.objectContaining({ id: A.id, question: "urgent", outcome: "agree", value: null, note: "late reply" })]);
-    stdin.write(ESC);
-    await tick();
-    expect(lastFrame()).toContain("1 marked decision to review");
     stdin.write(ENTER);
     await tick();
     expect(lastFrame()).toContain("question: frustration");
@@ -187,10 +186,26 @@ describe("recording outcomes from the review queue", () => {
     await tick(200);
     const recorded = await outcomesIn(home);
     expect(recorded.at(-1)).toMatchObject({ id: A.id, question: "frustration", outcome: "disagree", value: "2", note: null });
-    stdin.write(ESC);
-    await tick();
-    expect(lastFrame()).toContain("0 marked decisions to review");
+    expect(lastFrame()).toContain("0 marked decisions to review   recorded disagree 2 on frustration");
     unmount();
+  });
+
+  // A double key press, or a then d to correct a slip, would write two lines and report would count both.
+  it("writes one outcome per visit, however fast a and d are pressed", async () => {
+    const home = homeWith(LOG);
+    const { stdin, lastFrame, unmount } = render(createElement(App, { home, dirs: [], lines: LOG, filters: ALL }));
+    await tick();
+    for (const key of ["j", "j", ENTER]) { stdin.write(key); await tick(20); }
+    expect(lastFrame()).toContain("question: team");
+    stdin.write("a");
+    stdin.write("a");
+    stdin.write("d");
+    await tick(200);
+    stdin.write("a");
+    await tick(200);
+    expect(lastFrame()).toContain("8 decisions   recorded agree on team");
+    unmount();
+    expect(await outcomesIn(home)).toEqual([agreedB, expect.objectContaining({ id: B.id, question: "team", outcome: "agree" })]);
   });
 
   it("refuses an outcome on an ask Jev could not answer and writes nothing", async () => {
@@ -218,6 +233,24 @@ describe("live log", () => {
   });
 });
 
+describe("cursor", () => {
+  // In any filter but the queue, a reviewer walks down the list; esc from a detail must not send them back to the top.
+  it("returns to the same row after esc from a detail", async () => {
+    const { stdin, lastFrame, unmount } = render(createElement(App, { home: homeWith(LOG), dirs: [], lines: LOG, filters: ALL }));
+    await tick();
+    for (const key of ["j", "j", "j"]) { stdin.write(key); await tick(20); }
+    const selected = () => (lastFrame() ?? "").split("\n").find((l) => l.startsWith(">"));
+    expect(selected()).toMatch(/09:30 ticket-triage urgent/);
+    stdin.write(ENTER);
+    await tick();
+    expect(lastFrame()).toContain("question: urgent");
+    stdin.write(ESC);
+    await tick();
+    expect(selected()).toMatch(/09:30 ticket-triage urgent/);
+    unmount();
+  });
+});
+
 describe("unreadable log lines", () => {
   // Printing "skipped line N" to stderr would draw over the Ink screen, so the TUI counts them into its header.
   it("counts them in the header and writes nothing to stderr, also when a new broken line arrives", async () => {
@@ -239,7 +272,35 @@ describe("unreadable log lines", () => {
   });
 });
 
+describe("disagree picker", () => {
+  const answerOf = (id: string, question: string) => rowsOf(LOG, ALL).find((r) => r.ask.id === id && r.question === question)!.answer as Answer;
+  it("offers every other option of a choice, every other level of a score and only the opposite of a noul", () => {
+    expect(otherValues(answerOf(A.id, "team"))).toEqual(["technical", "account", "other"]);
+    expect(otherValues(answerOf(A.id, "frustration"))).toEqual(["0", "2"]);
+    expect(otherValues(answerOf(A.id, "urgent"))).toEqual(["no"]);
+    expect(otherValues(answerOf(B.id, "urgent"))).toEqual(["yes"]);
+  });
+});
+
 describe("report view", () => {
+  it("keeps its header on an 80x24 screen with 30 rows and scrolls the rows with j", async () => {
+    const many: LogLine[] = Array.from({ length: 30 }, (_, i) => ({
+      ...B, id: `eeeeeeee-0000-4000-8000-${String(i).padStart(12, "0")}`, jevel: { name: `jevel-${String(i).padStart(2, "0")}`, version: 1 }, answers: { urgent: B.answers.urgent! },
+    }));
+    const { stdin, lastFrame } = render(createElement(ReportView, { lines: many, filters: ALL, height: 24, onFilters: noop, onBack: noop }));
+    const frame = () => lastFrame() ?? "";
+    expect(frame().split("\n").length).toBeLessThanOrEqual(24);
+    expect(frame()).toContain("jevel          question");
+    expect(frame()).toContain("jevel-00");
+    expect(frame()).not.toContain("jevel-29");
+    for (let i = 0; i < 12; i++) { stdin.write("j"); await tick(10); }
+    expect(frame().split("\n").length).toBeLessThanOrEqual(24);
+    expect(frame()).toContain("jevel          question");
+    expect(frame()).toContain("jevel-29");
+    expect(frame()).not.toContain("jevel-00");
+    expect(frame()).toContain("rows 13-30 of 30");
+  });
+
   it("shows the report rows, how often act and mark were right", () => {
     const frame = render(createElement(ReportView, { lines: LOG, filters: ALL, onFilters: noop, onBack: noop })).lastFrame() ?? "";
     const team = frame.split("\n").find((l) => l.startsWith("ticket-triage") && l.includes("team"));
@@ -265,7 +326,7 @@ describe("jevelry tui, the command", () => {
   // Every other command starts as fast as before: only the tui chunk may reach ink or react, and only through a dynamic import.
   it("keeps ink and react out of every built file but the tui chunk", () => {
     const files = readdirSync("dist").filter((f) => f.endsWith(".js"));
-    const reaching = files.filter((f) => /from\s*["'](ink|react)["']|import\(["'](ink|react)["']\)/.test(readFileSync(join("dist", f), "utf8")));
+    const reaching = files.filter((f) => /from\s*["'](ink|react)(\/[^"']*)?["']|import\(["'](ink|react)(\/[^"']*)?["']\)/.test(readFileSync(join("dist", f), "utf8")));
     expect(reaching).toEqual(["tui.js"]);
     for (const f of files) expect(readFileSync(join("dist", f), "utf8")).not.toMatch(/from\s*["']\.\/tui\.js["']/);
     expect(readFileSync(join("dist", "cli.js"), "utf8")).toContain('import("./tui.js")');
