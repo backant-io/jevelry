@@ -68,7 +68,7 @@ Each jevel's body says what its state looks like and its `example.json` is a sta
 | `npx jevelry types [--out <file>]` | writes TypeScript types for every jevel it finds, for `jevel(name).decide()` |
 | `npx jevelry models` | the model names the account may send |
 
-Jevels are found in `--jevels <dir>`, then `JEVELRY_JEVELS` (colon separated), then `./jevels`, then `~/.jevelry/jevels`. Keep the project's jevels in `./jevels/` so a person reviews them with the code.
+Jevels are found in `--jevels <dir>`, then `JEVELRY_JEVELS` (colon separated), then `./jevels`, then `$JEVELRY_HOME/jevels` (default `~/.jevelry/jevels`), then the jevels that ship with jevelry. Keep the project's jevels in `./jevels/` so a person reviews them with the code.
 
 ## Let Jev run the command
 

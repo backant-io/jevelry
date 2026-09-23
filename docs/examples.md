@@ -103,14 +103,11 @@ In a shell, `jq` gets you the decisions:
 
 In TypeScript you can skip the CLI:
 
-    import { ask, loadJevel, discoveryDirs } from "jevelry";
-    import { TypeSafeClient } from "@typesafe-ai/sdk";
+    import { jevel } from "jevelry";
 
-    const { jevel } = loadJevel("ticket-triage", discoveryDirs({ cwd: process.cwd(), home: process.env.HOME ?? "" }));
-    const result = await ask({ client: new TypeSafeClient(), state, jevel });
-    if (result.ok && result.document.answers.team?.decision === "act") {
-      route(result.document.answers.team.choice);
-    }
+    const triage = jevel("ticket-triage");
+    const d = await triage.decide(state);
+    if (d.team?.decision === "act") route(d.team.answer);
 
 ## A question over a list
 
