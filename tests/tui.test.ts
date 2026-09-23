@@ -126,7 +126,7 @@ describe("detail view", () => {
     expect(frame).toContain("certainty 0.91  (act 0.80, mark 0.60)");
     // A question the file no longer has says so instead of showing the jevel-wide thresholds as its own.
     expect(detail(row(A.id, "team"), { thresholds: { act: 0.8, mark: 0.6 }, version: 3 })).toContain("this question is no longer in the jevel file");
-    expect(frame).toContain("decision  act  Jev was sure");
+    expect(frame).toContain("decision  act  Jev is sure");
     expect(frame).toContain("subject: Charged twice");
   });
 
@@ -389,12 +389,22 @@ describe("the shell", () => {
   });
 
   it("shows the screen's keys, the home directory and the version in the footer", async () => {
-    const { lastFrame, unmount } = app({ screen: "history" });
+    const { lastFrame, unmount } = app({ screen: "history", size: { columns: 120, rows: 40 } });
     await tick();
     const footer = (lastFrame() ?? "").split("\n").at(-1) ?? "";
     expect(footer).toContain("j/k move");
-    expect(footer).toContain("v9.9.9");
     expect(footer).toMatch(/jevelry-tui-\w+ {2}v9\.9\.9/);
+    unmount();
+  });
+
+  // At 80 columns a screen's keys matter more than where the log is: the path goes, the version stays.
+  it("drops the home directory from the footer below 100 columns", async () => {
+    const { lastFrame, unmount } = app({ screen: "history" });
+    await tick();
+    const footer = (lastFrame() ?? "").split("\n").at(-1) ?? "";
+    expect(footer).toMatch(/v9\.9\.9$/);
+    expect(footer).not.toContain("jevelry-tui-");
+    expect(footer).toContain("esc back");
     unmount();
   });
 
@@ -599,8 +609,10 @@ describe("review fixes", () => {
     await press(stdin, "?");
     const frame = lastFrame() ?? "";
     expect(frame).toContain("What the decisions mean");
-    expect(frame).toMatch(/act\s+Jev was sure: your code uses the answer/);
-    expect(frame).toMatch(/fall_back\s+unsure or failed: your code decides/);
+    // The same words as Home's legend and the card.
+    expect(frame).toMatch(/act\s+Jev is sure/);
+    expect(frame).toMatch(/mark\s+fairly sure, check it/);
+    expect(frame).toMatch(/fall_back\s+unsure, your code decides/);
     // Keys that work everywhere are listed once, under Everywhere.
     expect(frame.match(/y\s+history/g)).toHaveLength(1);
     unmount();

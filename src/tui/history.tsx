@@ -146,7 +146,7 @@ export function DecisionsView(props: {
   const below = Math.max(0, rows.length - top - height);
   const widths = columns(width);
   const last = Math.max(rows.length - 1, 0);
-  useChrome([["j/k", "move"], ["enter", "open"], ["f", "decision"], ["J", "jevel"], ["o", "no outcome"], ["x", "failed only"], ["r", "report"]]);
+  useChrome([["j/k", "move"], ["enter", "open"], ["esc", "back"], ["f", "decision"], ["J", "jevel"], ["o", "no outcome"], ["x", "failed only"], ["r", "report"]]);
   useInput((input, key) => {
     const step = moves(input, key);
     if (step !== 0) setCursor((c) => Math.max(0, Math.min(Math.min(c, last) + step, last)));

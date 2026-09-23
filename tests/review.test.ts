@@ -242,6 +242,21 @@ describe("review", () => {
     unmount();
   });
 
+  // The sample ticket answers all act: Review must not claim every marked decision has an outcome when there are none.
+  it("says there are no marked decisions yet when the log has none, and that every one has an outcome when it does", async () => {
+    const onlyAct: AskLine = { ...A, answers: { team: A.answers.team! } };
+    const empty = review([onlyAct]);
+    await tick();
+    expect(empty.lastFrame()).toContain("No marked decisions yet");
+    expect(empty.lastFrame()).toContain("Jev marks a decision when it is fairly sure.");
+    empty.unmount();
+    const done = review([B, agreedB]);
+    await tick();
+    expect(done.lastFrame()).toContain("No marked decisions to review");
+    expect(done.lastFrame()).toContain("Every marked decision has an outcome.");
+    done.unmount();
+  });
+
   // Act accuracy is only known when some acts get an outcome too, so the queue switches to them.
   it("m switches to act decisions without an outcome, and back", async () => {
     const { stdin, lastFrame, unmount } = review(LOG);

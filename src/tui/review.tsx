@@ -6,7 +6,7 @@ import { recordedDecision } from "../report.js";
 import { bar } from "./charts.js";
 import { ChromeContext, type Hint, moves, useChrome } from "./dialog.js";
 import { ALL, type Found, type Row, answerWord, fullTime, hasAnswer, jevelOf, label, otherValues, rowsOf, runLine, savedMessage, time, wrapLine } from "./history.js";
-import { decisionColor, useTheme } from "./theme.js";
+import { MEANINGS, decisionColor, useTheme } from "./theme.js";
 import { type Tally, tallyKey } from "./tuning.js";
 
 /**
@@ -36,7 +36,7 @@ export function stateLines(state: unknown, width: number): string[] {
 }
 
 /**
- * How long a card is on screen before a, d or s count, and how close a repeat of the same key is a held key.
+ * How long a card is on screen before c, w or s count, and how close a repeat of the same key is a held key.
  * A held key repeats after the terminal's initial delay (300 ms on macOS, about 500 on Windows, 660 on X11, up to
  * 1000) and then every 30 ms or so. The first repeat can outlast the settle time, so the same verdict key again
  * within HELD_MS of the last verdict, with no other key in between, is a held key too.
@@ -45,7 +45,6 @@ export const SETTLE_MS = 450;
 export const REPEAT_MS = 150;
 export const HELD_MS = 1100;
 
-const MEANING = { act: "Jev was sure", mark: "fairly sure, check it", fall_back: "your code decided" } as const;
 const labelOf = (v: unknown): string | null => (v === undefined || v === null ? null : label(v));
 const questionText = (found: Found | null): string | null => {
   const i = found?.question?.instructions;
@@ -116,7 +115,7 @@ export function decidedLines(row: Row, found: Found | null, width: number, room:
   else if (!found.question) out.push({ text: certainty, tone: "text" }, ...wrapLine("this question is no longer in the jevel file", width).map((text): Line => ({ text, tone: "muted" })));
   else if (found.version === ask.jevel?.version) out.push(...wrapLine(`${certainty}  (act ${t.act.toFixed(2)}, mark ${t.mark.toFixed(2)})`, width).map((text): Line => ({ text, tone: "text" })));
   else out.push({ text: certainty, tone: "text" }, ...wrapLine(`thresholds now (v${found.version}): act ${t.act.toFixed(2)}, mark ${t.mark.toFixed(2)}`, width).map((text): Line => ({ text, tone: "muted" })));
-  out.push({ text: `decision  ${d}  ${MEANING[d]}`, tone: d, bold: true });
+  out.push({ text: `decision  ${d}  ${MEANINGS[d]}`, tone: d, bold: true });
   if (ask.error) out.push(...wrapLine(`error     ${ask.error.code}: ${ask.error.message}`, width).map((text): Line => ({ text, tone: "error" })));
   if (row.run) out.push(...wrapLine(runLine(row.run), width).map((text): Line => ({ text, tone: "text" })));
   if (row.outcomes.length === 0) out.push({ text: "outcome   none yet", tone: "muted" });
@@ -170,7 +169,7 @@ export function Card(props: {
   active: boolean;
   /** How this jevel's question has done so far, from the whole log. */
   sofar?: Tally;
-  /** Keys the caller handles (skip, the marks and acts toggle), shown after a and d. */
+  /** Keys the caller handles (skip, the marks and acts toggle), shown after c and w. */
   keys?: Hint[];
   onKey?: (input: string) => void;
   onBack: () => void;
@@ -386,6 +385,8 @@ export function ReviewView(props: {
   const [recorded, setRecorded] = useState<ReadonlySet<string>>(new Set());
   const [skipped, setSkipped] = useState<ReadonlySet<string>>(new Set());
   const queue = useMemo(() => rowsOf(props.lines, { ...ALL, decision: mode, noOutcome: true }).filter((r) => !r.ask.error), [props.lines, mode]);
+  // Whether the log holds any decision of this kind at all, with an outcome or without.
+  const ever = useMemo(() => rowsOf(props.lines, { ...ALL, decision: mode }).some((r) => !r.ask.error), [props.lines, mode]);
   const open = queue.filter((r) => !recorded.has(keyOf(r)) && !skipped.has(keyOf(r)));
   const done = recorded.size + skipped.size;
   const current = open[0];
@@ -404,7 +405,7 @@ export function ReviewView(props: {
   const sofar = current ? props.tallies?.get(tallyKey(jevelOf(current.ask), current.question.replace(/\[\d+\]$/, ""))) : undefined;
 
   if (!current) {
-    return <ReviewEnd mode={mode} other={other} done={done} recorded={recorded.size} skipped={skipped.size} width={props.width} height={props.height} active={props.active}
+    return <ReviewEnd mode={mode} other={other} done={done} ever={ever} recorded={recorded.size} skipped={skipped.size} width={props.width} height={props.height} active={props.active}
       onToggle={toggle} onAgain={() => setSkipped(new Set())} onBack={props.onBack} noun={noun} />;
   }
   return (
@@ -434,6 +435,8 @@ function ReviewEnd(props: {
   other: ReviewMode;
   noun: string;
   done: number;
+  /** False when the log has no decision of this kind yet. */
+  ever: boolean;
   recorded: number;
   skipped: number;
   width: number;
@@ -452,8 +455,11 @@ function ReviewEnd(props: {
     else if (key.escape) props.onBack();
   }, { isActive: props.active });
   const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" : "s"}`;
-  const title = props.done === 0 ? `No ${props.noun} to review` : "All reviewed";
-  const said = props.done === 0
+  const none = props.mode === "mark" ? "No marked decisions yet" : "No act decisions yet";
+  const title = props.done > 0 ? "All reviewed" : props.ever ? `No ${props.noun} to review` : none;
+  const said = props.done === 0 && !props.ever
+    ? props.mode === "mark" ? "Jev marks a decision when it is fairly sure." : "Jev acts when it is sure."
+    : props.done === 0
     ? props.mode === "mark" ? "Every marked decision has an outcome." : "Every act decision has an outcome."
     : `${plural(props.recorded, "outcome")} recorded${props.skipped > 0 ? `, ${props.skipped} skipped` : ""} on this visit.`;
   const why = props.mode === "mark"

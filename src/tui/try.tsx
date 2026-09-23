@@ -128,7 +128,7 @@ function answerLines(d: Decisions, ms: number, width: number, theme: ReturnType<
 
 /**
  * Try: a jevel's example state in a text area, enter asks Jev live through decide(), and the answer comes back as bars.
- * The ask is logged like any other, so it shows up on Home and in History.
+ * The ask is logged with its state, so it shows up on Home and in History and opens with what Jev saw.
  */
 export function TryView(props: {
   name: string;
@@ -162,7 +162,8 @@ export function TryView(props: {
     return { text, at: text.length };
   });
   const draftRef = useRef(draft);
-  const [mode, setModeState] = useState<"edit" | "view" | "asking">("jevel" in loaded ? "edit" : "view");
+  // Opens to read, so every shell key works on arrival; e starts editing.
+  const [mode, setModeState] = useState<"edit" | "view" | "asking">("view");
   const modeRef = useRef(mode);
   const setMode = (m: "edit" | "view" | "asking"): void => { modeRef.current = m; setModeState(m); chrome.captureNow(m === "edit"); };
   const [result, setResult] = useState<{ d: Decisions; ms: number } | null>(null);
@@ -203,7 +204,7 @@ export function TryView(props: {
     setMode("asking");
     // decide() throws only for a jevel or a state it refuses, which the check above already ruled out; said, if it happens.
     Promise.resolve()
-      .then(() => loadDecider(props.name, { jevels: props.dirs, home: props.home, ...(props.client ? { client: props.client } : {}) }).decide(c.state))
+      .then(() => loadDecider(props.name, { jevels: props.dirs, home: props.home, logState: true, ...(props.client ? { client: props.client } : {}) }).decide(c.state))
       .then(
         (d) => { setResult({ d: d as Decisions, ms: Date.now() - t0 }); setMode("view"); props.onAsked(); },
         (e: unknown) => {
@@ -247,8 +248,8 @@ export function TryView(props: {
   const editorRows = Math.max(1, room - status.length - 1);
   const rows = layout(draft.text, left);
   const cursorRow = rowOf(rows, draft.at);
-  // The cursor stays in view: the window follows it, and otherwise starts at the top.
-  const top = Math.max(0, Math.min(cursorRow - Math.floor(editorRows / 2), rows.length - editorRows));
+  // While editing the window follows the cursor; to read, it starts at the top.
+  const top = mode !== "edit" ? 0 : Math.max(0, Math.min(cursorRow - Math.floor(editorRows / 2), rows.length - editorRows));
   const shownRows = rows.slice(top, top + editorRows);
 
   let answer: Line[];
@@ -264,14 +265,14 @@ export function TryView(props: {
       { text: " ", color: theme.text },
       ...wrapLine(`questions: ${qs}`, right).map((text) => ({ text, color: theme.muted })),
       { text: " ", color: theme.text },
-      ...wrapLine("The ask is logged like any other, so it shows up on Home and in History.", right).map((text) => ({ text, color: theme.muted })),
+      ...wrapLine("The ask is logged with its state, so you can open it later on Home and in History.", right).map((text) => ({ text, color: theme.muted })),
     ];
   } else answer = [];
   const answerTop = Math.min(scroll, Math.max(0, answer.length - room));
   const below = answer.length - answerTop - room;
   const shownAnswer = below > 0 ? answer.slice(answerTop, answerTop + room - 1) : answer.slice(answerTop, answerTop + room);
 
-  const version = "jevel" in loaded ? `  v${loaded.jevel.version} · asks Jev live, and logs the ask` : "";
+  const version = "jevel" in loaded ? `  v${loaded.jevel.version} · asks Jev live, and logs the ask with its state` : "";
   return (
     <Box flexDirection="column" paddingX={1} height={props.height}>
       <Text wrap="truncate">

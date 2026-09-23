@@ -33,6 +33,8 @@ const until = async (frame: () => string | undefined, text: string) => {
 };
 const tryApp = (h: string, size = { columns: 80, rows: 24 }) =>
   render(createElement(App, { home: h, dirs: [SHIPPED], lines: [], size, screen: "try", jevel: "ticket-triage", client: client(), version: "9.9.9" }));
+/** Try opens to read; e starts editing, with the cursor at the end of the text. */
+const editing = async (stdin: { write: (s: string) => void }) => { stdin.write("e"); await tick(); };
 
 describe("the Try text area", () => {
   // The text wraps at spaces, so a customer's message reads as words in a narrow column.
@@ -108,6 +110,7 @@ describe("Try", () => {
     const h = home();
     const { stdin, lastFrame, unmount } = tryApp(h);
     await tick();
+    await editing(stdin);
     stdin.write(BACKSPACE);
     await tick();
     expect(lastFrame()).toContain("not JSON yet:");
@@ -125,6 +128,7 @@ describe("Try", () => {
     const h = home();
     const { stdin, lastFrame, unmount } = tryApp(h);
     await tick();
+    await editing(stdin);
     for (let i = 0; i < 200; i++) stdin.write(BACKSPACE);
     await tick();
     stdin.write('\x1b[200~{"ticket": {\n "subject": "Pasted", "message": "hq q"}}\x1b[201~');
@@ -140,6 +144,7 @@ describe("Try", () => {
     const h = home();
     const { stdin, lastFrame, unmount } = tryApp(h);
     await tick();
+    await editing(stdin);
     for (let i = 0; i < 200; i++) stdin.write(BACKSPACE);
     stdin.write('{"ticket": {"subject": "x", "message": "y"}, "fail": 429}');
     await tick();
@@ -150,17 +155,27 @@ describe("Try", () => {
     unmount();
   });
 
-  it("esc stops editing, e edits again, p picks another jevel, and esc goes home", async () => {
+  // A newcomer's second screen: every shell key works on arrival, and nothing they press lands in the JSON by surprise.
+  it("opens to read, e edits, ctrl+p still opens the palette while editing, esc stops editing, p picks another jevel", async () => {
     const h = home();
     const { stdin, lastFrame, unmount } = tryApp(h);
     await tick();
-    stdin.write(ESC);
-    await tick();
     expect(lastFrame()).toContain("State  e edits");
     expect(lastFrame()).toContain("enter ask  e edit  p other jevel");
-    stdin.write("e");
+    stdin.write("?");
+    await tick();
+    expect(lastFrame()).toContain("Keys");
+    stdin.write(ESC);
+    await tick();
+    await editing(stdin);
+    expect(lastFrame()).toContain("State  editing");
+    stdin.write("\u0010");
+    await tick();
+    expect(lastFrame()).toContain("Commands");
+    stdin.write(ESC);
     await tick();
     expect(lastFrame()).toContain("State  editing");
+    expect(lastFrame()).toContain("valid state · enter asks Jev");
     stdin.write(ESC);
     await tick();
     stdin.write("p");
@@ -173,9 +188,23 @@ describe("Try", () => {
     expect(lastFrame()).toContain("Try failing-test");
     stdin.write(ESC);
     await tick();
-    stdin.write(ESC);
-    await tick();
     expect(lastFrame()).toContain("No decisions yet.");
+    unmount();
+  });
+
+  // The ask was typed here by the person reading it, so it keeps its state: the card later shows what Jev saw.
+  it("logs the state it asked with", async () => {
+    const h = home();
+    const { stdin, lastFrame, unmount } = tryApp(h);
+    await tick();
+    expect(lastFrame()).toContain("asks Jev live, and logs the ask with its state");
+    await editing(stdin);
+    for (let i = 0; i < 200; i++) stdin.write(BACKSPACE);
+    stdin.write('{"ticket": {"subject": "Mine", "message": "typed here"}}');
+    await tick();
+    stdin.write(ENTER);
+    await until(lastFrame, "team = billing");
+    expect((await asks(h))[0]?.state).toEqual({ ticket: { subject: "Mine", message: "typed here" } });
     unmount();
   });
 
@@ -199,6 +228,7 @@ describe("Try", () => {
     const h = home();
     const { stdin, lastFrame, unmount } = tryApp(h);
     await tick();
+    await editing(stdin);
     for (let i = 0; i < 200; i++) stdin.write(BACKSPACE);
     stdin.write('{"ticket": {"subject": "Kept"}}');
     await tick();
@@ -211,8 +241,6 @@ describe("Try", () => {
     stdin.write(ENTER);
     await tick();
     expect(lastFrame()).toContain("Try alert-cause");
-    stdin.write(ESC);
-    await tick();
     stdin.write("p");
     await tick();
     for (const ch of "ticket") stdin.write(ch);

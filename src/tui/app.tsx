@@ -3,7 +3,7 @@ import type { TypeSafeClient } from "@typesafe-ai/sdk";
 import { homedir } from "node:os";
 import { Box, Text, render, useApp, useInput, useWindowSize } from "ink";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { mergeThresholds } from "../decision.js";
 import { type Jevel, listJevels, loadJevel } from "../jevel.js";
 import { LOG_FILE, type LogLine, readLog } from "../log.js";
@@ -14,7 +14,7 @@ import { DetailView, ReviewView } from "./review.js";
 import { type Place, placeOf, proposeAct, tallies } from "./tuning.js";
 import { HomeView } from "./home.js";
 import { TryView } from "./try.js";
-import { THEMES, ThemeContext, type ThemeName, loadThemeName, saveThemeName, useTheme } from "./theme.js";
+import { MEANINGS, THEMES, ThemeContext, type ThemeName, loadThemeName, saveThemeName, useTheme } from "./theme.js";
 
 /** The TUI is the one place that imports ink and react: `jevelry tui` loads this file with a dynamic import, so no other command pays for them. */
 
@@ -28,7 +28,8 @@ const GLOBAL: Hint[] = [["h", "home"], ["v", "review"], ["y", "history"], ["t", 
  */
 function Footer(props: { hints: Hint[]; home: string; version: string; width: number; toast: { text: string; error: boolean } | null; extra: Hint[] }): React.JSX.Element {
   const theme = useTheme();
-  const right = props.toast ? `┃ ${props.toast.text}` : `${props.home}  v${props.version}`;
+  // Below 100 columns the home directory goes, so the screen's keys keep their room; the version stays.
+  const right = props.toast ? `┃ ${props.toast.text}` : props.width < 100 ? `v${props.version}` : `${props.home}  v${props.version}`;
   const width = (h: Hint): number => h[0].length + h[1].length + 3;
   // The toast or the home directory keeps its whole length, then "? help" (it lists everything else),
   // then the screen's own keys, then the rest of the shell's keys, as far as they fit.
@@ -63,11 +64,7 @@ function Footer(props: { hints: Hint[]; home: string; version: string; width: nu
 }
 
 /** What the three decisions mean, for someone who has never seen them. */
-export const WORDS: Hint[] = [
-  ["act", "Jev was sure: your code uses the answer"],
-  ["mark", "fairly sure: your code uses it, check it"],
-  ["fall_back", "unsure or failed: your code decides"],
-];
+export const WORDS: Hint[] = (["act", "mark", "fall_back"] as const).map((d) => [d, MEANINGS[d]]);
 
 function HelpDialog(props: { hints: Hint[]; columns: number; rows: number; onClose: () => void }): React.JSX.Element {
   const theme = useTheme();
@@ -195,7 +192,8 @@ export function App(props: {
   const project = props.project ?? join(process.cwd(), "jevels");
   /** Where esc from History goes: Home, or the Jevel screen that opened it. */
   const [historyBack, setHistoryBack] = useState<Screen>("home");
-  const place = (j: Jevel): Place => placeOf(j.path, { home: props.home, ...(props.shipped ? { shipped: props.shipped } : {}) });
+  // The project's jevels folder sits in the directory jevelry runs from.
+  const place = (j: Jevel): Place => placeOf(j.path, { home: props.home, cwd: dirname(project), ...(props.shipped ? { shipped: props.shipped } : {}) });
   const tuneKeys: Hint[] = dialog !== "tune" || tuning === null || jevel === null || loaded(jevel) === null ? []
     : ((plan) => (plan.blocked !== null ? [["esc", "close"]] : [["enter", plan.copy ? "copy and set" : "set it"], ["esc", "cancel"]]))(tunePlan(loaded(jevel)!, place(loaded(jevel)!), tuning, project));
   const toastTimer = useRef<NodeJS.Timeout | undefined>(undefined);
@@ -264,10 +262,11 @@ export function App(props: {
     else quit();
   };
   useInput((input, key) => {
+    // ctrl+p is never text, so it opens the palette even while a screen takes typed text.
+    if (key.ctrl && input === "p") { setDialog("palette"); return; }
     // Typed text belongs to the screen (the ref is set the moment a screen starts taking it).
     if (captureRef.current) return;
-    if (key.ctrl && input === "p") setDialog("palette");
-    else if (key.ctrl || key.meta) return;
+    if (key.ctrl || key.meta) return;
     // A chunk of several keys (a paste, a burst) belongs to the screen.
     else if (input.length > 1) return;
     else if (input === "?") setDialog("help");

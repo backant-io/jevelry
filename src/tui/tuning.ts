@@ -1,5 +1,5 @@
 import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, dirname, join, sep } from "node:path";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { type Node, isMap, isScalar, parseDocument } from "yaml";
 import { mergeThresholds, type Thresholds } from "../decision.js";
 import { SHIPPED_JEVELS, parseJevel } from "../jevel.js";
@@ -182,8 +182,8 @@ export function setActThreshold(text: string, question: string, act: number): { 
 }
 
 /**
- * Where a jevel file sits, as far as tuning is concerned. `source` is a shipped jevel inside a git checkout of
- * jevelry itself: that file is the one to change, so it is edited in place like a project's own.
+ * Where a jevel file sits, as far as tuning is concerned. `source` is a shipped jevel of a git checkout of jevelry,
+ * run from inside that checkout: that file is the one to change, so it is edited in place like a project's own.
  */
 export type Place = { kind: "project" } | { kind: "shipped" } | { kind: "home" } | { kind: "source" };
 
@@ -197,10 +197,11 @@ export function isSource(shipped: string): boolean {
   }
 }
 
-export function placeOf(path: string, dirs: { shipped?: string; home: string }): Place {
+export function placeOf(path: string, dirs: { shipped?: string; home: string; cwd?: string }): Place {
   const shipped = dirs.shipped ?? SHIPPED_JEVELS;
-  const under = (dir: string): boolean => path.startsWith(dir.endsWith(sep) ? dir : dir + sep);
-  if (under(shipped)) return isSource(shipped) ? { kind: "source" } : { kind: "shipped" };
+  const under = (dir: string, p = path): boolean => p === dir || p.startsWith(dir.endsWith(sep) ? dir : dir + sep);
+  // A checkout linked into another project (npm link, or its bin run from elsewhere) is still jevelry's to ship: copy there.
+  if (under(shipped)) return isSource(shipped) && under(dirname(shipped), resolve(dirs.cwd ?? process.cwd())) ? { kind: "source" } : { kind: "shipped" };
   if (under(join(dirs.home, "jevels"))) return { kind: "home" };
   return { kind: "project" };
 }

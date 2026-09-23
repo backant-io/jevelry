@@ -265,7 +265,7 @@ export function buildProgram(): Command {
 
   program
     .command("tui")
-    .description("browse the logged decisions in the terminal, review the marked ones and record whether Jev was right")
+    .description("a full-screen view of your decisions: Home shows today and what needs you, Review records whether Jev was right, Try asks a jevel live")
     .option("--jevel <name>")
     .option("--since <iso>")
     .option("--jevels <dir>", "a jevels directory searched first (repeatable)", (d: string, all: string[]) => [...all, d], [] as string[])

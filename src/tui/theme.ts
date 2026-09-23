@@ -52,6 +52,9 @@ export const THEMES: Record<ThemeName, Theme> = {
   },
 };
 
+/** What each decision means, in the same words on every screen. */
+export const MEANINGS: Record<Decision, string> = { act: "Jev is sure", mark: "fairly sure, check it", fall_back: "unsure, your code decides" };
+
 export const decisionColor = (theme: Theme, d: Decision): string => (d === "act" ? theme.act : d === "mark" ? theme.mark : theme.fallBack);
 
 const FILE = "tui.json";

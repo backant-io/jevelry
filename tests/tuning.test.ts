@@ -2,7 +2,7 @@ process.env.TZ = "UTC";
 
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { render } from "ink-testing-library";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
@@ -166,8 +166,13 @@ describe("setting the act threshold in the file", () => {
     expect(placeOf("/pkg/jevels-extra/x/JEVEL.md", { shipped: "/pkg/jevels", home: "/h" })).toEqual({ kind: "project" });
     // A git checkout of jevelry itself is where its jevels are written, so their files are edited in place.
     const source = fakePackage(true);
-    expect(placeOf(join(source, "ticket-triage", "JEVEL.md"), { shipped: source, home: "/h" })).toEqual({ kind: "source" });
-    expect(placeOf(join(fakePackage(false), "ticket-triage", "JEVEL.md"), { shipped: fakePackage(false), home: "/h" })).toEqual({ kind: "project" });
+    // Only from inside the checkout: the same checkout linked into another project copies like an installed one.
+    const file = join(source, "ticket-triage", "JEVEL.md");
+    expect(placeOf(file, { shipped: source, home: "/h", cwd: dirname(source) })).toEqual({ kind: "source" });
+    expect(placeOf(file, { shipped: source, home: "/h", cwd: join(dirname(source), "jevels") })).toEqual({ kind: "source" });
+    expect(placeOf(file, { shipped: source, home: "/h", cwd: mkdtempSync(join(tmpdir(), "jevelry-proj-")) })).toEqual({ kind: "shipped" });
+    const installed = fakePackage(false);
+    expect(placeOf(join(installed, "ticket-triage", "JEVEL.md"), { shipped: installed, home: "/h", cwd: dirname(installed) })).toEqual({ kind: "shipped" });
   });
 });
 

@@ -5,13 +5,9 @@ import { recordedDecision } from "../report.js";
 import { mix, spark } from "./charts.js";
 import { type Hint, moves, useChrome } from "./dialog.js";
 import { ALL, type Filters, answerWord, jevelOf, rowsOf, time } from "./history.js";
-import { type Theme, decisionColor, useTheme } from "./theme.js";
+import { MEANINGS, type Theme, decisionColor, useTheme } from "./theme.js";
 
-const WORD_LINES: Array<["act" | "mark" | "fall_back", string]> = [
-  ["act", ": Jev was sure, your code uses the answer"],
-  ["mark", ": fairly sure, your code uses it and you check it"],
-  ["fall_back", ": unsure, your code decides"],
-];
+const WORD_LINES: Array<["act" | "mark" | "fall_back", string]> = (["act", "mark", "fall_back"] as const).map((d) => [d, `: ${MEANINGS[d]}`]);
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" : "s"}`;
 const fit = (text: string, width: number): string => (text.length > width ? `${text.slice(0, width - 1)}~` : text.padEnd(width));
 
@@ -243,9 +239,9 @@ function Panel(props: { title: string; note?: string; width?: number; children: 
 
 /** The legend under the mix bar, split so every line fits `width`. */
 function legendLines(width: number): Array<Array<[word: "act" | "mark" | "fall_back", text: string]>> {
-  const act: ["act", string] = ["act", ": Jev was sure"];
-  const mark: ["mark", string] = ["mark", ": fairly sure, check it"];
-  const fb: ["fall_back", string] = ["fall_back", ": unsure, your code decides"];
+  const act: ["act", string] = ["act", `: ${MEANINGS.act}`];
+  const mark: ["mark", string] = ["mark", `: ${MEANINGS.mark}`];
+  const fb: ["fall_back", string] = ["fall_back", `: ${MEANINGS.fall_back}`];
   if (width >= 83) return [[act, mark, fb]];
   if (width >= 47) return [[act, mark], [fb]];
   return [[act], [mark], [fb]];

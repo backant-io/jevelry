@@ -110,7 +110,7 @@ describe("home screen", () => {
     for (const l of lines) expect(l.length).toBeLessThanOrEqual(80);
     expect(frame).toContain("◆ JEVELRY  Use Jev everywhere to make & track decisions  v9.9.9");
     expect(frame).toContain("Today  8 decisions · 3 asks · $0.000033");
-    expect(frame).toContain("act: Jev was sure · mark: fairly sure, check it");
+    expect(frame).toContain("act: Jev is sure · mark: fairly sure, check it");
     expect(frame).toContain("fall_back: unsure, your code decides");
     expect(frame).toMatch(/[█▓░]+ act 38% mark 38% fall_back 25%/);
     expect(frame).toContain("24h · peak 5/h");
