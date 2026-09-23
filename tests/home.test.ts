@@ -156,7 +156,7 @@ describe("home screen", () => {
     await tick();
     stdin.write("\r");
     await tick();
-    expect(lastFrame()).toContain("was Jev right?");
+    expect(lastFrame()).toContain("Was Jev right?");
     stdin.write("h");
     await tick();
     stdin.write("j");
@@ -265,8 +265,8 @@ describe("home feed", () => {
     await tick();
     stdin.write("\r");
     await tick();
-    expect(lastFrame()).toContain("wake-gate v1");
-    expect(lastFrame()).toContain("question: worth_a_turn");
+    expect(lastFrame()).toContain("wake-gate worth_a_turn  v1");
+    expect(lastFrame()).toMatch(/question {2}worth_a_turn/);
     stdin.write("\u001B");
     await tick();
     expect(lastFrame()).toContain("Latest decisions");

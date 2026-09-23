@@ -1,11 +1,10 @@
 import { Box, Text, useInput } from "ink";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { type Thresholds, mergeThresholds } from "../decision.js";
-import { loadJevel } from "../jevel.js";
-import { type AskLine, type LogLine, type OutcomeLine, type RunLine, recordOutcome } from "../log.js";
+import { type JevelQuestion, loadJevel } from "../jevel.js";
+import type { AskLine, LogLine, OutcomeLine, RunLine } from "../log.js";
 import type { Answer, FallBackAnswer } from "../protocol.js";
 import { recordedDecision, report } from "../report.js";
-import { bar } from "./charts.js";
 import { moves, useChrome } from "./dialog.js";
 import { decisionColor, useTheme } from "./theme.js";
 
@@ -66,7 +65,7 @@ export function jevelNames(lines: LogLine[]): string[] {
   return [...new Set(lines.filter((l): l is AskLine => l.kind === "ask").map(jevelOf))].sort();
 }
 
-const hasAnswer = (a: Answer | FallBackAnswer): a is Answer => !("answer" in a && a.answer === null);
+export const hasAnswer = (a: Answer | FallBackAnswer): a is Answer => !("answer" in a && a.answer === null);
 
 export function answerWord(a: Answer | FallBackAnswer): string {
   if (!hasAnswer(a)) return "error";
@@ -83,7 +82,7 @@ export const time = (iso: string): string => {
   return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 /** `2026-09-23 13:17:31 (local)`. */
-const fullTime = (iso: string): string => {
+export const fullTime = (iso: string): string => {
   const d = new Date(iso);
   return `${d.getFullYear()}-${time(iso)}:${pad(d.getSeconds())} (local)`;
 };
@@ -199,16 +198,7 @@ export function DecisionsView(props: {
   );
 }
 
-const label = (v: unknown): string => (typeof v === "string" ? v : typeof v === "object" && v !== null && typeof (v as { what?: unknown }).what === "string" ? (v as { what: string }).what : JSON.stringify(v));
-
-function probabilityLines(a: Answer): string[] {
-  const line = (name: string, p: number, picked: boolean, legend = ""): string =>
-    `  ${picked ? "*" : " "} ${cell(name, 12)} ${p.toFixed(2)} ${bar(p, 10)} ${picked ? "picked" : "      "}${legend}`.trimEnd();
-  if (a.type === "noul") return [line("yes", a.noul, a.yes), line("no", 1 - a.noul, !a.yes)];
-  const picked = a.type === "choice" ? a.choice : String(Math.round(a.score));
-  return Object.entries(a.probabilities).map(([name, p]) =>
-    line(a.type === "score" ? `level ${name}` : name, p, name === picked, a.type === "score" && a.legend[name] !== undefined ? `  ${label(a.legend[name])}` : ""));
-}
+export const label = (v: unknown): string => (typeof v === "string" ? v : typeof v === "object" && v !== null && typeof (v as { what?: unknown }).what === "string" ? (v as { what: string }).what : JSON.stringify(v));
 
 /** What the toast says once an outcome is written: plain words, which question, and the right value when it was given. */
 export function savedMessage(line: OutcomeLine, row: Row): string {
@@ -226,46 +216,15 @@ export function otherValues(a: Answer): string[] {
   return Object.keys(a.legend).filter((l) => Number(l) !== Math.round(a.score));
 }
 
-function runLine(r: RunLine): string {
+export function runLine(r: RunLine): string {
   const what = r.command ?? "a handler in the program";
   const confirmed = r.confirmed === null ? "" : r.confirmed ? ", confirmed" : ", not confirmed";
   const result = r.exit !== null ? `exit ${r.exit}${r.signal ? ` (${r.signal})` : ""} in ${r.ms} ms` : r.ms !== null ? `took ${r.ms} ms` : "did not run";
   return `run: ${r.option ?? "fall_back"}: ${what}, ${result}${confirmed}`;
 }
 
-export function detailLines(row: Row, thresholds: { thresholds: Thresholds; version: number } | null, note: string): string[] {
-  const { ask, question, answer } = row;
-  const out = [
-    `${jevelOf(ask)} v${ask.jevel?.version ?? "-"}   ${fullTime(ask.at)}   model ${ask.model ?? "-"}`,
-    `question: ${question}`,
-  ];
-  const certainty = answer.certainty.toFixed(2);
-  const bands = thresholds
-    ? ` (act ${thresholds.thresholds.act.toFixed(2)}, mark ${thresholds.thresholds.mark.toFixed(2)}${thresholds.version === ask.jevel?.version ? "" : `, from v${thresholds.version}`})`
-    : " (thresholds unknown: the jevel is not found here)";
-  if (hasAnswer(answer)) {
-    out.push(`answer: ${answerWord(answer)}${answer.type === "score" ? ` (score ${answer.score.toFixed(2)})` : ""}`, ...probabilityLines(answer));
-  } else {
-    out.push("answer: none, Jev could not answer");
-  }
-  out.push(`certainty: ${certainty}${bands}`, `decision: ${recordedDecision(answer)}`);
-  if (ask.error) out.push(`error: ${ask.error.code} (exit ${ask.error.exit}): ${ask.error.message}`);
-  if (row.run) out.push(runLine(row.run));
-  out.push("", "outcomes:");
-  if (row.outcomes.length === 0) out.push("  none yet");
-  for (const o of row.outcomes) out.push(`  ${time(o.at)} ${o.outcome}${o.value !== null ? ` ${o.value}` : ""}${o.note ? `  note: ${o.note}` : ""}`);
-  if (note !== "") out.push(`note for the next outcome: ${note}`);
-  out.push("", "state:");
-  if (ask.state === undefined) {
-    out.push("  not logged. To log it next time: jevelry ask --log-state,", "  jevel(name, { logState: true }) or JEVELRY_LOG_STATE=1");
-  } else {
-    out.push(...JSON.stringify(ask.state, null, 2).split("\n").map((l) => `  ${l}`));
-  }
-  return out;
-}
-
 /** Long lines (a customer message in the state, an error message) wrap at spaces, so a reviewer reads all of it. */
-function wrapLine(line: string, width: number): string[] {
+export function wrapLine(line: string, width: number): string[] {
   const out: string[] = [];
   const lead = /^\s*/.exec(line)?.[0] ?? "";
   // A continuation indent under half the width, so every pass cuts at least half a line and the loop ends.
@@ -279,108 +238,6 @@ function wrapLine(line: string, width: number): string[] {
   }
   out.push(rest);
   return out;
-}
-
-const HEADINGS = /^(question|answer|certainty|decision|error|run|outcomes|state|note for the next outcome):/;
-
-export function DetailView(props: {
-  row: Row;
-  home: string;
-  thresholds: { thresholds: Thresholds; version: number } | null;
-  height?: number;
-  width?: number;
-  active?: boolean;
-  onBack: () => void;
-  /** Called once per visit: the detail closes after one outcome, so a second key press cannot write a second line. */
-  onRecorded: (message: string) => void;
-}): React.JSX.Element {
-  const theme = useTheme();
-  const { row } = props;
-  const [scroll, setScroll] = useState(0);
-  const [mode, setMode] = useState<"view" | "pick" | "note">("view");
-  const [pick, setPick] = useState(0);
-  const [note, setNote] = useState("");
-  const [message, setMessage] = useState("");
-  const choices = hasAnswer(row.answer) ? otherValues(row.answer) : [];
-  // Set on the first key press, before the write resolves, so a fast second press is ignored too.
-  const recording = useRef(false);
-  const record = (value: string): void => {
-    if (recording.current) return;
-    recording.current = true;
-    recordOutcome(props.home, row.ask.id, row.question, value, note === "" ? null : note, () => undefined)
-      .then((line) => props.onRecorded(savedMessage(line, row)))
-      .catch((error: unknown) => {
-        recording.current = false;
-        setMessage(`not recorded: ${error instanceof Error ? error.message : String(error)}`);
-      });
-  };
-  useChrome(
-    mode === "pick" ? [["j/k", "move"], ["enter", "record"], ["esc", "cancel"]]
-      : mode === "note" ? [["enter", "keep note"], ["esc", "drop note"]]
-        : hasAnswer(row.answer) ? [["a", "Jev was right"], ["d", "Jev was wrong"], ["n", "note"], ["j/k", "scroll"], ["esc", "back"]]
-          : [["j/k", "scroll"], ["esc", "back"]],
-    mode === "note",
-  );
-  useInput((input, key) => {
-    if (mode === "note") {
-      if (key.escape) { setNote(""); setMode("view"); }
-      else if (key.return) setMode("view");
-      else if (key.backspace || key.delete) setNote((n) => n.slice(0, -1));
-      else if (!key.ctrl && !key.meta && input) setNote((n) => n + input);
-      return;
-    }
-    if (mode === "pick") {
-      if (key.escape) setMode("view");
-      else if (key.downArrow || input === "j") setPick(Math.min(pick + 1, choices.length - 1));
-      else if (key.upArrow || input === "k") setPick(Math.max(pick - 1, 0));
-      else if (key.return && choices[pick] !== undefined) { setMode("view"); record(choices[pick]); }
-      return;
-    }
-    if (key.escape) props.onBack();
-    else if (moves(input, key) !== 0) { const step = moves(input, key); setScroll((s) => Math.max(s + step, 0)); }
-    else if (input === "a") record("agree");
-    else if (input === "d") {
-      if (choices.length === 0) record("disagree");
-      else { setPick(0); setMode("pick"); }
-    } else if (input === "n") setMode("note");
-  }, { isActive: props.active ?? true });
-  const width = Math.min(Math.max(props.width ?? 80, 40), 100) - 3;
-  const lines = detailLines(row, props.thresholds, mode === "note" ? "" : note).flatMap((l) => wrapLine(l, width));
-  const bottom = mode === "pick"
-    ? ["What was right? j/k to move, enter to record, esc to cancel", ...choices.map((c, i) => `${i === pick ? ">" : " "} ${c}`)]
-    : mode === "note"
-      ? [`note: ${note}_`, "enter keeps the note for the next a or d, esc drops it"]
-      : message === "" ? [] : wrapLine(message, width);
-  // The title line plus the bottom lines; the footer belongs to the shell.
-  const height = Math.max((props.height ?? 23) - 1 - bottom.length, 3);
-  const top = Math.min(scroll, Math.max(lines.length - height, 0));
-  const d = recordedDecision(row.answer);
-  return (
-    <Box flexDirection="column" paddingX={1}>
-      <Text wrap="truncate">
-        <Text bold color={theme.text}>Decision</Text>
-        <Text color={theme.muted}>{"  what Jev saw and decided, and whether it was right   "}</Text>
-        <Text color={decisionColor(theme, d)} bold>{d}</Text>
-      </Text>
-      {lines.slice(top, top + height).map((l, i) => {
-        const heading = HEADINGS.exec(l);
-        if (heading) {
-          return (
-            <Text key={i} wrap="truncate">
-              <Text color={theme.muted}>{heading[0]}</Text>
-              <Text color={l.startsWith("decision:") ? decisionColor(theme, d) : l.startsWith("error:") ? theme.error : theme.text}>{l.slice(heading[0].length)}</Text>
-            </Text>
-          );
-        }
-        return <Text key={i} wrap="truncate" color={l.startsWith("  * ") ? theme.accent : theme.text}>{l === "" ? " " : l}</Text>;
-      })}
-      {bottom.map((l, i) => (
-        <Text key={`b${i}`} wrap="truncate" color={mode === "view" ? theme.error : i === 0 ? theme.accent : theme.text} backgroundColor={mode === "pick" && i > 0 && i - 1 === pick ? theme.element : theme.background}>
-          {l === "" ? " " : l}
-        </Text>
-      ))}
-    </Box>
-  );
 }
 
 const pct = (n: number | null): string => (n === null ? "-" : `${Math.round(n * 100)}%`);
@@ -423,8 +280,15 @@ export function ReportView(props: { lines: LogLine[]; filters: Filters; height?:
   );
 }
 
+/** What the jevel file says about a decision's question now: its thresholds, the jevel's version and the question as written. */
+export interface Found {
+  thresholds: Thresholds;
+  version: number;
+  question?: JevelQuestion;
+}
+
 /** Thresholds of the jevel as it is found now, per question; null when the jevel is not found. */
-export function thresholdsLookup(dirs: string[]): (row: Row) => { thresholds: Thresholds; version: number } | null {
+export function thresholdsLookup(dirs: string[]): (row: Row) => Found | null {
   const cache = new Map<string, ReturnType<typeof loadJevel>["jevel"] | null>();
   return (row) => {
     const name = row.ask.jevel?.name;
@@ -435,6 +299,7 @@ export function thresholdsLookup(dirs: string[]): (row: Row) => { thresholds: Th
     const j = cache.get(name);
     if (!j) return null;
     const base = baseName(row.question);
-    return { thresholds: mergeThresholds(j.thresholds, Object.hasOwn(j.questions, base) ? j.questions[base]!.thresholds : undefined), version: j.version };
+    const question = Object.hasOwn(j.questions, base) ? j.questions[base] : undefined;
+    return { thresholds: mergeThresholds(j.thresholds, question?.thresholds), version: j.version, ...(question ? { question } : {}) };
   };
 }

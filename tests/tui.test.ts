@@ -12,7 +12,8 @@ import { type AskLine, type LogLine, type OutcomeLine, type RunLine, readLog } f
 import type { Answer } from "../src/protocol.js";
 import { fuzzyFilter } from "../src/tui/dialog.js";
 import { loadThemeName, saveThemeName } from "../src/tui/theme.js";
-import { DecisionsView, DetailView, type Filters, ReportView, otherValues, rowsOf } from "../src/tui/history.js";
+import { DecisionsView, type Filters, ReportView, otherValues, rowsOf } from "../src/tui/history.js";
+import { DetailView, stateLines } from "../src/tui/review.js";
 import { App } from "../src/tui/app.js";
 
 const FIXTURES = join(process.cwd(), "tests", "fixtures", "jevels");
@@ -112,58 +113,66 @@ describe("decisions view", () => {
 
 describe("detail view", () => {
   const detail = (row: ReturnType<typeof rowsOf>[number], thresholds: { thresholds: { act: number; mark: number }; version: number } | null) =>
-    render(createElement(DetailView, { row, home: homeWith(LOG), thresholds, height: 60, onBack: noop, onRecorded: noop })).lastFrame() ?? "";
+    render(createElement(DetailView, { row, home: homeWith(LOG), thresholds, height: 60, width: 100, onBack: noop, onRecorded: noop })).lastFrame() ?? "";
   const row = (id: string, question: string) => rowsOf(LOG, ALL).find((r) => r.ask.id === id && r.question === question)!;
 
   it("shows every option with its probability, the picked one marked, certainty against the thresholds and the logged state", () => {
     const frame = detail(row(A.id, "team"), { thresholds: { act: 0.8, mark: 0.6 }, version: 3 });
-    expect(frame).toContain("ticket-triage v3");
-    expect(frame).toMatch(/\* billing\s+0\.91 █+▏\s+picked/);
-    expect(frame).toMatch(/ {3}technical\s+0\.05/);
-    expect(frame).toContain("certainty: 0.91 (act 0.80, mark 0.60)");
-    expect(frame).toContain("decision: act");
-    expect(frame).toContain('"subject": "Charged twice"');
+    expect(frame).toContain("ticket-triage team  v3");
+    expect(frame).toMatch(/> billing\s+█+[▏▎▍▌▋▊▉]?\s+0\.91/);
+    expect(frame).toMatch(/ {2}technical\s+\S*\s+0\.05/);
+    expect(frame).toContain("certainty 0.91  (act 0.80, mark 0.60)");
+    expect(frame).toContain("decision  act  Jev was sure");
+    expect(frame).toContain("subject: Charged twice");
   });
 
   it("shows a score's levels with their words and a noul as yes and no", () => {
-    expect(detail(row(A.id, "frustration"), null)).toMatch(/\* level 1\s+0\.62 \S+\s+picked\s+annoyed/);
-    expect(detail(row(A.id, "urgent"), null)).toMatch(/\* yes\s+0\.78 \S+\s+picked[\s\S]*no\s+0\.22/);
+    const score = detail(row(A.id, "frustration"), null);
+    expect(score).toMatch(/> 1 annoyed\s+\S+\s+0\.62/);
+    expect(score).toMatch(/ {2}2 angry\s+\S+\s+0\.18/);
+    expect(score).toContain("level 1: annoyed");
+    expect(detail(row(A.id, "urgent"), null)).toMatch(/> yes\s+\S+\s+0\.78[\s\S]*no\s+\S+\s+0\.22/);
   });
 
   it("says how to log the state when it was not logged, and lists past outcomes", () => {
     const frame = detail(row(B.id, "team"), null);
-    expect(frame).toContain("not logged. To log it next time: jevelry ask --log-state");
-    expect(frame).toMatch(/09-22 11:00 agree/);
+    expect(frame).toContain("state not logged; set JEVELRY_LOG_STATE=1");
+    expect(frame).toContain("or ask with --log-state");
+    expect(frame).toContain("outcome   Jev was right (09-22 11:00)");
     expect(frame).toContain("thresholds unknown");
   });
 
   it("wraps a long line of the state at spaces, so the whole customer message stays readable", () => {
     const message = "I ordered the blue kettle on Monday, it arrived broken, the box was open and nobody answered my two emails since then, please call me";
     const frame = detail({ ...row(A.id, "team"), ask: { ...A, state: { ticket: { message } } } }, null);
-    for (const line of frame.split("\n")) expect(line.length).toBeLessThanOrEqual(99);
-    expect(frame.replace(/\s+/g, " ")).toContain(message);
+    for (const line of frame.split("\n")) expect(line.length).toBeLessThanOrEqual(100);
+    const saw = stateLines({ ticket: { message } }, 46);
+    for (const line of saw) expect(line.length).toBeLessThanOrEqual(46);
+    expect(saw.map((l) => l.trim()).join(" ")).toContain(message);
+    expect(frame).toContain(saw[2]!);
   });
 
   it("wraps a deeply indented line too, where a naive continuation indent would never shrink the line", () => {
     let deep: unknown = { message: "x ".repeat(80) };
     for (let i = 0; i < 50; i++) deep = { level: deep };
     const frame = detail({ ...row(A.id, "team"), ask: { ...A, state: deep } }, null);
-    for (const line of frame.split("\n")) expect(line.length).toBeLessThanOrEqual(99);
+    for (const line of frame.split("\n")) expect(line.length).toBeLessThanOrEqual(100);
+    for (const line of stateLines(deep, 40)) expect(line.length).toBeLessThanOrEqual(40);
   });
 
   it("shows what jevelry run did after the ask, so a reviewer sees the command a decision started", () => {
     const ran: RunLine = { kind: "run", id: A.id, at: A.at, option: "billing", command: 'echo "refund queued"', decision: "mark", exit: 0, ms: 42, confirmed: true };
     const withRun = rowsOf([...LOG, ran], ALL).find((r) => r.ask.id === A.id && r.question === "team")!;
-    expect(detail(withRun, null)).toContain('run: billing: echo "refund queued", exit 0 in 42 ms, confirmed');
+    expect(detail(withRun, null).replace(/\s+/g, " ")).toContain('run: billing: echo "refund queued", exit 0 in 42 ms, confirmed');
     const declined = rowsOf([...LOG, { ...ran, exit: null, ms: null, confirmed: false }], ALL).find((r) => r.ask.id === A.id)!;
-    expect(detail(declined, null)).toContain("did not run, not confirmed");
+    expect(detail(declined, null).replace(/\s+/g, " ")).toContain("did not run, not confirmed");
     expect(detail(row(B.id, "team"), null)).not.toContain("run:");
   });
 
   it("shows the error body of an ask Jev could not answer", () => {
     const frame = detail(row(C.id, "worth_a_turn"), null);
-    expect(frame).toContain("answer: none, Jev could not answer");
-    expect(frame).toContain("error: rate_limited (exit 3): TypeSafe is rate limiting this key");
+    expect(frame).toContain("Jev could not answer");
+    expect(frame.replace(/\s+/g, " ")).toContain("error rate_limited: TypeSafe is rate limiting this key");
   });
 });
 
@@ -178,10 +187,12 @@ describe("recording outcomes from the review queue", () => {
     // The newest mark first: A.urgent comes before A.frustration in the ask's own order.
     stdin.write(ENTER);
     await tick();
-    expect(lastFrame()).toContain("question: urgent");
-    expect(lastFrame()).toContain("certainty: 0.78 (act 0.85, mark 0.70)");
+    expect(lastFrame()).toMatch(/question {2}urgent/);
+    expect(lastFrame()).toContain("certainty 0.78  (act 0.85, mark 0.70)");
     stdin.write("n");
     await tick();
+    // Only type once the note line is up: under a loaded test run the key listener can lag the first frame.
+    expect(lastFrame()).toContain("note: _");
     for (const ch of "late reply") stdin.write(ch);
     await tick();
     stdin.write(ENTER);
@@ -194,7 +205,7 @@ describe("recording outcomes from the review queue", () => {
     expect(await outcomesIn(home)).toEqual([agreedB, expect.objectContaining({ id: A.id, question: "urgent", outcome: "agree", value: null, note: "late reply" })]);
     stdin.write(ENTER);
     await tick();
-    expect(lastFrame()).toContain("question: frustration");
+    expect(lastFrame()).toMatch(/question {2}frustration/);
     stdin.write("d");
     await tick();
     expect(lastFrame()).toContain("What was right?");
@@ -215,7 +226,7 @@ describe("recording outcomes from the review queue", () => {
     const { stdin, lastFrame, unmount } = render(createElement(App, { home, dirs: [], lines: LOG, filters: ALL, screen: "history", size: SIZE }));
     await tick();
     for (const key of ["j", "j", ENTER]) { stdin.write(key); await tick(20); }
-    expect(lastFrame()).toContain("question: team");
+    expect(lastFrame()).toMatch(/question {2}team/);
     stdin.write("a");
     stdin.write("a");
     stdin.write("d");
@@ -233,8 +244,10 @@ describe("recording outcomes from the review queue", () => {
     const r = rowsOf(LOG, ALL).find((x) => x.ask.id === C.id)!;
     const { stdin, lastFrame } = render(createElement(DetailView, { row: r, home, thresholds: null, height: 60, width: 120, onBack: noop, onRecorded: noop }));
     stdin.write("a");
+    stdin.write("d");
     await tick(200);
-    expect(lastFrame()).toContain("not recorded: ask cccccccc-0000-4000-8000-000000000003 got no answer from Jev (rate_limited)");
+    expect(lastFrame()).toContain("Jev could not answer, so there is nothing to judge.");
+    expect(lastFrame()).not.toContain("What was right?");
     expect(await outcomesIn(home)).toEqual([agreedB]);
   });
 });
@@ -263,7 +276,7 @@ describe("cursor", () => {
     expect(selected()).toMatch(/09:30 ticket-triage urgent/);
     stdin.write(ENTER);
     await tick();
-    expect(lastFrame()).toContain("question: urgent");
+    expect(lastFrame()).toMatch(/question {2}urgent/);
     stdin.write(ESC);
     await tick();
     expect(selected()).toMatch(/09:30 ticket-triage urgent/);
@@ -384,8 +397,8 @@ describe("the shell", () => {
     const { stdin, lastFrame, unmount } = app({ screen: "history" });
     await tick();
     await press(stdin, "v");
-    expect(lastFrame()).toContain("Review");
-    expect(lastFrame()).toContain("was Jev right?");
+    expect(lastFrame()).toContain("Review 1 of 2");
+    expect(lastFrame()).toContain("Was Jev right?");
     await press(stdin, "t");
     expect(lastFrame()).toContain("Try a jevel");
     await press(stdin, "y");
@@ -429,7 +442,7 @@ describe("the shell", () => {
     await press(stdin, CTRL_P, "y", "q");
     expect(lastFrame()).toContain("Commands");
     await press(stdin, ESC);
-    expect(lastFrame()).toContain("was Jev right?");
+    expect(lastFrame()).toContain("Was Jev right?");
     expect(lastFrame()).not.toContain("8 decisions");
     unmount();
   });
@@ -437,7 +450,7 @@ describe("the shell", () => {
   it("keeps the screen keys off while a note is typed", async () => {
     const { stdin, lastFrame, unmount } = app({ screen: "history" });
     await tick();
-    await press(stdin, ENTER, "n", ..."why? try harder");
+    await press(stdin, "j", "j", ENTER, "n", ..."why? try harder");
     expect(lastFrame()).toContain("note: why? try harder_");
     expect(lastFrame()).not.toContain("Everywhere");
     unmount();
@@ -588,7 +601,7 @@ describe("review fixes", () => {
     const { stdin, lastFrame, unmount } = app({ screen: "history" });
     await tick();
     await press(stdin, ENTER);
-    expect(lastFrame()).toContain("answer: none, Jev could not answer");
+    expect(lastFrame()).toContain("Jev could not answer");
     expect(lastFrame()).not.toContain("Jev was right");
     unmount();
   });

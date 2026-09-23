@@ -1,11 +1,13 @@
 import { watch } from "node:fs";
 import { homedir } from "node:os";
 import { Box, Text, render, useApp, useInput, useWindowSize } from "ink";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { listJevels } from "../jevel.js";
 import { LOG_FILE, type LogLine, readLog } from "../log.js";
 import { ChromeContext, Dialog, type Hint, SelectDialog, type SelectItem, useChrome } from "./dialog.js";
-import { ALL, DecisionsView, DetailView, type Filters, NO_JEVEL, ReportView, jevelNames, rowsOf, thresholdsLookup } from "./history.js";
+import { ALL, DecisionsView, type Filters, NO_JEVEL, ReportView, jevelNames, rowsOf, thresholdsLookup } from "./history.js";
+import { DetailView, ReviewView } from "./review.js";
+import { tallies } from "./tuning.js";
 import { HomeView } from "./home.js";
 import { THEMES, ThemeContext, type ThemeName, loadThemeName, saveThemeName, useTheme } from "./theme.js";
 
@@ -166,6 +168,7 @@ export function App(props: {
   const [homeCursor, setHomeCursor] = useState(0);
   const [jevel, setJevel] = useState<string | null>(null);
   const [lookup] = useState(() => thresholdsLookup(props.dirs));
+  const byQuestion = useMemo(() => tallies(lines), [lines]);
   const toastTimer = useRef<NodeJS.Timeout | undefined>(undefined);
 
   const say = (text: string, error = false): void => {
@@ -247,8 +250,8 @@ export function App(props: {
     const row = open && historyView === "detail" ? rowsOf(lines, ALL).find((r) => r.ask.id === open.id && r.question === open.question) : undefined;
     if (row) {
       content = (
-        <DetailView row={row} home={props.home} thresholds={lookup(row)} height={body} width={columns} active={active}
-          onBack={() => (fromHome ? go("home") : setHistoryView("list"))} onRecorded={(message) => { say(message); if (fromHome) go("home"); else setHistoryView("list"); reload(); }} />
+        <DetailView row={row} home={props.home} thresholds={lookup(row)} tallies={byQuestion} height={body} width={columns} active={active}
+          onBack={() => (fromHome ? go("home") : setHistoryView("list"))} onRecorded={(message: string) => { say(message); if (fromHome) go("home"); else setHistoryView("list"); reload(); }} />
       );
     } else if (historyView === "report") {
       content = <ReportView lines={lines} filters={filters} height={body} active={active} onFilters={setFilters} onBack={() => setHistoryView("list")} />;
@@ -261,7 +264,7 @@ export function App(props: {
       );
     }
   } else if (screen === "review") {
-    content = <Placeholder title="Review" purpose="One marked decision at a time: was Jev right?" meanwhile="Meanwhile y opens History, f to mark and o to no outcome shows the same queue." height={body} />;
+    content = <ReviewView lines={lines} home={props.home} lookup={lookup} tallies={byQuestion} width={columns} height={body} active={active} onBack={() => go("home")} onRecorded={(message) => { say(message); reload(); }} />;
   } else if (screen === "jevel") {
     content = <Placeholder title={`Jevel ${jevel ?? ""}`.trim()} purpose="How each question of this jevel decides, and whether its thresholds should move." meanwhile="Meanwhile y opens History and J filters it to one jevel." height={body} />;
   } else if (screen === "try") {
