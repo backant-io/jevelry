@@ -1,7 +1,7 @@
 {
   "name": "jevelry",
   "version": "0.3.0",
-  "description": "The Jev framework for TypeSafe System One: let Jev make the small calls in your code and your coding agent, with a decision your code can act on",
+  "description": "Use Jev everywhere to make & track decisions",
   "keywords": [
     "jev",
     "typesafe",

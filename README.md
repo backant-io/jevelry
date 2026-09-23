@@ -15,7 +15,7 @@
   <img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT">
 </p>
 
-<p align="center"><b>Let Jev make the small calls in your code and your coding agent, with a decision your code can act on.</b></p>
+<p align="center"><b>Use Jev everywhere to make &amp; track decisions.</b></p>
 
 Your code and your coding agent make the same small calls every day: is this ticket urgent, which team should get it, is this bug a duplicate, did this test fail because of the code or because of the machine it ran on. Today each of those is usually a prompt that returns text you parse, and you don't learn how sure the model was.
 
