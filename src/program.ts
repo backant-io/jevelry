@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,7 +7,7 @@ import { Command } from "commander";
 import { ask, errorBody } from "./ask.js";
 import { installSkill, knownAgents, promptForKey, unknownAgents, whereToPutTheKey } from "./install.js";
 import { JevelError, discoveryDirs, listJevels, loadJevel } from "./jevel.js";
-import { defaultClient } from "./decide.js";
+import { defaultClient, renderTypes } from "./decide.js";
 import { resolveKey, storeKey } from "./key.js";
 import { appendLine, findAsk, jevelryHome, logAsk, outcomeOf, readLog } from "./log.js";
 import { type AskDocument, type ErrorBody, type ErrorDocument, PROTOCOL } from "./protocol.js";
@@ -198,6 +198,22 @@ export function buildProgram(): Command {
         const { jevel, warnings } = loadJevel(name, dirs(opts.jevels));
         for (const warning of warnings) say(`warning: ${warning}`);
         say(`${jevel.name} v${jevel.version}: ${Object.keys(jevel.questions).length} questions, ${warnings.length} warnings`);
+      } catch (error) {
+        failCommand(error);
+      }
+    });
+
+  program
+    .command("types")
+    .description("write a TypeScript declaration so jevel(name).decide() returns each jevel's own answer types")
+    .option("--jevels <dir>", "a jevels directory searched first (repeatable)", (d: string, all: string[]) => [...all, d], [] as string[])
+    .option("--out <file>", "write the declaration here instead of stdout")
+    .action((opts: { jevels: string[]; out?: string }) => {
+      try {
+        const found = dirs(opts.jevels);
+        const text = renderTypes(listJevels(found).map((j) => loadJevel(j.name, found).jevel));
+        if (opts.out) writeFileSync(opts.out, text);
+        else process.stdout.write(text);
       } catch (error) {
         failCommand(error);
       }

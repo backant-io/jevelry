@@ -1,4 +1,5 @@
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TypeSafeClient } from "@typesafe-ai/sdk";
@@ -95,5 +96,50 @@ describe("decide", () => {
     } finally {
       warn.mockRestore();
     }
+  });
+});
+
+describe("jevelry types", () => {
+  it("types each answer by its jevel, so a wrong literal fails to compile", () => {
+    const dir = mkdtempSync(join(tmpdir(), "jevelry-types-"));
+    const out = join(dir, "jevels.d.ts");
+    const r = spawnSync("node", ["bin/jevelry.js", "types", "--out", out], { encoding: "utf8", env: { ...process.env, JEVELRY_HOME: dir } });
+    expect(r.status, r.stderr).toBe(0);
+    expect(readFileSync(out, "utf8")).toContain('"ticket-triage": TicketTriage;');
+    writeFileSync(
+      join(dir, "use.ts"),
+      [
+        'import { jevel } from "jevelry";',
+        'const d = await jevel("ticket-triage").decide({});',
+        'const team: "billing" | "technical" | "account" | "other" | null = d.team.answer;',
+        "// @ts-expect-error a team this jevel does not have",
+        'const wrong: "sales" | null = d.team.answer;',
+        "const urgent: boolean | null = d.urgent.answer;",
+        "const frustration: number | null = d.frustration.answer;",
+        'const same = await jevel("duplicate-issue").decide({});',
+        'const first: boolean | null = same["same_as[0]"].answer;',
+        'if (d.team.decision === "act") { const sure: "billing" | "technical" | "account" | "other" = d.team.answer; void sure; }',
+        'const loose = await jevel(String("any")).decide({});',
+        "const anything: string | boolean | number | null | undefined = loose.whatever?.answer;",
+        "const logId: string | null = d.logId;",
+        "void [team, wrong, urgent, frustration, first, anything, logId];",
+        "export {};",
+      ].join("\n"),
+    );
+    writeFileSync(join(dir, "package.json"), '{ "type": "module" }');
+    writeFileSync(
+      join(dir, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          target: "ES2022", module: "NodeNext", moduleResolution: "NodeNext", strict: true, noEmit: true, skipLibCheck: true, types: ["node"],
+          typeRoots: [join(process.cwd(), "node_modules", "@types")],
+          paths: { jevelry: [join(process.cwd(), "dist", "index.d.ts")] },
+        },
+        files: ["use.ts", "jevels.d.ts"],
+      }),
+    );
+    const tsc = spawnSync("node", [join(process.cwd(), "node_modules", "typescript", "bin", "tsc"), "-p", join(dir, "tsconfig.json")], { encoding: "utf8" });
+    expect(tsc.stdout + tsc.stderr).toBe("");
+    expect(tsc.status).toBe(0);
   });
 });

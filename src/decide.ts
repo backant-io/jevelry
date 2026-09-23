@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { type EntryType, TypeSafeClient } from "@typesafe-ai/sdk";
 import { ask, errorBody, stateHash } from "./ask.js";
-import { JevelError, checkState, discoveryDirs, expandQuestions, isEntry, loadJevel } from "./jevel.js";
+import { type Jevel, JevelError, type JevelQuestion, checkState, discoveryDirs, expandQuestions, isEntry, loadJevel } from "./jevel.js";
 import { resolveKey } from "./key.js";
 import { jevelryHome, logAsk } from "./log.js";
 import type { Answer, ChoiceAnswer, ErrorBody, NoulAnswer, ScoreAnswer, Usage } from "./protocol.js";
@@ -132,3 +132,34 @@ export function jevel<N extends string>(
   };
 }
 
+const pascal = (name: string): string => {
+  const out = name.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join("");
+  return /^\d/.test(out) ? `_${out}` : out;
+};
+
+function answerType(q: JevelQuestion): string {
+  if (q.type === "noul") return "NoulDecision";
+  if (q.type === "score") return "ScoreDecision";
+  return `ChoiceDecision<${Object.keys(q.criteria as Record<string, unknown>).map((o) => JSON.stringify(o)).join(" | ")}>`;
+}
+
+/** The declaration `jevelry types` writes: one interface per jevel and the map `jevel()` reads it through. */
+export function renderTypes(jevels: Jevel[]): string {
+  const lines = [
+    "// Written by `jevelry types`. Run it again after you change a jevel.",
+    'import type { ChoiceDecision, NoulDecision, ScoreDecision } from "jevelry";',
+    "",
+  ];
+  for (const j of jevels) {
+    lines.push(`export interface ${pascal(j.name)} {`);
+    for (const [id, q] of Object.entries(j.questions)) {
+      const key = q.repeat ? `[key: \`${id}[\${number}]\`]` : id;
+      lines.push(`  ${key}: ${answerType(q)};`);
+    }
+    lines.push("}", "");
+  }
+  lines.push('declare module "jevelry" {', "  interface JevelTypes {");
+  for (const j of jevels) lines.push(`    ${JSON.stringify(j.name)}: ${pascal(j.name)};`);
+  lines.push("  }", "}", "");
+  return lines.join("\n");
+}

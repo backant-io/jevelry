@@ -77,7 +77,7 @@ switch (d.team.decision) {
 }
 ```
 
-`decide` asks Jev, writes the ask to your log and hands you every question with its `decision` and its `answer`, so here `d.team.answer` is `"billing"` and `d.urgent.answer` is `true`. When Jev cannot answer, because TypeSafe is busy or your network is down, every question comes back `fall_back` with the reason in `d.error`, so your code just keeps its old path.
+`decide` asks Jev, writes the ask to your log and hands you every question with its `decision` and its `answer`, so here `d.team.answer` is `"billing"` and `d.urgent.answer` is `true`. When Jev cannot answer, because TypeSafe is busy or your network is down, every question comes back `fall_back` with the reason in `d.error`, so your code just keeps its old path. Run `npx jevelry types --out src/jevels.d.ts` once and your editor knows the options of every jevel, so `d.team.answer` is typed as `"billing" | "technical" | "account" | "other"`.
 
 ## What is underneath
 

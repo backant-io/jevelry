@@ -62,6 +62,7 @@ Each jevel's body says what its state looks like and its `example.json` is a sta
 | `npx jevelry ask --questions '<json>' --state '<json>'` | a one-off ask with the API's question shape |
 | `npx jevelry outcome <log_id> <question> <value>` | records what proved true (`agree`, `disagree`, an option, a level index, `yes`, `no`) |
 | `npx jevelry report [--jevel <name>] [--json]` | agreement per question from the log |
+| `npx jevelry types [--out <file>]` | writes TypeScript types for every jevel it finds, for `jevel(name).decide()` |
 | `npx jevelry models` | the model names the account may send |
 
 Jevels are found in `--jevels <dir>`, then `JEVELRY_JEVELS` (colon separated), then `./jevels`, then `~/.jevelry/jevels`. Keep the project's jevels in `./jevels/` so a person reviews them with the code.
@@ -116,7 +117,7 @@ switch (d.team.decision) {
 }
 ```
 
-`decide` asks Jev, writes the ask to the log and hands back every question with its `decision` and its `answer` (the option for a choice, `true` or `false` for a noul, the level for a score). When Jev cannot answer, every question comes back `fall_back` with the reason in `d.error`, so the code keeps its old path. The lower level functions are importable too, `import { ask, loadJevel, discoveryDirs } from "jevelry"`, and every other language spawns the CLI and parses stdout.
+`decide` asks Jev, writes the ask to the log and hands back every question with its `decision` and its `answer` (the option for a choice, `true` or `false` for a noul, the level for a score). When Jev cannot answer, every question comes back `fall_back` with the reason in `d.error`, so the code keeps its old path. Run `npx jevelry types --out src/jevels.d.ts` after you write or change a jevel, so `d.team.answer` is typed as the options of that jevel. The lower level functions are importable too, `import { ask, loadJevel, discoveryDirs } from "jevelry"`, and every other language spawns the CLI and parses stdout.
 
 ## Rules
 

@@ -33,7 +33,7 @@ switch (d.team.decision) {
 }
 ```
 
-When Jev cannot answer, every question comes back `fall_back` with the reason in `d.error`, so the code keeps its old path.
+When Jev cannot answer, every question comes back `fall_back` with the reason in `d.error`, so the code keeps its old path. `npx jevelry types --out src/jevels.d.ts` writes the types, so `d.team.answer` is typed as the options of the jevel.
 
 ## Decisions
 
