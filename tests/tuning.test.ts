@@ -224,6 +224,8 @@ describe("jevel screen", () => {
     expect(confirm).toContain("+ version: 4");
     expect(confirm).toContain("- thresholds: { act: 0.8, mark: 0.6 }");
     expect(confirm).toContain("+ thresholds: { act: 0.7, mark: 0.6 }");
+    // The footer names enter the way the dialog does.
+    expect(confirm.split("\n").at(-1)).toMatch(/^ enter set it {2}esc cancel/);
     expect(readFileSync(path, "utf8")).toBe(before);
     await press(stdin, ESC);
     expect(readFileSync(path, "utf8")).toBe(before);
@@ -247,6 +249,8 @@ describe("jevel screen", () => {
     await press(stdin, "T");
     expect(lastFrame()).toContain("Copy the jevel and set its threshold");
     expect(lastFrame()).toContain("ticket-triage ships with jevelry, so tune your own copy.");
+    expect(lastFrame()).toContain("enter copy and set");
+    expect((lastFrame() ?? "").split("\n").at(-1)).toMatch(/^ enter copy and set {2}esc cancel/);
     await press(stdin, ENTER);
     expect(readFileSync(shippedPath, "utf8")).toBe(before);
     const copy = join(project, "ticket-triage", "JEVEL.md");

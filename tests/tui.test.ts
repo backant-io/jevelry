@@ -404,7 +404,7 @@ describe("the shell", () => {
     await tick();
     await press(stdin, "v");
     expect(lastFrame()).toContain("Review 1 of 2");
-    expect(lastFrame()).toContain("Was Jev right?");
+    expect(lastFrame()).toMatch(/Was Jev right\?|reading…/);
     await press(stdin, "t");
     expect(lastFrame()).toContain("Try a jevel");
     await press(stdin, "y");
@@ -448,7 +448,7 @@ describe("the shell", () => {
     await press(stdin, CTRL_P, "y", "q");
     expect(lastFrame()).toContain("Commands");
     await press(stdin, ESC);
-    expect(lastFrame()).toContain("Was Jev right?");
+    expect(lastFrame()).toMatch(/Was Jev right\?|reading…/);
     expect(lastFrame()).not.toContain("8 decisions");
     unmount();
   });

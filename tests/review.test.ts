@@ -43,6 +43,8 @@ const LOG: LogLine[] = [A, B, C, D, agreedB];
 const tick = (ms = 60) => new Promise((resolve) => setTimeout(resolve, ms));
 /** A card takes a, d and s only once it has been on screen this long (SETTLE_MS plus slack). */
 const SETTLE = 520;
+/** The same verdict key again this soon after the last verdict is a held key (HELD_MS plus slack). */
+const HELD = 1200;
 const press = async (stdin: { write: (s: string) => void }, ...keys: string[]) => { for (const k of keys) { stdin.write(k); await tick(80); } };
 const homeWith = (lines: LogLine[]): string => {
   const home = mkdtempSync(join(tmpdir(), "jevelry-review-"));
@@ -86,7 +88,7 @@ describe("review", () => {
   it("shows one marked decision: what Jev saw, what it decided, and the question it asks, at 80x24 and 120x40", async () => {
     for (const size of [{ columns: 80, rows: 24 }, { columns: 120, rows: 40 }]) {
       const { lastFrame, unmount } = review(LOG, size);
-      await tick();
+      await tick(SETTLE);
       const frame = lastFrame() ?? "";
       expect(frame.split("\n")).toHaveLength(size.rows);
       for (const l of frame.split("\n")) expect(l.length).toBeLessThanOrEqual(size.columns);
@@ -150,7 +152,7 @@ describe("review", () => {
     expect(await outcomes(home)).toEqual([agreedB, expect.objectContaining({ id: D.id, question: "team", outcome: "agree" })]);
     expect(lastFrame()).toContain("Review 2 of 3");
     // A terminal's key repeat: the press, 400 ms, then repeats 33 ms apart. One press, one outcome.
-    await tick(SETTLE);
+    await tick(HELD);
     stdin.write("a");
     await tick(400);
     for (let i = 0; i < 9; i++) { stdin.write("a"); await tick(33); }
@@ -160,6 +162,56 @@ describe("review", () => {
       expect.objectContaining({ id: A.id, question: "urgent", outcome: "agree" }),
     ]);
     expect(lastFrame()).toContain("Review 3 of 3");
+    unmount();
+  });
+
+  // A key repeat's first delay is 300 ms on macOS, about 500 on Windows, 660 on X11 and up to 1000: every one of them
+  // outlasts or nearly outlasts the next card's settle time, and the first repeat must still not be a second verdict.
+  it("records exactly one outcome for a held a whatever the terminal's first repeat delay", async () => {
+    for (const delay of [300, 500, 660, 1000]) {
+      const { home, stdin, lastFrame, unmount } = review(LOG);
+      await tick(SETTLE);
+      stdin.write("a");
+      await tick(delay);
+      for (let i = 0; i < 9; i++) { stdin.write("a"); await tick(33); }
+      await tick(200);
+      expect((await outcomes(home)).length, `delay ${delay} ms`).toBe(2);
+      expect(lastFrame()).toContain("Review 2 of 3");
+      unmount();
+    }
+  }, 20000);
+
+  // A person who means it presses again after a pause, or presses another key first: that verdict counts.
+  it("takes the same verdict key again after a pause, or right after another key", async () => {
+    const { home, stdin, lastFrame, unmount } = review(LOG);
+    await tick(SETTLE);
+    stdin.write("a");
+    await tick(HELD);
+    stdin.write("a");
+    await tick(150);
+    expect(await outcomes(home)).toHaveLength(3);
+    expect(lastFrame()).toContain("Review 3 of 3");
+    await tick(SETTLE);
+    stdin.write("j");
+    await tick(30);
+    stdin.write("a");
+    await tick(150);
+    expect(await outcomes(home)).toHaveLength(4);
+    expect(lastFrame()).toContain("All reviewed");
+    unmount();
+  });
+
+  // A key pressed while the card settles does nothing, so the card says why.
+  it("says reading while a new card settles, then drops the hint", async () => {
+    const { stdin, lastFrame, unmount } = review(LOG);
+    await tick(60);
+    expect(lastFrame()).toContain("reading…");
+    await tick(SETTLE);
+    expect(lastFrame()).not.toContain("reading…");
+    stdin.write("a");
+    await tick(100);
+    expect(lastFrame()).toContain("Review 2 of 3");
+    expect(lastFrame()).toContain("reading…");
     unmount();
   });
 

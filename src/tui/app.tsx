@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { mergeThresholds } from "../decision.js";
 import { type Jevel, listJevels, loadJevel } from "../jevel.js";
 import { LOG_FILE, type LogLine, readLog } from "../log.js";
-import { ChromeContext, Dialog, type Hint, SelectDialog, type SelectItem, useChrome } from "./dialog.js";
+import { ChromeContext, Dialog, type Hint, SelectDialog, type SelectItem, newKeyMemory, useChrome } from "./dialog.js";
 import { ALL, DecisionsView, type Filters, NO_JEVEL, ReportView, jevelNames, rowsOf, thresholdsLookup } from "./history.js";
 import { JevelView, TuneDialog, type QuestionView, questionViews, tunePlan } from "./jevel-screen.js";
 import { DetailView, ReviewView } from "./review.js";
@@ -162,6 +162,7 @@ export function App(props: {
   const captureRef = useRef(false);
   const setCapture = (on: boolean): void => { captureRef.current = on; setCaptureState(on); };
   const captureNow = (on: boolean): void => { captureRef.current = on; };
+  const keys = useRef(newKeyMemory()).current;
   const [toast, setToast] = useState<{ text: string; error: boolean } | null>(null);
   const [filters, setFilters] = useState<Filters>(props.filters ?? ALL);
   const [historyView, setHistoryView] = useState<"list" | "detail" | "report">("list");
@@ -201,8 +202,8 @@ export function App(props: {
   /** Where esc from History goes: Home, or the Jevel screen that opened it. */
   const [historyBack, setHistoryBack] = useState<Screen>("home");
   const place = (j: Jevel): Place => placeOf(j.path, { home: props.home });
-  const tuneBlocked = dialog === "tune" && tuning !== null && jevel !== null && loaded(jevel) !== null
-    ? tunePlan(loaded(jevel)!, place(loaded(jevel)!), tuning, project).blocked !== null : false;
+  const tuneKeys: Hint[] = dialog !== "tune" || tuning === null || jevel === null || loaded(jevel) === null ? []
+    : ((plan) => (plan.blocked !== null ? [["esc", "close"]] : [["enter", plan.copy ? "copy and set" : "set it"], ["esc", "cancel"]]))(tunePlan(loaded(jevel)!, place(loaded(jevel)!), tuning, project));
   const toastTimer = useRef<NodeJS.Timeout | undefined>(undefined);
 
   const say = (text: string, error = false): void => {
@@ -346,12 +347,12 @@ export function App(props: {
   const home = tilde.length > 24 ? `...${tilde.slice(-21)}` : tilde;
   return (
     <ThemeContext.Provider value={THEMES[themeName]}>
-      <ChromeContext.Provider value={{ setHints, setCapture, captureNow }}>
+      <ChromeContext.Provider value={{ setHints, setCapture, captureNow, keys }}>
         <Root columns={columns} rows={rows}>
           <Box height={body} flexDirection="column" overflow="hidden">{content}</Box>
           <Footer
             hints={dialog === null ? hints : []}
-            extra={dialog === "help" ? [["esc", "close"]] : dialog === "tune" ? (tuneBlocked ? [["esc", "close"]] : [["enter", "set"], ["esc", "cancel"]]) : dialog !== null ? [["↑↓", "move"], ["enter", "choose"], ["esc", "close"]] : capture ? [] : [["ctrl+p", "commands"], ["?", "help"]]}
+            extra={dialog === "help" ? [["esc", "close"]] : dialog === "tune" ? tuneKeys : dialog !== null ? [["↑↓", "move"], ["enter", "choose"], ["esc", "close"]] : capture ? [] : [["ctrl+p", "commands"], ["?", "help"]]}
             home={home} version={version} width={columns} toast={toast} />
           {dialog === "palette" ? <SelectDialog title="Commands" items={palette()} columns={columns} rows={rows} onSelect={run} onClose={() => setDialog(null)} /> : null}
           {dialog === "theme" ? (

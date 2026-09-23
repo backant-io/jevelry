@@ -37,13 +37,13 @@ export function stateLines(state: unknown, width: number): string[] {
 
 /**
  * How long a card is on screen before a, d or s count, and how close a repeat of the same key is a held key.
- * A held key repeats after the terminal's initial delay (often 300 to 450 ms) and then every 30 ms or so; the settle
- * time has to outlast that first delay, or the first repeat lands on the next card as a second verdict.
+ * A held key repeats after the terminal's initial delay (300 ms on macOS, about 500 on Windows, 660 on X11, up to
+ * 1000) and then every 30 ms or so. The first repeat can outlast the settle time, so the same verdict key again
+ * within HELD_MS of the last verdict, with no other key in between, is a held key too.
  */
 export const SETTLE_MS = 450;
 export const REPEAT_MS = 150;
-/** The last key any card saw: a held key's repeats stay repeats across the change of card. */
-const lastKey = { key: "", at: 0 };
+export const HELD_MS = 1100;
 
 const MEANING = { act: "Jev was sure", mark: "fairly sure, check it", fall_back: "your code decided" } as const;
 const labelOf = (v: unknown): string | null => (v === undefined || v === null ? null : label(v));
@@ -203,6 +203,8 @@ export function Card(props: {
   // The handler reads the mode from a ref: keys typed right after n or d arrive before the next render,
   // and must already count as note text or a pick, never as a or d.
   const chrome = useContext(ChromeContext);
+  // Kept by the shell, so a held key's repeats stay repeats across the change of card.
+  const { last: lastKey, verdict: lastVerdict } = chrome.keys;
   const modeRef = useRef<"view" | "pick" | "note">("view");
   const noteRef = useRef("");
   const edit = (f: (n: string) => string): void => { noteRef.current = f(noteRef.current); setNote(noteRef.current); };
@@ -212,8 +214,14 @@ export function Card(props: {
   // A verdict needs a card someone has seen: a, d and s count only once the card has been up for SETTLE_MS,
   // and a key that repeats within REPEAT_MS is a held key, not a second decision.
   const shownAt = useRef(Date.now());
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(true), SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, []);
   const skipped = useRef(false);
   const one = (input: string, key: Partial<Key>): void => {
+    if (input !== lastVerdict.key) lastVerdict.key = "";
     if (modeRef.current === "note") {
       if (key.escape) { edit(() => ""); to("view"); }
       else if (key.return) to("view");
@@ -234,7 +242,9 @@ export function Card(props: {
     lastKey.at = now;
     const verdict = input === "a" || input === "d" || input === "s";
     // Once a verdict or a skip is given, this card is done: the next key belongs to the next card.
-    if (verdict && (repeated || now - shownAt.current < SETTLE_MS || recording.current || skipped.current)) return;
+    const held = lastVerdict.key === input && now - lastVerdict.at < HELD_MS;
+    if (verdict && (repeated || held || now - shownAt.current < SETTLE_MS || recording.current || skipped.current)) return;
+    if (verdict) { lastVerdict.key = input; lastVerdict.at = now; }
     if (key.escape) props.onBack();
     else if (moves(input, key as Key) !== 0) { const step = moves(input, key as Key); setScroll((s) => Math.max(s + step, 0)); }
     else if (input === "a" && answered) record("agree");
@@ -281,9 +291,12 @@ export function Card(props: {
   const prompt = mode !== "view" ? null : (
     <Box width={inner} backgroundColor={theme.panel}>
       <Text wrap="truncate">
-        <Text color={answered ? theme.text : theme.muted} bold>{answered ? " Was Jev right? " : " Jev could not answer, so there is nothing to judge. "}</Text>
+        {/* While the card settles its keys do nothing, so the line says so, dim, in the same width. */}
+        {answered && !settled
+          ? <Text color={theme.muted}>{" reading…".padEnd(16)}</Text>
+          : <Text color={answered ? theme.text : theme.muted} bold>{answered ? " Was Jev right? " : " Jev could not answer, so there is nothing to judge. "}</Text>}
         {ask.map(([k, what]) => (
-          <Text key={k}><Text color={theme.accent} bold>{`  ${k}`}</Text><Text color={theme.text}>{` ${what}`}</Text></Text>
+          <Text key={k}><Text color={answered && !settled ? theme.muted : theme.accent} bold>{`  ${k}`}</Text><Text color={answered && !settled ? theme.muted : theme.text}>{` ${what}`}</Text></Text>
         ))}
       </Text>
     </Box>

@@ -5,16 +5,22 @@ import { useTheme } from "./theme.js";
 /** A key and what it does, as the footer and the help overlay show it. */
 export type Hint = [key: string, label: string];
 
+export type KeyMemory = { last: { key: string; at: number }; verdict: { key: string; at: number } };
+export function newKeyMemory(): KeyMemory { return { last: { key: "", at: 0 }, verdict: { key: "", at: 0 } }; }
+
 /** How a screen tells the app shell which keys it offers and whether it is taking typed text (then the global keys stay off). */
 export const ChromeContext = createContext<{
   setHints: (hints: Hint[]) => void;
   setCapture: (capture: boolean) => void;
   /** The same, at once: a key that arrives before the next render must already be text, not a shell key. */
   captureNow: (capture: boolean) => void;
+  /** The last key a card saw and the last verdict key that counted, kept by the shell so a held key stays held across cards. */
+  keys: KeyMemory;
 }>({
   setHints: () => undefined,
   setCapture: () => undefined,
   captureNow: () => undefined,
+  keys: newKeyMemory(),
 });
 
 export function useChrome(hints: Hint[], capture = false): void {
