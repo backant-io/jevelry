@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { EntryType, Question, Questions } from "@typesafe-ai/sdk";
 import { parse as parseYaml } from "yaml";
 import { mergeThresholds, type Thresholds } from "./decision.js";
@@ -303,12 +304,17 @@ export function parseJevel(markdown: string, dirName: string, path = "<inline>")
 }
 
 /** First match wins: --jevels dirs, then JEVELRY_JEVELS entries, then ./jevels, then $JEVELRY_HOME/jevels. */
-export function discoveryDirs(input: { cli?: string[]; env?: string; cwd: string; home: string }): string[] {
+/** The jevels that ship in the package: `src/` and `dist/` both sit one level below the package root. */
+export const SHIPPED_JEVELS = join(dirname(fileURLToPath(import.meta.url)), "..", "jevels");
+
+export function discoveryDirs(input: { cli?: string[]; env?: string; cwd: string; home: string; shipped?: string }): string[] {
   const ordered = [
     ...(input.cli ?? []),
     ...(input.env ? input.env.split(":").filter((d) => d !== "") : []),
     join(input.cwd, "jevels"),
     join(input.home, "jevels"),
+    // Last, so a project's own jevel of the same name wins over the shipped one.
+    input.shipped ?? SHIPPED_JEVELS,
   ].map((d) => resolve(input.cwd, d));
   return ordered.filter((dir, i) => ordered.indexOf(dir) === i);
 }
