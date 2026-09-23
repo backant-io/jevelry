@@ -41,7 +41,7 @@ When Jev cannot answer, every question comes back `fall_back` with the reason in
 - `mark`: Jev is fairly sure, so go ahead and flag it for a person to look at.
 - `fall_back`: Jev is unsure, so do what you did before, or look closer yourself.
 
-`npx jevelry tui` shows every logged decision in your terminal, and pressing `c` (correct) or `w` (wrong) on a `mark` tells jevelry whether Jev was right.
+`npx jevelry tui` opens a full-screen view of your decisions: Home shows how Jev decided today, Review lets a person press `c` (correct) or `w` (wrong) on each `mark`, and Try asks a jevel live with its example state.
 
 `npx jevelry run <jevel> --state @file` asks a jevel whose options name commands, like `failing-test`, and runs the one Jev picks: `act` runs it, `mark` asks you first and `fall_back` runs the jevel's `fall_back` command.
 
