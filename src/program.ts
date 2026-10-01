@@ -3,9 +3,10 @@ import { constants, homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Questions, TypeSafeClient } from "@typesafe-ai/sdk";
-import { Command } from "commander";
+import { Command, InvalidArgumentError } from "commander";
 import { createInterface } from "node:readline/promises";
 import { ask, errorBody, stateHash } from "./ask.js";
+import { askAndLog, askBatch } from "./batch.js";
 import { installSkill, knownAgents, promptForKey, unknownAgents, whereToPutTheKey } from "./install.js";
 import { JevelError, checkState, discoveryDirs, expandQuestions, isEntry, listJevels, loadJevel } from "./jevel.js";
 import { defaultClient, fallenAnswers, renderTypes } from "./decide.js";
@@ -107,13 +108,43 @@ export function buildProgram(): Command {
   program
     .command("ask [jevel]")
     .description("evaluate a state against a jevel (or --questions) and print one protocol document")
-    .requiredOption("--state <source>", "@file, - for stdin, or inline JSON")
+    .option("--state <source>", "@file, - for stdin, or inline JSON (required without --batch)")
     .option("--questions <source>", "@file or inline JSON: the API's questions map, for a one-off ask")
     .option("--model <id>", "model id, overriding the jevel's pin and JEVELRY_MODEL")
     .option("--jevels <dir>", "a jevels directory searched first (repeatable)", (d: string, all: string[]) => [...all, d], [] as string[])
     .option("--no-log", "do not append this ask to the log")
     .option("--log-state", "write the state itself into the log line, not only its hash (or JEVELRY_LOG_STATE=1)")
-    .action(async (jevelName: string | undefined, opts: { state: string; questions?: string; model?: string; jevels: string[]; log: boolean; logState?: boolean }) => {
+    .option("--batch", "NDJSON asks on stdin ({id, jevel or questions, state, model?}), one NDJSON answer per line on stdout as each completes")
+    .option("--concurrency <n>", "with --batch, how many asks are in flight at once", (v: string) => {
+      const n = Number(v);
+      if (!Number.isInteger(n) || n < 1) throw new InvalidArgumentError("a whole number of at least 1");
+      return n;
+    }, 16)
+    .action(async (jevelName: string | undefined, opts: { state?: string; questions?: string; model?: string; jevels: string[]; log: boolean; logState?: boolean; batch?: boolean; concurrency: number }, command: Command) => {
+      const logOptions = { home: home(), log: opts.log, logState: opts.logState === true || logStateFromEnv(process.env), warn: (m: string) => say(`warning: ${m}`) };
+      if (opts.batch) {
+        if (jevelName || opts.questions || opts.state) failAsk(errorBody(new JevelError("batch", "with --batch every stdin line names its own jevel or questions and state")));
+        let client: TypeSafeClient;
+        try {
+          client = defaultClient(home());
+        } catch (error) {
+          failAsk(errorBody(error));
+        }
+        try {
+          await askBatch(createInterface({ input: process.stdin, crlfDelay: Infinity }), {
+            ...logOptions,
+            client,
+            dirs: dirs(opts.jevels),
+            ...(opts.model ? { model: opts.model } : {}),
+            concurrency: opts.concurrency,
+            write: (line) => { process.stdout.write(`${JSON.stringify(line)}\n`); },
+          });
+        } catch (error) {
+          failCommand(error);
+        }
+        return;
+      }
+      if (opts.state === undefined) command.error("error: required option '--state <source>' not specified");
       let jevel: ReturnType<typeof loadJevel>["jevel"] | undefined;
       let questions: Questions | undefined;
       let state: unknown;
@@ -138,15 +169,9 @@ export function buildProgram(): Command {
         failAsk(errorBody(error));
       }
       const askInput = { client: typesafe, state: state as never, ...(jevel ? { jevel } : { questions: questions ?? {} }), ...(opts.model ? { model: opts.model } : {}) };
-      const result = await ask(askInput);
+      const result = await askAndLog(askInput, logOptions);
       if (!result.ok) failAsk(result.error);
-      const document = result.document;
-      if (opts.log) {
-        const { jevel: j, model, state_hash, answers, usage } = document;
-        const logged = opts.logState === true || logStateFromEnv(process.env) ? { state } : {};
-        document.log_id = await logAsk(home(), { jevel: j, model, state_hash, ...logged, answers, usage }, (m) => say(`warning: ${m}`));
-      }
-      out(document);
+      out(result.document);
     });
 
   program

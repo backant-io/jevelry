@@ -183,6 +183,31 @@ describe("ask", () => {
   });
 });
 
+describe("ask --batch", () => {
+  // A 429 is the one ask's answer, never the batch's: the other lines still get theirs and the exit stays 0.
+  it("answers each stdin line on its own stdout line, a 429 included, and exits 0", async () => {
+    const r = await run(["ask", "--batch"], {
+      input: [
+        JSON.stringify({ id: "ok", jevel: "wake-gate", state }),
+        JSON.stringify({ id: "limited", jevel: "wake-gate", state: { ...state, fail: 429 } }),
+      ].join("\n"),
+    });
+    expect(r.status).toBe(0);
+    const lines = r.stdout.trim().split("\n").map((l) => JSON.parse(l) as { id: string; error?: unknown });
+    expect(lines).toHaveLength(2);
+    const { id: _id, ...doc } = lines.find((l) => l.id === "ok") as { id: string };
+    expect(validate(doc)).toBe(true);
+    expect(lines.find((l) => l.id === "limited")).toMatchObject({ protocol: 2, error: { code: "rate_limited", retry_after_ms: 10 } });
+  });
+  it("exits 4 with one error document when there is no key, before any request", async () => {
+    const before = server.requests.length;
+    const r = await run(["ask", "--batch"], { input: JSON.stringify({ id: "a", jevel: "wake-gate", state }), env: { TYPESAFE_API_KEY: undefined } });
+    expect(r.status).toBe(4);
+    expect(JSON.parse(r.stdout)).toMatchObject({ error: { code: "auth" } });
+    expect(server.requests.length).toBe(before);
+  });
+});
+
 describe("outcome and report", () => {
   it("records an outcome and reports agreement", async () => {
     const asked = JSON.parse((await run(["ask", "wake-gate", "--state", JSON.stringify(state)])).stdout) as { log_id: string };
