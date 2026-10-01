@@ -163,7 +163,7 @@ The skill keeps every jevel in `./jevels/` and leaves the questions and threshol
 
 | Command | What it does |
 |---|---|
-| `jevelry ask [jevel]` | asks every question of a jevel (or of `--questions`) about a state and prints one JSON document |
+| `jevelry ask [jevel]` | asks every question of a jevel (or of `--questions`) about a state and prints one JSON document; `--batch` asks many from stdin at once |
 | `jevelry run <jevel>` | asks a jevel whose options name commands, then runs the command for Jev's decision |
 | `jevelry outcome <log_id> <question> <value>` | records what proved true: `agree`, `disagree`, an option, a level index, `yes` or `no` |
 | `jevelry report` | agreement per jevel and question, from the log |
@@ -183,12 +183,20 @@ The skill keeps every jevel in `./jevels/` and leaves the questions and threshol
 
 | Flag | What it does |
 |---|---|
-| `--state <source>` | the state to ask about; required |
+| `--state <source>` | the state to ask about; required without `--batch` |
 | `--questions <source>` | the API's questions map, for a one-off ask with no jevel |
 | `--model <id>` | the model, over the jevel's pin and `JEVELRY_MODEL` |
 | `--jevels <dir>` | a jevels folder searched first; repeatable |
 | `--no-log` | keeps this ask out of the log |
 | `--log-state` | writes the state itself into the log line, next to its hash |
+| `--batch` | reads many asks from stdin, one JSON object per line, and answers them concurrently in one process |
+| `--concurrency <n>` | with `--batch`, how many asks are in flight at once; 16 by default |
+
+With `--batch`, each stdin line is `{"id": ..., "jevel": "<name>", "state": ...}`, or `"questions"` in place of `"jevel"`, with an optional `"model"`. The `id` is a string or a number of your choosing. Each answer is one line on stdout, in the order the asks finish: the `id` followed by the same document `ask` prints, or by `protocol` and `error` when that ask failed. A line without a usable `id` answers with `"id": null` and its line number in `"line"`. Every answer is logged as a single ask is. The exit is 0 whenever the batch ran; it is nonzero only when it could not, for example with no key.
+
+```sh
+printf '%s\n' '{"id":"a","jevel":"ticket-triage","state":{"ticket":{"subject":"Charged twice"}}}' | npx jevelry ask --batch
+```
 
 ### `run`
 
@@ -548,7 +556,7 @@ npm run test:live -- tests/live/jevels.test.ts
 
 ## How do we know you can trust it
 
-364 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
+371 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## License
 

@@ -42,7 +42,7 @@ export class UnreadableAnswer extends Error {
   }
 }
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+export const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** A noul, a confidence and every entry of probabilities is a probability. Out of range is a defect, never something to clamp. */
 function probabilityOf(field: string, value: unknown): number {

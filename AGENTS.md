@@ -14,6 +14,10 @@ This installs the jevelry skill into every coding agent it finds and asks for yo
 
 The state is a JSON file with the keys the jevel names, and the answer is one JSON document on stdout with an answer per question.
 
+    npx jevelry ask --batch < asks.ndjson
+
+Many asks in one process: each stdin line is `{"id": ..., "jevel": "<name>", "state": ...}`, and each answer is one stdout line with the `id` and the same document, written as it finishes. `--concurrency` bounds the asks in flight, 16 by default.
+
 ## In your program
 
 When the decision happens inside your own code, install jevelry in the project, load the jevel once when the program starts and call `decide` where the code decides:
