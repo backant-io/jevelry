@@ -13,7 +13,9 @@ Run this in the project:
 
     npx jevelry install
 
-It puts this skill into every coding agent it finds on the machine and asks for the TypeSafe key, which you can skip with Enter. When the person already has the key in their keychain or in `TYPESAFE_API_KEY`, you are done. If you only need the skill, `npx jevelry install-skill` does that part alone.
+It puts this skill into every coding agent it finds on the machine and asks how jevelry should reach Jev: hosted with a TypeSafe key, which you can skip with Enter, or a model on this machine. When the person already has the key in their keychain or in `TYPESAFE_API_KEY`, or a local model is set up, you are done: `install` says which one jevelry asks and changes nothing. Without a terminal it changes nothing and names both ways. If you only need the skill, `npx jevelry install-skill` does that part alone.
+
+To run Jev on the machine instead of the hosted API, run `npx jevelry models --local`, which ranks the decision models on Hugging Face and says for each whether this machine can run it, then `npx jevelry install --local <id>`. The install may install llama.cpp with Homebrew and downloads 1 to 30 GB, so ask the person before you run it, and pass `--yes` only once they agreed, since that answers its Homebrew and tight-fit questions for them. A model the table marks `won't fit` is refused anyway. After the install every `ask`, `run` and `decide()` goes to a local server the first ask starts, the answer's `model` is `local/<file>`, and `npx jevelry install --typesafe` goes back to hosted Jev.
 
 ## When to reach for a jevel
 
@@ -54,7 +56,9 @@ Each jevel's body says what its state looks like and its `example.json` is a sta
 
 | Command | What it does |
 |---|---|
-| `npx jevelry install` | installs this skill into every agent found, then asks for the key (skippable) |
+| `npx jevelry install` | installs this skill into every agent found, then asks for the key (skippable) or a model on this machine |
+| `npx jevelry install --typesafe` | asks hosted Jev from now on, and stores a key when none is there |
+| `npx jevelry install --local [<id>] [--yes]` | runs that model on this machine (an id or a row of `models --local`, `<id>:Q4_K_M` forces the quant), or shows the list to choose from; `--yes` answers the Homebrew and tight-fit questions |
 | `npx jevelry install-skill [--project]` | installs the skill only |
 | `npx jevelry list` | the jevels jevelry can find |
 | `npx jevelry show <jevel>` | the resolved frontmatter and the body |
@@ -66,7 +70,8 @@ Each jevel's body says what its state looks like and its `example.json` is a sta
 | `npx jevelry report [--jevel <name>] [--json]` | agreement per question from the log |
 | `npx jevelry tui [--dashboard] [--jevel <name>]` | a full-screen terminal view of the log: a start screen, `d` for the dashboard of today's decisions, a review queue where a person presses `c` (correct) or `w` (wrong), and Try to ask a jevel live |
 | `npx jevelry types [--out <file>]` | writes TypeScript types for every jevel it finds, for `jevel(name).decide()` |
-| `npx jevelry models` | the model names the account may send |
+| `npx jevelry models` | the model names the account may send, or the local model's alias when one is set up |
+| `npx jevelry models --local [--json]` | the decision models on Hugging Face ranked for this machine: download, memory needed, fit, score, seconds per question, licence |
 | `npx jevelry stop` | stops the local model server jevelry started |
 
 Jevels are found in `--jevels <dir>`, then `JEVELRY_JEVELS` (colon separated), then `./jevels`, then `$JEVELRY_HOME/jevels` (default `~/.jevelry/jevels`), then the jevels that ship with jevelry. Keep the project's jevels in `./jevels/` so a person reviews them with the code.
@@ -106,7 +111,7 @@ Read `references/writing-jevels.md` before you write one; it is the whole method
 
 The values come from a live ask of `ticket-triage` on its `example.json`, trimmed to two of its three answers. The code reads `decision` per answer and branches: `act` means use the answer, `mark` means use it and flag the case for a person, `fall_back` means do what the code did before the jevel existed. The raw probabilities are there when the code needs its own rule. Answers for a `repeat` question are named `same_as[0]`, `same_as[1]` and so on.
 
-On failure the document is `{ "protocol": 2, "error": { "exit": 3, "code": "rate_limited", "message": "...", "retry_after_ms": 1200 } }` and the exit code says what happened: 2 the jevel or state is wrong (the document names the field), 3 rate limited or overloaded, 4 the key is missing or refused, 5 over the token budget, 6 network, 7 an answer this build cannot read. 4 and 5 make no request. Branch on the exit code, show the message to a person.
+On failure the document is `{ "protocol": 2, "error": { "exit": 3, "code": "rate_limited", "message": "...", "retry_after_ms": 1200 } }` and the exit code says what happened: 2 the jevel or state is wrong (the document names the field), 3 rate limited or overloaded, 4 the key is missing or refused, 5 over the token budget, 6 network or a local model server that cannot start (the message says what to run), 7 an answer this build cannot read. 4 and 5 make no request. Branch on the exit code, show the message to a person.
 
 From TypeScript or JavaScript, install jevelry in the project, load the jevel once when the program starts and call `decide` where the code decides:
 
