@@ -1,5 +1,7 @@
 // Times show in the terminal's own zone; pin it so the fixture's times read the same everywhere.
 process.env.TZ = "UTC";
+// Whether Jev is set up is read from the temp home's key file, never from this machine's keychain.
+process.env.JEVELRY_KEY_STORE = "file";
 
 import { spawn } from "node:child_process";
 import { appendFileSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -68,6 +70,8 @@ const SETTLE = 520;
 const homeWith = (lines: LogLine[]): string => {
   const home = mkdtempSync(join(tmpdir(), "jevelry-tui-"));
   writeFileSync(join(home, "log.jsonl"), lines.map((l) => `${JSON.stringify(l)}\n`).join(""));
+  // A stored key: Jev is set up, so the start screen opens on its usual rows, not on setup.
+  writeFileSync(join(home, "env"), "TYPESAFE_API_KEY=test-key\n");
   return home;
 };
 const outcomesIn = async (home: string): Promise<OutcomeLine[]> => (await readLog(home)).filter((l): l is OutcomeLine => l.kind === "outcome");

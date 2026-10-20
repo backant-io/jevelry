@@ -6,7 +6,12 @@
 
     npx jevelry install
 
-This installs the jevelry skill into every coding agent it finds and asks for your TypeSafe key, or you set `TYPESAFE_API_KEY` in the environment. jevelry runs on Node 22 or newer.
+This installs the jevelry skill into every coding agent it finds and asks how jevelry should reach Jev: hosted, with your TypeSafe key (or `TYPESAFE_API_KEY` in the environment), or with a Jev-compatible decision model on this machine, which needs no key. jevelry runs on Node 22 or newer.
+
+    npx jevelry models --local
+    npx jevelry install --local vllm-d3-flash
+
+The first ranks the decision models on Hugging Face by the Jev Decision Index and says for each whether this machine can run it and how many seconds a question takes. The second offers to install llama.cpp with Homebrew when it is missing or too old, downloads the model and checks its sha256, and from then on every ask goes to a local `llama-server` that the first ask starts. `npx jevelry stop` stops it, and `npx jevelry install --typesafe` goes back to hosted Jev. The install downloads 1 to 30 GB, so ask the person first. When a Jev server already runs on the machine, like jevd on port 8741, `npx jevelry install --local-url http://127.0.0.1:8741` asks it instead, with no download, and `models --local` names one it finds.
 
 ## Ask
 

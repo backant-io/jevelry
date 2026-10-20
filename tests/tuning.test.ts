@@ -1,4 +1,6 @@
 process.env.TZ = "UTC";
+// The App reads whether Jev is set up when it opens: from the temp home's file store, never from this machine's keychain.
+process.env.JEVELRY_KEY_STORE = "file";
 
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

@@ -7,6 +7,7 @@
   <a href="#command-line-reference">Commands</a> ·
   <a href="#keyboard-shortcuts">Keys</a> ·
   <a href="#jevels">Jevels</a> ·
+  <a href="#local-models">Local models</a> ·
   <a href="#configuration">Configuration</a> ·
   <a href="https://docs.typesafe.ai">Jev docs</a>
 </p>
@@ -25,7 +26,7 @@
 > [!WARNING]
 > **Early development:** jevelry is young and changes fast. Commands, the jevel format and the answer document may change between minor versions until 1.0, so pin the version you depend on.
 
-jevelry lets your code and your coding agent ask Jev, the decision model from TypeSafe, a small typed question and get back a decision it can act on, and it keeps every decision so you can see how often Jev was right.
+jevelry lets your code and your coding agent ask Jev, the decision model from TypeSafe, a small typed question and get back a decision it can act on, and it keeps every decision so you can see how often Jev was right. It asks hosted Jev with a TypeSafe key, or a Jev-compatible decision model that runs on your own machine.
 
 ## Overview
 
@@ -46,6 +47,7 @@ With jevelry you ask each of those questions to Jev with one command. A question
 - **Typed decisions in code**: Load a jevel once and get a typed decision wherever your code asks
 - **Commands Jev runs**: Jev picks the command to run and asks you first when it is only fairly sure
 - **Review and tuning**: Mark whether Jev was right and move thresholds based on real outcomes
+- **Local models**: A Jev-compatible decision model on your own machine, picked for what the machine can run, with no key and with your states staying on it
 - **Persistent log**: Every decision in one local log, with a report per question
 - **Tested jevels**: Every shipped jevel is checked against the real API on its own cases
 - **Agent skill**: One install for Claude Code, Codex, Cursor, opencode and pi
@@ -62,7 +64,14 @@ npm install -g jevelry
 jevelry install
 ```
 
-`jevelry install` puts the skill into every coding agent it finds and asks for your TypeSafe key. You can skip the key with Enter and add it later. Get a key at https://docs.typesafe.ai.
+`jevelry install` puts the skill into every coding agent it finds and then asks how jevelry should reach Jev:
+
+    How should jevelry ask Jev?
+      1  TypeSafe, hosted: needs an API key
+      2  A model on this machine: free and private, downloads 1 to 30 GB
+    Choose 1 or 2:
+
+With 1 it asks for your TypeSafe key, which you can skip with Enter and add later. Get a key at https://docs.typesafe.ai. With 2 it first offers a Jev server that already runs on this machine, as [Use a Jev server you already run](#use-a-jev-server-you-already-run) describes, then shows the models this machine can run and sets up the one you pick, as [Run Jev on this machine](#run-jev-on-this-machine) describes. Once jevelry asks somewhere, `install` leaves that alone and says so, and `jevelry install --typesafe` or `jevelry install --local` switches. Without a terminal, in a pipe or a CI job, it names both ways and changes nothing.
 
 ### As a library in your project
 
@@ -98,7 +107,7 @@ node bin/jevelry.js --help
 jevelry tui
 ```
 
-It opens on the start screen with what you can do from there: try a jevel, review the decisions Jev marked, open the dashboard or go through your history. Press `d` for the dashboard, which shows you how Jev decided today, what needs you and how each of your jevels is doing. When your log is still empty, the first row on the start screen offers you a sample ticket: press enter to open it in Try and enter again to ask Jev about it live, and you see your first answer in a few seconds. If you have no key yet, Try tells you how to add one.
+It opens on the start screen with what you can do from there: try a jevel, review the decisions Jev marked, open the dashboard or go through your history. Press `d` for the dashboard, which shows you how Jev decided today, what needs you and how each of your jevels is doing. When your log is still empty, the first row on the start screen offers you a sample ticket: press enter to open it in Try and enter again to ask Jev about it live, and you see your first answer in a few seconds. Until jevelry is set up, the first row is "Set up Jev: a TypeSafe key or a model on this machine": press `s` and choose the way, and Try tells you to press `s` when you ask before that. `Set up Jev` in the command palette (`ctrl+p`) opens the same dialog later, when you want to switch.
 
 ### Ask from the command line
 
@@ -159,6 +168,71 @@ You probably want your coding agent to write the jevel and wire it in, while you
 
 The skill keeps every jevel in `./jevels/` and leaves the questions and thresholds for you to read. The guide the agent reads is [skills/jevelry/references/writing-jevels.md](skills/jevelry/references/writing-jevels.md) and works for people too.
 
+### Run Jev on this machine
+
+jevelry can ask a Jev-compatible decision model on your own machine instead of hosted Jev. It costs nothing per ask, needs no key, and your states stay on the machine. First see what this machine can run:
+
+```sh
+jevelry models --local
+```
+
+On an Apple M4 Pro with 24 GB that prints:
+
+    This machine: Apple M4 Pro, 24 GB memory, about 17 GB usable by the GPU
+    Ranked by the Jev Decision Index 0.3.2, where hosted Jev 1.14 scores 61.5
+
+      #  id                    model                     quant   download    needs  fit        score  s/question  licence
+      1  vllm-d3-flash         vLLM-SR d3-flash 9B       Q8_0      9.6 GB  11.2 GB  runs well   55.8         2.1  Apache-2.0
+      2  bespoke-nimble-9b-v3  Bespoke Nimble 9B v3      Q8_0      9.6 GB  11.2 GB  runs well   54.7         2.1  CC BY-NC 4.0, non-commercial
+      3  vllm-d3-mini          vLLM-SR d3-mini 4B        Q8_0      5.2 GB   6.8 GB  runs well   52.6         1.1  Apache-2.0
+      ...
+     16  vllm-d3               vLLM-SR d3 27B            Q4_K_M   19.9 GB  22.6 GB  won't fit   66.3           -  Apache-2.0
+     17  clef                  Cloudflare Clef 27B       Q4_K_M   20.0 GB  22.7 GB  won't fit   53.1           -  Apache-2.0
+     18  openjev               OpenJev 27B               Q4_K_M   19.9 GB  22.6 GB  won't fit      -           -  CC BY-NC 4.0, non-commercial
+
+    OpenJev 27B: not on the index; its card reports 84.0% against hosted Jev's 85.4% on its own 10,000 questions
+
+Each row is one model at the quant that suits this machine. `download` is the size of the file, `needs` the memory it takes while it answers, `fit` whether this machine has that memory (`runs well`, `tight` or `won't fit`), `score` its result on the index, `s/question` the seconds a question of about 500 tokens takes here, and `licence` what you may use it for. Models that run well come first, then tight ones, then the ones that won't fit, each group by best score, so row 1 is the one to pick. [Local models](#local-models) says where each number comes from. `--json` prints the same rows for a program.
+
+Then install one by its id or its row number:
+
+```sh
+jevelry install --local vllm-d3-flash
+```
+
+`jevelry install --local` with no model shows the same table and asks for a number or an id, and Enter takes row 1. `vllm-d3-flash:Q4_K_M` or `:Q8_0` forces that quant. The install then:
+
+1. looks for llama.cpp's `llama-server` and, when it is missing or too old for the model, offers to install or upgrade it with Homebrew (`brew install llama.cpp`)
+2. downloads the model from Hugging Face into `$JEVELRY_HOME/models`, resumes a download that was cut off, and checks the file against its sha256
+3. starts `llama-server` with the model, asks it one setup check and says how long the answer took
+4. writes `$JEVELRY_HOME/config.json`, so `ask`, `ask --batch`, `run`, `decide()` and Try ask this model from then on
+
+A model that won't fit is refused, also with `--yes`, because a model too big for the GPU's memory can crash the machine. A tight fit and Homebrew are asked first, and `--yes` answers yes to both, which you need when there is no terminal. A failed install leaves the setup that worked before.
+
+jevelry starts `llama-server` on `127.0.0.1` on the first ask and leaves it running for the next ones, so the first ask also waits for the model to load. After five idle minutes the server unloads the model and gives the memory back, and the next ask loads it again. `jevelry stop` stops the server and says so only once its process has exited and the memory is free, killing it after 15 seconds when it does not exit, and the next ask starts it again. jevelry never runs two models at once: an ask for another model while one runs is refused, so is a start while a server jevelry did not record runs from `$JEVELRY_HOME/models`, and switching models stops the old server and waits for it to exit before the new one loads. The answer document is the same, with the model's alias, like `local/vllm-d3-flash-Q8_0`, as its `model`, and `jevelry models` prints that alias instead of asking TypeSafe.
+
+In `jevelry tui`, press `s` on the start screen or choose `Set up Jev` in `ctrl+p`, then `A model on this machine`. The dialog reads the models from Hugging Face and lists them in the same order, each with its download, fit, score and seconds per question. Enter on a model shows its details, its licence and whether Homebrew will install llama.cpp, and enter again installs it while the dialog shows each step and how far the download is. Once it is done, the start screen drops its setup row. `TypeSafe, hosted` tells you to run `npx jevelry install --typesafe` in a terminal or to export `TYPESAFE_API_KEY`, since the TUI does not take a key itself.
+
+`jevelry install --typesafe` goes back to hosted Jev once there is a key, asking for one when there is none, and stops the local server. Without a key it changes nothing. The model stays on disk, so `jevelry install --local <id>` switches back without a new download.
+
+### Use a Jev server you already run
+
+When a Jev System One server already runs on this machine, like candle-jev's `jevd` on `127.0.0.1:8741`, jevelry can ask it instead of downloading a model, so there is one copy on disk and one model in memory:
+
+```sh
+jevelry install --local-url http://127.0.0.1:8741
+```
+
+It reads the model the server lists at `GET /v1/models` (the first one when it lists several), asks it one setup check, stops the `llama-server` jevelry runs when there is one, and writes `$JEVELRY_HOME/config.json`:
+
+```json
+{ "backend": "server", "server": { "url": "http://127.0.0.1:8741", "model": "jevk5-v0.3-mlx8" } }
+```
+
+Every ask then sends the server's own model whatever the jevel pins, and no `x-jev-lane` header, so jevd answers jevelry on its research lane, behind the program it runs for. The answer's `model` reads `local/<model>`, like `local/jevk5-v0.3-mlx8`, and Try counts it as $0. When no Jev server answers at the URL, or it fails the setup check, the install exits 1 and changes nothing.
+
+`jevelry models --local`, `jevelry install --local` and `A model on this machine` in the TUI look for such a server first, with `GET /v1/models` on the URLs in `JEVELRY_KNOWN_SERVERS` (`http://127.0.0.1:8741` unless you set it), and offer it before any download. A server that lists only `local/` models is a `llama-server` of jevelry's own and is not offered. jevelry does not start or stop a server it did not start: `jevelry stop` says so and stops only jevelry's own `llama-server`. `jevelry install --local <id>` or `--typesafe` switches away again.
+
 ## Command-line reference
 
 | Command | What it does |
@@ -172,8 +246,9 @@ The skill keeps every jevel in `./jevels/` and leaves the questions and threshol
 | `jevelry show <jevel>` | the resolved frontmatter as JSON, then the body, then `example.json` when the jevel has one |
 | `jevelry check <jevel>` | refuses a defective jevel with exit 2 and warns about questions Jev handles poorly |
 | `jevelry types` | writes a TypeScript declaration so `jevel(name).decide()` returns each jevel's own answer types |
-| `jevelry models` | the model names your account may send, from `GET /v1/models` |
-| `jevelry install` | installs the skill into your coding agents, then stores a TypeSafe key |
+| `jevelry models` | the model names your account may send, from `GET /v1/models`; `--local` ranks the decision models this machine can run |
+| `jevelry stop` | stops the local model server jevelry started, and any it did not record, and waits until they have exited; a Jev server jevelry did not start keeps running |
+| `jevelry install` | installs the skill into your coding agents, then sets up Jev: a TypeSafe key or a model on this machine |
 | `jevelry install-skill` | installs the skill into your coding agents, and asks for no key |
 | `jevelry help [command]` | the help of one command |
 
@@ -247,13 +322,26 @@ printf '%s\n' '{"id":"a","jevel":"ticket-triage","state":{"ticket":{"subject":"C
 | `--jevels <dir>` | a jevels folder searched first; repeatable |
 | `--out <file>` | writes the declaration to this file; stdout by default |
 
+### `models`
+
+| Flag | What it does |
+|---|---|
+| `--local` | the decision models on Hugging Face, ranked for this machine, with what each needs and how fast it would answer here |
+| `--json` | with `--local`, one object per row: `id`, `repo`, `name`, `quant`, `file`, `download_bytes`, `need_bytes`, `fit`, `score`, `seconds_per_question`, `licence`, `decision_type` |
+
+With a local model or a running Jev server set up and no `TYPESAFE_BASE_URL`, `jevelry models` prints its `local/` name and asks nothing. With `--local`, a Jev server already running here is named on the first line, above the table; `--json` lists only the models to download.
+
 ### `install`, `install-skill`
 
 | Flag | What it does |
 |---|---|
 | `--project` | installs into this project (`.claude/skills` and `.agents/skills`) |
 | `--agent <names...>` | only these agents: `claude-code`, `codex`, `cursor`, `opencode`, `pi`, or `agents` with `--project` |
-| `--no-key` | `install` only: installs the skill and asks for no key |
+| `--no-key` | `install` only: installs the skill and sets up nothing else |
+| `--typesafe` | `install` only: stores a TypeSafe key when none is there, then asks hosted Jev; without a key nothing changes |
+| `--local [model]` | `install` only: runs that model on this machine, an id or a row number from `jevelry models --local`, or shows the list to choose from |
+| `--local-url <url>` | `install` only: asks the Jev server that already runs at this URL, after one setup check; no download |
+| `--yes` | `install` only: answers yes to the Homebrew and tight-fit questions, needed without a terminal |
 
 ## Keyboard shortcuts
 
@@ -268,7 +356,7 @@ The footer shows the keys of the screen you are on, and `?` lists them all.
 | `v` | Review |
 | `y` | History |
 | `t` | pick a jevel to try |
-| `ctrl+p` | command palette: screens, theme, help, quit and every jevel |
+| `ctrl+p` | command palette: screens, Set up Jev, theme, help, quit and every jevel |
 | `?` | help |
 | `q` | quit; asks first when a state you edited in Try would be lost |
 
@@ -282,6 +370,7 @@ The footer shows the keys of the screen you are on, and `?` lists them all.
 | `enter` | open the selected row |
 | `t` `v` `d` `y` | open that row directly |
 | `t` or `enter` on an empty log | try `ticket-triage` with a sample ticket |
+| `s` | set up Jev: a TypeSafe key or a model on this machine, while jevelry is not set up |
 
 ### Dashboard
 
@@ -358,10 +447,13 @@ In the report, `j` `k` scroll, `J` cycles the jevel and `esc` goes back to the l
 
 | Dialog | Key | Action |
 |---|---|---|
-| commands, pick a jevel, theme | typing | filter the list |
-| commands, pick a jevel, theme | `↑` `↓` or `ctrl+n` `ctrl+p` | move |
-| commands, pick a jevel, theme | `enter` | choose |
-| commands, pick a jevel, theme | `esc` | close |
+| commands, pick a jevel, theme, set up Jev | typing | filter the list |
+| commands, pick a jevel, theme, set up Jev | `↑` `↓` or `ctrl+n` `ctrl+p` | move |
+| commands, pick a jevel, theme, set up Jev | `enter` | choose |
+| commands, pick a jevel, theme, set up Jev | `esc` | close |
+| set up Jev | `enter` on a model that won't fit | says how much memory it needs and installs nothing |
+| install a model | `enter` | install it |
+| install a model | `esc` | back to the list |
 | help | `esc`, `?` or `enter` | close |
 | set threshold | `enter` | write the threshold, copying a shipped jevel into `./jevels` first |
 | set threshold | `esc` | cancel |
@@ -450,6 +542,29 @@ Every ask goes into `$JEVELRY_HOME/log.jsonl` with its answers, its decisions an
 
 Once a question has 20 reviewed decisions, the Jevel screen proposes a lower act threshold when the decisions above it were right at least 90% of the time and at least as often as at the current threshold, less two points. `T` writes it into the jevel file. A jevel that came with jevelry is first copied into `./jevels`, and from then on your project uses that copy.
 
+## Local models
+
+`jevelry models --local` and `jevelry install --local` read the list live from Hugging Face each time, and these rules decide what you see:
+
+- **Official builds only.** The models come from ggml-org, the llama.cpp project, which converts and checks them, and from LiquidAI, which publishes its own. Test repos are left out, and so is a model whose decision type llama-server cannot serve. Only the Q8_0 and Q4_K_M files are offered.
+- **Ranking.** Scores come from the [Jev Decision Index](https://huggingface.co/spaces/multimodalart/jev-decision-index) 0.3.2, the full score corrected for chance, as published on 2026-10-16. Hosted Jev 1.14 scores 61.5 on it. The index measures the 16-bit models, so the Q8_0 and Q4_K_M files you download may score a little lower. A model the index does not list has no score and comes last among the models with the same fit.
+- **Quant.** The Q8_0 file when it runs well here, else Q4_K_M. Prompt speed on Apple's GPU is the same for both, and Q4_K_M changes about 5% of vLLM-SR d3-flash's answers.
+- **Memory.** `needs` is the file plus the context and working memory at 8192 tokens: 1.5 GiB, 2.5 GiB for a model above 15B parameters, and 3.8 GiB more for a Kev model. A Mac's GPU may use two thirds of its memory up to 32 GB and three quarters above that (Metal's limit on macOS 15 and earlier; macOS 26 allows a little more), an NVIDIA GPU its own memory, and a machine with neither three quarters of its memory. llama.cpp keeps 1 GiB of that free. A model `runs well` when it needs at most 90% of the rest, is `tight` up to the whole amount and `won't fit` above it.
+- **Speed.** `s/question` is a question of about 500 prompt tokens, worked out from the published llama.cpp prompt-processing numbers of a 7B model on this chip and scaled by the model's size: discussion [#4167](https://github.com/ggml-org/llama.cpp/discussions/4167) for Apple Silicon and [#15013](https://github.com/ggml-org/llama.cpp/discussions/15013) for NVIDIA. Expect it to be off by up to about 30%. It is `-` for a chip those tables leave out, a machine with no supported GPU and a model that won't fit.
+- **Download.** The table estimates the size from the parameter count. The install reads the exact size and the sha256 from Hugging Face and checks the fit again before it downloads.
+
+On macOS jevelry reads the chip name and the memory from Node and starts no program to probe the GPU. On Linux it asks `nvidia-smi` for an NVIDIA GPU. Local models run on macOS and Linux; on Windows jevelry cannot yet tell its own model server from another program, so it refuses to start one there. `JEVELRY_MACHINE` replaces the detection, for example to see the list for a machine you are about to buy:
+
+```sh
+JEVELRY_MACHINE='{"os":"darwin","chip":"Apple M4 Max","cpus":16,"ramBytes":68719476736,"darwinMajor":25,"gpu":null}' jevelry models --local
+```
+
+The install and the server's start still check the model against this machine, so a bigger `JEVELRY_MACHINE` never installs or loads a model this one cannot hold.
+
+The `licence` column comes from each model's card. OpenJev 27B and Bespoke Nimble 9B v3 are CC BY-NC 4.0, which allows non-commercial use only. Liquid d1 is LFM 1.0, which allows commercial use under $10M revenue. Read the column before you use a model for work.
+
+OpenJev 27B is not on the index; its card reports 84.0% against hosted Jev's 85.4% on its own 10,000 questions. It needs about 22.6 GB at Q4_K_M, so it takes a Mac with 32 GB or a GPU with 24 GB, where it is a tight fit, and it runs well on a Mac with 36 GB or more. OpenJev Flash 9B has no official llama.cpp decision build yet, so jevelry does not offer it.
+
 ## Configuration
 
 ### Environment variables
@@ -457,15 +572,20 @@ Once a question has 20 reviewed decisions, the Jevel screen proposes a lower act
 | Variable | What it does | Default |
 |---|---|---|
 | `TYPESAFE_API_KEY` | your key; read from the environment, then the macOS keychain, then `$JEVELRY_HOME/env` | required |
-| `TYPESAFE_BASE_URL` | the API root, read by the SDK | `https://api.typesafe.ai` |
+| `TYPESAFE_BASE_URL` | the API root, read by the SDK; when set, it wins over a local model | `https://api.typesafe.ai` |
 | `TYPESAFE_DEFAULT_MODEL` | the model the SDK sends when `--model`, the jevel and `JEVELRY_MODEL` name none | `jev-latest` |
 | `TYPESAFE_LOG_LEVEL` | the SDK's log level; its lines go to stderr as `jevelry: sdk:` | the SDK's |
 | `JEVELRY_MODEL` | the model when the jevel pins none | `TYPESAFE_DEFAULT_MODEL` |
-| `JEVELRY_HOME` | where the log, the key file and the TUI settings live | `~/.jevelry` |
+| `JEVELRY_HOME` | where the log, the key file, the TUI settings and the local models live | `~/.jevelry` |
 | `JEVELRY_JEVELS` | more jevel folders, colon separated | none |
-| `JEVELRY_TIMEOUT_MS` | the request timeout, per attempt | `30000` |
+| `JEVELRY_TIMEOUT_MS` | the request timeout, per attempt | `30000`, and `300000` with a local model, whose first ask waits for it to load |
 | `JEVELRY_LOG_STATE` | `1` writes the state itself into each ask line, for `ask`, `run` and `decide` | off, only the hash |
 | `JEVELRY_KEY_STORE` | `file` keeps the key in `$JEVELRY_HOME/env` on macOS too | the keychain on macOS |
+| `JEVELRY_MACHINE` | JSON of a machine (`os`, `chip`, `cpus`, `ramBytes`, `darwinMajor`, `gpu`) that replaces detection, to see the local models for another machine | this machine |
+| `JEVELRY_HF_URL` | the Hugging Face root for the model list and downloads | `https://huggingface.co` |
+| `JEVELRY_LLAMA_SERVER` | the `llama-server` to run | the one on `PATH` |
+| `JEVELRY_BREW` | the `brew` that installs llama.cpp | the one on `PATH` |
+| `JEVELRY_KNOWN_SERVERS` | comma-separated URLs where a Jev server may already run, offered before a download; empty looks for none | `http://127.0.0.1:8741` |
 
 The model an ask uses is the first one set of `--model`, the jevel's `model`, `JEVELRY_MODEL` and `TYPESAFE_DEFAULT_MODEL`.
 
@@ -490,6 +610,12 @@ A command started by `jevelry run` gets these, and `TYPESAFE_API_KEY` is removed
 | `env` | the key, when the keychain is unavailable |
 | `tui.json` | the TUI theme, `dark` or `light`, set from `ctrl+p` |
 | `jevels/` | your own jevels for every project on this machine |
+| `config.json` | which way jevelry asks, `typesafe`, `local` or `server`, the local model's file, port and alias, and the running server's `url` and `model`; nothing secret |
+| `models/` | the downloaded models, one folder per Hugging Face repo |
+| `server.json` | the process, port and model of the `llama-server` jevelry started, so `jevelry stop` stops that one and nothing else; it stays until that process has exited |
+| `llama-server.log` | what `llama-server` printed, appended on every start |
+
+jevelry starts the local server as `llama-server -m <model> --host 127.0.0.1 --port <port> --alias local/<file> --no-webui --no-mmproj -c 8192 -b 4096 -ub 4096 -np 1 --sleep-idle-seconds 300`. The port is picked at install and stays the same. A chosen local model or server wins over a key, and a `TYPESAFE_BASE_URL` in the environment wins over both.
 
 ## When it fails
 
@@ -503,11 +629,19 @@ A command started by `jevelry run` gets these, and `TYPESAFE_API_KEY` is removed
 | 3 | rate limited or overloaded, with `retry_after_ms` when TypeSafe gave one |
 | 4 | the key is missing or refused, and no request was made |
 | 5 | over the token budget, and no request was made |
-| 6 | the network or TypeSafe's servers |
+| 6 | the network, TypeSafe's servers, or a local model server that cannot start or answer, with the reason |
 | 7 | TypeSafe answered a shape this build cannot read |
 | 9 | `jevelry run` only: Jev marked the call and nobody confirmed it, so the command stayed put |
 
 When `jevelry run` runs a command, it exits with that command's exit code.
+
+With a local model, exit 6 says what to do: run `jevelry install --local` when `llama-server` or the model file is missing, read the last lines of `llama-server.log` it quotes when the server stopped while starting, or pick a new port with `jevelry install --local` when another program answers on the model's port. Two refusals keep a second model out of memory, and `jevelry stop` clears both: "a different local model is running" when a server for another model is up, for example a program still holding the config from before a switch or an install that was interrupted while its server exits, and "a local model server jevelry did not record is running (pid N)" when a jevelry was killed between starting a server and writing it down. An error from the server itself names the local model server, not TypeSafe, and points at `llama-server.log` in `$JEVELRY_HOME`. An error from a Jev server jevelry did not start names it as "the local Jev server at <url>", whose log is wherever it was started.
+
+`jevelry install --local` exits 2 when it does not know the model you named, or when you named none and there is no terminal to choose on. It exits 1 when the setup cannot finish: the model won't fit, llama.cpp is missing or too old and Homebrew was not allowed, Hugging Face cannot be reached, the disk is too full, the download does not match its sha256, or the previous model's server did not stop.
+
+`jevelry install --local-url` exits 1 with "no Jev server answers at <url>" when nothing at the URL lists a model, and with the reason when the server fails the setup check or jevelry's own server does not stop; it changes nothing then.
+
+`jevelry stop` exits 1 with "the local model server (pid N) did not stop" when a server is still running 5 seconds after it was killed; stop that process yourself.
 
 ## Architecture
 
@@ -523,10 +657,16 @@ When `jevelry run` runs a command, it exits with that command's exit code.
 | `src/log.ts` | the log, outcomes and runs |
 | `src/report.ts` | agreement per question |
 | `src/key.ts`, `src/install.ts` | the key store and the skill installer |
+| `src/config.ts` | `config.json`: whether jevelry asks TypeSafe or a local model |
+| `src/catalog.ts` | the decision models on Hugging Face, their scores and their ranking for this machine |
+| `src/estimate.ts` | this machine, and what a model needs and how fast it answers on it |
+| `src/download.ts` | resumable model downloads, checked against their sha256 |
+| `src/server.ts` | starts, checks and stops the local `llama-server` |
+| `src/setup.ts` | the installer the CLI and the TUI share: llama.cpp, the download, the config and the setup check |
 | `src/protocol.ts` | the answer document and the exit codes |
 | `src/tui/` | the full-screen view, built with ink |
 
-An ask flows like this: the jevel is found and checked, the state is checked against the jevel's required keys, questions that repeat over a list are expanded, the request is estimated against the budget, and then the official `@typesafe-ai/sdk` sends every question in one request. Each answer is checked against its question, turned into a decision by the thresholds and written to stdout, and the ask is appended to the log.
+An ask flows like this: the jevel is found and checked, the state is checked against the jevel's required keys, questions that repeat over a list are expanded, the request is estimated against the budget, and then the official `@typesafe-ai/sdk` sends every question in one request, to TypeSafe or to the local `llama-server`, which the first ask starts. Each answer is checked against its question, turned into a decision by the thresholds and written to stdout, and the ask is appended to the log.
 
 ## Development
 
@@ -556,7 +696,7 @@ npm run test:live -- tests/live/jevels.test.ts
 
 ## How do we know you can trust it
 
-371 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
+519 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. The local-model tests among them use a fake `llama-server`, a fake jevd, a fake Homebrew and a fake Hugging Face, so no test downloads a model or starts a real server, and they check that a 27B model is never offered as runnable on a 24 GB Mac. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## License
 

@@ -3,14 +3,14 @@ import { dirname, join } from "node:path";
 import type { TypeSafeClient } from "@typesafe-ai/sdk";
 import { Box, type Key, Text, useInput, usePaste } from "ink";
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import { configured } from "../config.js";
 import { type Decisions, jevel as loadDecider } from "../decide.js";
 import { type Jevel, checkState, expandQuestions, isEntry, loadJevel } from "../jevel.js";
-import { resolveKey } from "../key.js";
 import type { Answer, FallBackAnswer } from "../protocol.js";
 import { bar } from "./charts.js";
 import { ChromeContext, type Hint, moves, useChrome } from "./dialog.js";
 import { answerWord, hasAnswer, wrapLine } from "./history.js";
-import { PRICE_PER_MTOK, formatCost } from "./home.js";
+import { formatCost, priceOf } from "./home.js";
 import { optionsOf } from "./review.js";
 import { decisionColor, useTheme } from "./theme.js";
 
@@ -98,8 +98,10 @@ const SPIN = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "�
 function answerLines(d: Decisions, ms: number, width: number, theme: ReturnType<typeof useTheme>): Line[] {
   const out: Line[] = [];
   const tokens = d.usage ? `${d.usage.input_tokens + d.usage.output_tokens} tokens · ` : "";
-  const price = d.model === null ? undefined : PRICE_PER_MTOK[d.model];
-  const cost = d.usage && price !== undefined ? `${formatCost({ dollars: (d.usage.input_tokens / 1_000_000) * price, noUsage: 0, noPrice: 0 })} · ` : "";
+  const price = priceOf(d.model);
+  // A local model is free with or without usage; a priced one needs the usage to be summed.
+  const dollars = price === 0 ? 0 : d.usage && price !== undefined ? (d.usage.input_tokens / 1_000_000) * price : null;
+  const cost = dollars === null ? "" : `${formatCost({ dollars, noUsage: 0, noPrice: 0 })} · `;
   out.push(...wrapLine(`${d.model ?? "no model"} · ${(ms / 1000).toFixed(1)}s · ${tokens}${cost}${d.logId !== null ? "logged" : "not logged"}`, width).map((text) => ({ text, color: theme.muted })));
   if (d.error) {
     out.push({ text: " ", color: theme.text });
@@ -170,9 +172,9 @@ export function TryView(props: {
   const [started, setStarted] = useState(0);
   const [now, setNow] = useState(Date.now());
   const [scroll, setScroll] = useState(0);
-  // Read on open and again on each enter (the keychain lookup starts a process): a key stored meanwhile counts at once.
-  const hasKey = (): boolean => props.client !== undefined || resolveKey(process.env, props.home) !== undefined;
-  const [noKey, setNoKey] = useState(() => !hasKey());
+  // Read on open and again on each enter (the keychain lookup starts a process): a key or a model set up meanwhile counts at once.
+  const isSetUp = (): boolean => props.client !== undefined || configured(process.env, props.home) !== null;
+  const [notSetUp, setNotSetUp] = useState(() => !isSetUp());
 
   useEffect(() => {
     if (mode !== "asking") return undefined;
@@ -194,8 +196,8 @@ export function TryView(props: {
     if (!("jevel" in loaded)) return;
     const c = checkDraft(draftRef.current.text, loaded.jevel);
     if (!("state" in c)) return;
-    const missing = !hasKey();
-    setNoKey(missing);
+    const missing = !isSetUp();
+    setNotSetUp(missing);
     if (missing) return;
     const t0 = Date.now();
     setStarted(t0);
@@ -242,8 +244,9 @@ export function TryView(props: {
   const room = Math.max(3, props.height - 3);
   const status: Line[] = "error" in checked
     ? wrapLine(checked.error, left).slice(0, 3).map((text) => ({ text, color: theme.error }))
-    : noKey
-      ? wrapLine("No TypeSafe key yet. Run npx jevelry install in another terminal, then press enter here.", left).slice(0, 3).map((text) => ({ text, color: theme.mark }))
+    : notSetUp
+      // Four lines: at 80 columns the whole sentence, the way out included, takes them.
+      ? wrapLine("Jev is not set up yet. Press s on the start screen, or run npx jevelry install in another terminal, then press enter here.", left).slice(0, 4).map((text) => ({ text, color: theme.mark }))
       : [{ text: "valid state · enter asks Jev", color: theme.muted }];
   const editorRows = Math.max(1, room - status.length - 1);
   const rows = layout(draft.text, left);

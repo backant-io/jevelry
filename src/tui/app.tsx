@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { Box, Text, render, useApp, useInput, useWindowSize } from "ink";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { dirname, join } from "node:path";
+import { configured } from "../config.js";
 import { mergeThresholds } from "../decision.js";
 import { type Jevel, listJevels, loadJevel } from "../jevel.js";
 import { LOG_FILE, type LogLine, readLog } from "../log.js";
@@ -13,6 +14,7 @@ import { JevelView, TuneDialog, type QuestionView, questionViews, tunePlan } fro
 import { DetailView, ReviewView } from "./review.js";
 import { type Place, placeOf, proposeAct, tallies } from "./tuning.js";
 import { HomeView, StartView } from "./home.js";
+import { SetupDialog, type SetupSeam } from "./setup.js";
 import { TryView } from "./try.js";
 import { MEANINGS, THEMES, ThemeContext, type ThemeName, loadThemeName, saveThemeName, useTheme } from "./theme.js";
 
@@ -110,7 +112,7 @@ async function readCounted(home: string): Promise<{ lines: LogLine[]; skipped: n
   return { lines, skipped };
 }
 
-type Command = { go: Screen } | { jevel: string } | { pick: true } | { theme: true } | { help: true } | { quit: true };
+type Command = { go: Screen } | { jevel: string } | { pick: true } | { setup: true } | { theme: true } | { help: true } | { quit: true };
 
 export function App(props: {
   home: string;
@@ -132,6 +134,8 @@ export function App(props: {
   shipped?: string;
   /** What Try asks Jev through; tests pass one that talks to a local server. */
   client?: TypeSafeClient;
+  /** What the setup dialog lists, detects and installs with; tests replace it, runTui passes nothing. */
+  setup?: SetupSeam;
 }): React.JSX.Element {
   const { exit } = useApp();
   const window = useWindowSize();
@@ -142,7 +146,11 @@ export function App(props: {
   const [skipped, setSkipped] = useState(props.skipped ?? 0);
   const [screen, setScreen] = useState<Screen>(props.screen ?? "start");
   const [themeName, setThemeName] = useState<ThemeName>(() => loadThemeName(props.home));
-  const [dialog, setDialog] = useState<null | "palette" | "theme" | "help" | "tune" | "pick" | "quit">(null);
+  const [dialog, setDialog] = useState<null | "palette" | "theme" | "help" | "tune" | "pick" | "setup" | "quit">(null);
+  /** Whether Jev can be asked (a key, a local model, or a client passed in); until then the start screen leads with setup. */
+  const isSetUp = (): boolean => props.client !== undefined || configured(process.env, props.home) !== null;
+  const [setUp, setSetUp] = useState(isSetUp);
+  const [setupKeys, setSetupKeys] = useState<Hint[]>([]);
   /** The jevel Try asks, and the state text left in Try per jevel, kept while jevelry runs. */
   const [tryName, setTryName] = useState<string | null>(props.screen === "try" ? props.jevel ?? null : null);
   const drafts = useRef(new Map<string, { text: string; edited: boolean }>()).current;
@@ -246,6 +254,8 @@ export function App(props: {
 
   const go = (next: Screen): void => {
     setScreen(next);
+    // A key stored from another terminal meanwhile counts on the way back, and the setup row goes.
+    if (next === "start" && !setUp) setSetUp(isSetUp());
     if (next === "history") {
       setHistoryView("list");
       setFromHome(false);
@@ -261,6 +271,7 @@ export function App(props: {
     else if ("theme" in c) setDialog("theme");
     else if ("help" in c) setDialog("help");
     else if ("pick" in c) setDialog("pick");
+    else if ("setup" in c) setDialog("setup");
     else quit();
   };
   useInput((input, key) => {
@@ -277,6 +288,8 @@ export function App(props: {
     else if (input === "d") go("dashboard");
     else if (input === "v") go("review");
     else if (input === "y") go("history");
+    // s is the setup row's key, there only while Jev is not set up; the palette's "Set up Jev" works everywhere.
+    else if (input === "s" && screen === "start" && !setUp) setDialog("setup");
     // On an empty log the start screen's first row is ticket-triage with its sample ticket, and t is that row's key.
     else if (input === "t" && screen === "start" && !lines.some((l) => l.kind === "ask")) openTry("ticket-triage");
     else if (input === "t") setDialog("pick");
@@ -335,7 +348,7 @@ export function App(props: {
   } else {
     content = (
       <StartView lines={lines} now={(props.now ?? (() => new Date()))()} version={version} width={columns} height={body} active={active} cursor={startCursor} onCursor={setStartCursor}
-        onTry={openTry} onPick={() => setDialog("pick")} onGo={go} />
+        onTry={openTry} onPick={() => setDialog("pick")} onGo={go} {...(setUp ? {} : { onSetup: () => setDialog("setup") })} />
     );
   }
 
@@ -346,6 +359,8 @@ export function App(props: {
     { label: "Review marked decisions", value: { go: "review" }, hint: "v" },
     { label: "History", value: { go: "history" }, hint: "y" },
     { label: "Try a jevel", value: { pick: true }, hint: "t" },
+    // Always here, so a person set up with one backend can switch to the other later.
+    { label: "Set up Jev", value: { setup: true }, hint: "key or local model" },
     { label: "Switch theme", value: { theme: true }, hint: themeName },
     { label: "Help", value: { help: true }, hint: "?" },
     { label: "Quit", value: { quit: true }, hint: "q" },
@@ -361,7 +376,7 @@ export function App(props: {
           <Box height={body} flexDirection="column" overflow="hidden">{content}</Box>
           <Footer
             hints={dialog === null ? hints : []}
-            extra={dialog === "help" ? [["esc", "close"]] : dialog === "tune" ? tuneKeys : dialog === "quit" ? [["enter", "quit"], ["esc", "stay"]] : dialog !== null ? [["↑↓", "move"], ["enter", "choose"], ["esc", "close"]] : capture ? [] : [["ctrl+p", "commands"], ["?", "help"]]}
+            extra={dialog === "help" ? [["esc", "close"]] : dialog === "tune" ? tuneKeys : dialog === "setup" ? setupKeys : dialog === "quit" ? [["enter", "quit"], ["esc", "stay"]] : dialog !== null ? [["↑↓", "move"], ["enter", "choose"], ["esc", "close"]] : capture ? [] : [["ctrl+p", "commands"], ["?", "help"]]}
             home={home} version={version} width={columns} toast={toast} />
           {dialog === "palette" ? <SelectDialog title="Commands" items={palette()} columns={columns} rows={rows} onSelect={run} onClose={() => setDialog(null)} /> : null}
           {dialog === "theme" ? (
@@ -386,6 +401,11 @@ export function App(props: {
                 // A second enter from the same press must not fall through to the Jevel screen.
                 setQuiet(true); setTimeout(() => setQuiet(false), 300);
               }} />
+          ) : null}
+          {dialog === "setup" ? (
+            <SetupDialog home={props.home} columns={columns} rows={rows} {...(props.setup ? { seam: props.setup } : {})} onKeys={setSetupKeys} onToast={say}
+              onDone={(name) => { setDialog(null); setSetUp(true); say(`Jev now runs on ${name} on this machine`); }}
+              onClose={() => { setDialog(null); if (!setUp) setSetUp(isSetUp()); }} />
           ) : null}
           {dialog === "pick" ? (
             <SelectDialog title="Try a jevel" items={shipped.map((name) => ({ label: name, value: name, hint: questionCount(loaded(name)) }))} columns={columns} rows={rows}
