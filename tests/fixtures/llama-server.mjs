@@ -9,8 +9,12 @@ if (args.includes("--version")) {
   process.stderr.write(`version: 0.7.0 (build ${process.env.FAKE_LLAMA_BUILD ?? 11669}, commit 620d222)\n`);
   process.exit(0);
 }
-// One JSON line per start, so a test can assert the launch args and count the starts.
-if (process.env.FAKE_LLAMA_ARGV_FILE) appendFileSync(process.env.FAKE_LLAMA_ARGV_FILE, `${JSON.stringify(args)}\n`);
+// One JSON line per start, so a test can assert the launch args, count the starts, kill what started
+// whatever the code under test did, and see which secrets and LLAMA_ settings reached the server.
+if (process.env.FAKE_LLAMA_ARGV_FILE) {
+  const env = Object.keys(process.env).filter((key) => key === "TYPESAFE_API_KEY" || key.startsWith("LLAMA_"));
+  appendFileSync(process.env.FAKE_LLAMA_ARGV_FILE, `${JSON.stringify({ pid: process.pid, args, env })}\n`);
+}
 const arg = (name) => {
   const at = args.indexOf(name);
   return at === -1 ? undefined : args[at + 1];
@@ -28,7 +32,7 @@ if (process.env.FAKE_LLAMA_FAIL) {
   process.exit(1);
 }
 // A safety net: a fake a test forgot to stop ends by itself instead of outliving the suite.
-setTimeout(() => process.exit(0), Number(process.env.FAKE_LLAMA_LIFETIME_MS ?? 120000));
+setTimeout(() => process.exit(0), Number(process.env.FAKE_LLAMA_LIFETIME_MS ?? 30000));
 process.on("SIGTERM", () => process.exit(0));
 
 const loadMs = Number(process.env.FAKE_LLAMA_LOAD_MS ?? 300);
@@ -54,6 +58,7 @@ const server = createServer((req, res) => {
       });
     }
     if (req.method !== "POST" || req.url !== "/v1/systemone") return json(404, { error: { code: 404, message: "File Not Found", type: "not_found_error" } });
+    if (process.env.FAKE_LLAMA_ANSWER_STATUS) return json(Number(process.env.FAKE_LLAMA_ANSWER_STATUS), { error: { message: "fake failure" } });
     const body = JSON.parse(raw);
     const answers = {};
     for (const [name, q] of Object.entries(body.questions)) {
@@ -75,4 +80,7 @@ server.on("error", (error) => {
   process.stderr.write(`main: couldn't bind HTTP server socket, hostname: 127.0.0.1, port: ${port}: ${error.message}\n`);
   process.exit(1);
 });
-server.listen(port, "127.0.0.1", () => { process.stdout.write(`main: server is listening on http://127.0.0.1:${port}\n`); });
+// A delay before listening is a server still starting: the port refuses every connection until then.
+setTimeout(() => {
+  server.listen(port, "127.0.0.1", () => { process.stdout.write(`main: server is listening on http://127.0.0.1:${port}\n`); });
+}, Number(process.env.FAKE_LLAMA_LISTEN_DELAY_MS ?? 0));

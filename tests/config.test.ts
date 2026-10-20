@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -32,6 +33,29 @@ describe("readConfig and writeConfig", () => {
     writeFileSync(join(dir, "config.json"), JSON.stringify({ ...raw, future: 1 }));
     writeConfig(dir, { backend: "typesafe" });
     expect(readConfig(dir)).toEqual({ backend: "typesafe", local: LOCAL, future: 1 });
+  });
+
+  // An ask reads the config while an install writes it. Half a file reads as no config, and that ask would
+  // send a state meant for the model on this machine to hosted Jev.
+  it("never shows a reader in another process half a file while it is written", async () => {
+    const dir = home();
+    const file = join(dir, "config.json");
+    writeConfig(dir, { backend: "local", local: LOCAL });
+    // Reads the way readConfig does, as fast as it can, and counts what does not parse.
+    const reader = spawn(process.execPath, ["-e", `
+      const fs = require("node:fs");
+      let torn = 0;
+      for (const end = Date.now() + 1500; Date.now() < end;) {
+        try { JSON.parse(fs.readFileSync(${JSON.stringify(file)}, "utf8")); } catch { torn++; }
+      }
+      process.stdout.write(String(torn));
+    `]);
+    let out = "";
+    reader.stdout.on("data", (chunk: Buffer) => { out += chunk.toString(); });
+    const done = new Promise((resolve) => reader.on("close", resolve));
+    for (const end = Date.now() + 1500; Date.now() < end;) writeConfig(dir, { backend: "local", local: LOCAL });
+    await done;
+    expect(out).toBe("0");
   });
 });
 

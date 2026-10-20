@@ -1,10 +1,10 @@
 import { createHash, type Hash } from "node:crypto";
-import { createReadStream, createWriteStream, existsSync, mkdirSync, renameSync, statSync, statfsSync, unlinkSync } from "node:fs";
+import { createReadStream, createWriteStream, existsSync, mkdirSync, renameSync, rmSync, statSync, statfsSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream } from "node:stream/web";
-import { hfJson } from "./catalog.js";
+import { hfJson, safePath } from "./catalog.js";
 import { GIB } from "./estimate.js";
 
 /** A file on Hugging Face as its tree lists it: the exact size and the sha256 the download is checked against. */
@@ -32,10 +32,14 @@ export async function remoteFile(repo: string, file: string, options: { hfUrl: s
 
 /** One directory per repo under `$JEVELRY_HOME/models`, so two repos with the same file name never collide. */
 export function modelPath(home: string, repo: string, file: string): string {
+  for (const [name, segments] of [[repo, 2], [file, undefined]] as const) {
+    if (!safePath(name, segments)) throw new Error(`refusing an unsafe model path from Hugging Face: ${name}`);
+  }
   return join(home, "models", ...repo.split("/"), file);
 }
 
 const gb = (bytes: number): string => `${(bytes / 1e9).toFixed(1)} GB`;
+const stopped = (file: string, done: number, total: number): string => `the download of ${file} stopped at ${gb(done)} of ${gb(total)}; run the install again to resume it`;
 
 /** 1 GiB stays free after the download: a disk filled to the last byte breaks more than this install. */
 export function checkSpace(remaining: number, free: number, dir: string): void {
@@ -94,30 +98,42 @@ export async function downloadFile(remote: RemoteFile, dest: string, options: {
     }
     const flags = done > 0 ? "a" : "w";
     let last = 0;
-    await pipeline(
-      Readable.fromWeb(response.body as ReadableStream<Uint8Array>),
-      async function* (source: AsyncIterable<Buffer>) {
-        for await (const chunk of source) {
-          hash.update(chunk);
-          done += chunk.length;
-          const now = Date.now();
-          if (now - last >= 250) {
-            last = now;
-            progress(done, total);
+    try {
+      await pipeline(
+        Readable.fromWeb(response.body as ReadableStream<Uint8Array>),
+        async function* (source: AsyncIterable<Buffer>) {
+          for await (const chunk of source) {
+            done += chunk.length;
+            // More than the tree says is not this file: the disk is not filled with it.
+            if (done > total) throw new Error(`${remote.file} is larger than Hugging Face says`);
+            hash.update(chunk);
+            const now = Date.now();
+            if (now - last >= 250) {
+              last = now;
+              progress(done, total);
+            }
+            yield chunk;
           }
-          yield chunk;
-        }
-      },
-      createWriteStream(part, { flags }),
-    );
+        },
+        createWriteStream(part, { flags }),
+      );
+    } catch (error) {
+      if (done > total) {
+        rmSync(part, { force: true });
+        throw error;
+      }
+      // A connection cut mid-stream: what arrived stays in the part for the next run.
+      if (existsSync(part)) throw new Error(stopped(remote.file, done, total), { cause: error });
+      throw error;
+    }
   }
   finish(remote, dest, part, done, hash, progress);
 }
 
 /** A short part is a cut connection and stays for the next resume; a wrong hash is a bad file and goes. */
 function finish(remote: RemoteFile, dest: string, part: string, done: number, hash: Hash, progress: (done: number, total: number) => void): void {
-  if (done < remote.bytes) throw new Error(`the download of ${remote.file} stopped at ${gb(done)} of ${gb(remote.bytes)}; run the install again to resume it`);
-  if (done > remote.bytes || hash.digest("hex") !== remote.sha256) {
+  if (done < remote.bytes) throw new Error(stopped(remote.file, done, remote.bytes));
+  if (hash.digest("hex") !== remote.sha256) {
     unlinkSync(part);
     throw new Error(`downloaded ${remote.file} does not match its sha256 on Hugging Face`);
   }

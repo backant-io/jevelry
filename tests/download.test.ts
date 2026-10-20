@@ -39,6 +39,13 @@ describe("downloadFile", () => {
     expect(modelPath("/h", REPO, FILE)).toBe(join("/h", "models", "ggml-org", "vllm-d3-flash-GGUF", FILE));
   });
 
+  // The repo and file names come from Hugging Face; one with "../" in it would write outside the models folder.
+  it("refuses a repo or file name that could leave the models folder", () => {
+    for (const [repo, file, named] of [[REPO, "../x.gguf", "../x.gguf"], [REPO, "..", ".."], ["ggml-org/..", FILE, "ggml-org/.."], ["a/b/c", FILE, "a/b/c"], [REPO, "/etc/x", "/etc/x"]]) {
+      expect(() => modelPath("/h", repo!, file!)).toThrow(`refusing an unsafe model path from Hugging Face: ${named}`);
+    }
+  });
+
   // The file only takes its real name once verified, so a half-written file is never mistaken for a model.
   it("downloads, verifies and renames the part, reporting progress to the end", async () => {
     const dest = modelPath(home(), REPO, FILE);
@@ -70,15 +77,25 @@ describe("downloadFile", () => {
   });
 
   // A cut connection is the common failure: the bytes that arrived stay for the next run.
-  it("keeps the part when the connection drops, and the next run resumes it", async () => {
+  it("keeps the part when the connection drops, says to run the install again, and the next run resumes it", async () => {
     const dest = modelPath(home(), REPO, FILE);
     hf.behaviour.cutAt = 3000;
-    await expect(downloadFile(remote(), dest, { hfUrl: hf.url })).rejects.toThrow();
+    const error = await downloadFile(remote(), dest, { hfUrl: hf.url }).catch((e: unknown) => e);
+    expect((error as Error).message).toBe(`the download of ${FILE} stopped at 0.0 GB of 0.0 GB; run the install again to resume it`);
+    expect((error as Error).cause).toBeInstanceOf(Error);
     expect(existsSync(`${dest}.part`)).toBe(true);
     delete hf.behaviour.cutAt;
     await downloadFile(remote(), dest, { hfUrl: hf.url });
     expect(downloads().at(-1)?.range).toMatch(/^bytes=\d+-$/);
     expect(readFileSync(dest)).toEqual(fileBytes(FILE));
+  });
+
+  // A body longer than the tree says is not the file that was checked: it must not fill the disk, and no part of it is worth resuming.
+  it("cuts a body larger than Hugging Face says and deletes the part", async () => {
+    const dest = modelPath(home(), REPO, FILE);
+    await expect(downloadFile({ ...remote(), bytes: 3000 }, dest, { hfUrl: hf.url })).rejects.toThrow(`${FILE} is larger than Hugging Face says`);
+    expect(existsSync(`${dest}.part`)).toBe(false);
+    expect(existsSync(dest)).toBe(false);
   });
 
   // A file that does not match its published hash is not the model, and resuming it could never match.

@@ -213,7 +213,7 @@ jevelry starts `llama-server` on `127.0.0.1` on the first ask and leaves it runn
 
 In `jevelry tui`, press `s` on the start screen or choose `Set up Jev` in `ctrl+p`, then `A model on this machine`. The dialog reads the models from Hugging Face and lists them in the same order, each with its download, fit, score and seconds per question. Enter on a model shows its details, its licence and whether Homebrew will install llama.cpp, and enter again installs it while the dialog shows each step and how far the download is. Once it is done, the start screen drops its setup row. `TypeSafe, hosted` tells you to run `npx jevelry install --typesafe` in a terminal or to export `TYPESAFE_API_KEY`, since the TUI does not take a key itself.
 
-`jevelry install --typesafe` goes back to hosted Jev. The model stays on disk, so `jevelry install --local <id>` switches back without a new download.
+`jevelry install --typesafe` goes back to hosted Jev once there is a key, asking for one when there is none, and stops the local server. Without a key it changes nothing. The model stays on disk, so `jevelry install --local <id>` switches back without a new download.
 
 ## Command-line reference
 
@@ -320,7 +320,7 @@ With a local model set up and no `TYPESAFE_BASE_URL`, `jevelry models` prints th
 | `--project` | installs into this project (`.claude/skills` and `.agents/skills`) |
 | `--agent <names...>` | only these agents: `claude-code`, `codex`, `cursor`, `opencode`, `pi`, or `agents` with `--project` |
 | `--no-key` | `install` only: installs the skill and sets up nothing else |
-| `--typesafe` | `install` only: asks hosted Jev, then stores a TypeSafe key when none is there |
+| `--typesafe` | `install` only: stores a TypeSafe key when none is there, then asks hosted Jev; without a key nothing changes |
 | `--local [model]` | `install` only: runs that model on this machine, an id or a row number from `jevelry models --local`, or shows the list to choose from |
 | `--yes` | `install` only: answers yes to the Homebrew and tight-fit questions, needed without a terminal |
 
@@ -540,6 +540,8 @@ On macOS jevelry reads the chip name and the memory from Node and starts no prog
 JEVELRY_MACHINE='{"os":"darwin","chip":"Apple M4 Max","cpus":16,"ramBytes":68719476736,"darwinMajor":25,"gpu":null}' jevelry models --local
 ```
 
+The install and the server's start still check the model against this machine, so a bigger `JEVELRY_MACHINE` never installs or loads a model this one cannot hold.
+
 The `licence` column comes from each model's card. OpenJev 27B and Bespoke Nimble 9B v3 are CC BY-NC 4.0, which allows non-commercial use only. Liquid d1 is LFM 1.0, which allows commercial use under $10M revenue. Read the column before you use a model for work.
 
 OpenJev 27B is not on the index; its card reports 84.0% against hosted Jev's 85.4% on its own 10,000 questions. It needs about 22.6 GB at Q4_K_M, so it takes a Mac with 32 GB or a GPU with 24 GB, where it is a tight fit, and it runs well on a Mac with 36 GB or more. OpenJev Flash 9B has no official llama.cpp decision build yet, so jevelry does not offer it.
@@ -613,7 +615,7 @@ jevelry starts the local server as `llama-server -m <model> --host 127.0.0.1 --p
 
 When `jevelry run` runs a command, it exits with that command's exit code.
 
-With a local model, exit 6 says what to do: run `jevelry install --local` when `llama-server` or the model file is missing, read the last lines of `llama-server.log` it quotes when the server stopped while starting, or pick a new port with `jevelry install --local` when another program answers on the model's port.
+With a local model, exit 6 says what to do: run `jevelry install --local` when `llama-server` or the model file is missing, read the last lines of `llama-server.log` it quotes when the server stopped while starting, or pick a new port with `jevelry install --local` when another program answers on the model's port. An error from the server itself names the local model server, not TypeSafe, and points at `llama-server.log` in `$JEVELRY_HOME`.
 
 `jevelry install --local` exits 2 when it does not know the model you named, or when you named none and there is no terminal to choose on. It exits 1 when the setup cannot finish: the model won't fit, llama.cpp is missing or too old and Homebrew was not allowed, Hugging Face cannot be reached, the disk is too full, or the download does not match its sha256.
 

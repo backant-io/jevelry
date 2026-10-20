@@ -57,7 +57,7 @@ Each jevel's body says what its state looks like and its `example.json` is a sta
 | Command | What it does |
 |---|---|
 | `npx jevelry install` | installs this skill into every agent found, then asks for the key (skippable) or a model on this machine |
-| `npx jevelry install --typesafe` | asks hosted Jev from now on, and stores a key when none is there |
+| `npx jevelry install --typesafe` | stores a key when none is there, then asks hosted Jev from now on; without a key nothing changes |
 | `npx jevelry install --local [<id>] [--yes]` | runs that model on this machine (an id or a row of `models --local`, `<id>:Q4_K_M` forces the quant), or shows the list to choose from; `--yes` answers the Homebrew and tight-fit questions |
 | `npx jevelry install-skill [--project]` | installs the skill only |
 | `npx jevelry list` | the jevels jevelry can find |

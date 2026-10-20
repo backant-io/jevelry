@@ -138,6 +138,8 @@ export interface AskInput {
 export type AskResult = { ok: true; document: AskDocument } | { ok: false; error: ErrorBody };
 
 export async function ask(input: AskInput): Promise<AskResult> {
+  // A model on this machine answers as local/<file>: its failures are the local server's, not TypeSafe's.
+  const who = input.client.defaultModel?.startsWith("local/") ? "the local model server" : "TypeSafe";
   try {
     // The first check of all: the CLI reads the state as arbitrary JSON, so a number, a boolean or
     // a `null` would otherwise reach the wire and come back a 422 after a paid round trip. The SDK
@@ -184,7 +186,7 @@ export async function ask(input: AskInput): Promise<AskResult> {
     };
     return { ok: true, document };
   } catch (error) {
-    return { ok: false, error: errorBody(error) };
+    return { ok: false, error: errorBody(error, who) };
   }
 }
 
@@ -210,27 +212,31 @@ const body = (code: ErrorCode, message: string, extra: { retry_after_ms?: number
   return out;
 };
 
-export function errorBody(error: unknown): ErrorBody {
+/** `who` names what answered, TypeSafe unless a caller says otherwise. */
+export function errorBody(error: unknown, who = "TypeSafe"): ErrorBody {
+  // The local server's reason is in its log, which its answer does not carry.
+  const transport = (message: string): ErrorBody =>
+    body("transport", who === "TypeSafe" || message.includes("llama-server.log") ? message : `${message}; see llama-server.log in $JEVELRY_HOME`);
   if (error instanceof JevelError) return body("bad_input", error.message, { field: error.field });
   if (error instanceof UnreadableAnswer) return body("unreadable_answer", error.message, { field: error.field });
   if (error instanceof RateLimitError) {
     const retry = error.retryAfterMs ?? retryAfterMs(error.headers);
-    return body("rate_limited", "TypeSafe answered 429 after the SDK's retries", retry === undefined ? {} : { retry_after_ms: retry });
+    return body("rate_limited", `${who} answered 429 after the SDK's retries`, retry === undefined ? {} : { retry_after_ms: retry });
   }
   if (error instanceof InternalServerError && error.status === 529) {
     const retry = retryAfterMs(error.headers);
-    return body("overloaded", "TypeSafe answered 529 (overloaded) after the SDK's retries", retry === undefined ? {} : { retry_after_ms: retry });
+    return body("overloaded", `${who} answered 529 (overloaded) after the SDK's retries`, retry === undefined ? {} : { retry_after_ms: retry });
   }
   if (error instanceof AuthenticationError || error instanceof PermissionDeniedError) {
-    return body("auth", `TypeSafe refused the key: ${error.message}; check TYPESAFE_API_KEY`);
+    return body("auth", `${who} refused the key: ${error.message}; check TYPESAFE_API_KEY`);
   }
   if (error instanceof BadRequestError || error instanceof UnprocessableEntityError) {
-    return body("bad_input", `TypeSafe refused the request: ${error.message}`);
+    return body("bad_input", `${who} refused the request: ${error.message}`);
   }
-  if (error instanceof APIError) return body("transport", `TypeSafe answered ${error.status}: ${error.message}`);
-  if (error instanceof APIConnectionError) return body("transport", error.message);
+  if (error instanceof APIError) return transport(`${who} answered ${error.status}: ${error.message}`);
+  if (error instanceof APIConnectionError) return transport(error.message);
   if (error instanceof TypeSafeError) {
     return /api key/i.test(error.message) ? body("auth", error.message) : body("bad_input", error.message);
   }
-  return body("transport", error instanceof Error ? error.message : String(error));
+  return transport(error instanceof Error ? error.message : String(error));
 }

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type CatalogModel, findModel, hfUrl, licenceLabel, listModels, rank, renderTable } from "../src/catalog.js";
-import { type FakeHf, startHf } from "./fixtures/hf.js";
+import { type FakeHf, ROWS, startHf } from "./fixtures/hf.js";
 import { LINUX_CPU, M2_16, M4_PRO_24 } from "./fixtures/sandbox.js";
 
 let hf: FakeHf;
@@ -46,6 +46,14 @@ describe("listModels", () => {
     expect(licenceLabel("apache-2.0")).toBe("Apache-2.0");
     expect(licenceLabel("mit")).toBe("mit");
     expect(byId("openjev")).toMatchObject({ score: null, note: expect.stringContaining("not on the index") });
+  });
+
+  // A file name with "../" in the listing would be written outside the models folder: it is never offered.
+  it("leaves out files whose names are not plain paths", async () => {
+    const row = { ...ROWS["ggml-org"]![0]!, siblings: [{ rfilename: "../vllm-d3-flash-Q8_0.gguf" }, { rfilename: "vllm-d3-flash-Q4_K_M.gguf" }] };
+    const listing = (async (url: string) => new Response(JSON.stringify(url.includes("author=ggml-org") ? [row] : []))) as unknown as typeof fetch;
+    const [model] = await listModels({ hfUrl: "http://hf.test", fetch: listing });
+    expect(model?.quants.map((q) => q.file)).toEqual(["vllm-d3-flash-Q4_K_M.gguf"]);
   });
 
   // The setup cannot go on without the list, so the failure must say where it failed.

@@ -198,10 +198,21 @@ describe("error mapping", () => {
   });
   it("maps 500 and a connection failure to transport", async () => {
     const { fetch } = scriptedFetch([() => jsonResponse(500, "boom")]);
-    expect(await ask({ client: client(fetch), state, questions })).toMatchObject({ ok: false, error: { exit: 6, code: "transport" } });
+    expect(await ask({ client: client(fetch), state, questions })).toMatchObject({ ok: false, error: { exit: 6, code: "transport", message: expect.stringMatching(/^TypeSafe answered 500: [^;]*$/) } });
     const failing = async (): Promise<Response> => {
       throw new TypeError("fetch failed");
     };
     expect(await ask({ client: client(failing), state, questions })).toMatchObject({ ok: false, error: { exit: 6, code: "transport" } });
+  });
+  // A failure in local mode is the server on this machine's, and its reason is in that server's log, not at TypeSafe.
+  it("names the local model server and its log when the client is a local model's", async () => {
+    const local = (fetch: (url: string, init?: RequestInit) => Promise<Response>) =>
+      new TypeSafeClient({ apiKey: "local", fetch, retry: { maxRetries: 0 }, defaultModel: "local/vllm-d3-flash-Q8_0" });
+    const { fetch } = scriptedFetch([() => jsonResponse(500, "boom")]);
+    expect(await ask({ client: local(fetch), state, questions })).toMatchObject({ ok: false, error: { exit: 6, code: "transport", message: expect.stringMatching(/^the local model server answered 500: .*; see llama-server\.log in \$JEVELRY_HOME$/) } });
+    const failing = async (): Promise<Response> => {
+      throw new TypeError("fetch failed");
+    };
+    expect(await ask({ client: local(failing), state, questions })).toMatchObject({ ok: false, error: { exit: 6, message: expect.stringMatching(/; see llama-server\.log in \$JEVELRY_HOME$/) } });
   });
 });

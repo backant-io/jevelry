@@ -1,4 +1,5 @@
-import { chmodSync, mkdtempSync, symlinkSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Machine } from "../../src/estimate.js";
@@ -23,7 +24,10 @@ export function sandboxPath(fakes = true): string {
   return bin;
 }
 
-/** The environment every local-model test runs with: fakes for every binary, the file key store, a temp home. */
+/**
+ * The environment every local-model test runs with: fakes for every binary, the file key store, a temp
+ * home, and every fake llama-server recorded in `argv.ndjson` there, so killFakes can end it.
+ */
 export function sandboxEnv(home: string, extra: Record<string, string | undefined> = {}): NodeJS.ProcessEnv {
   return {
     PATH: sandboxPath(),
@@ -32,8 +36,27 @@ export function sandboxEnv(home: string, extra: Record<string, string | undefine
     JEVELRY_KEY_STORE: "file",
     JEVELRY_LLAMA_SERVER: FAKE_LLAMA,
     JEVELRY_BREW: FAKE_BREW,
+    FAKE_LLAMA_ARGV_FILE: join(home, "argv.ndjson"),
     ...extra,
   };
+}
+
+/**
+ * Kills every fake llama-server recorded in `argvFile`, so no fake outlives its suite whatever the code
+ * under test did or failed to do. A pid is killed only while its command line still ends in the
+ * recorded arguments: a pid freed by a fake that already ended may belong to someone else's program now.
+ */
+export function killFakes(argvFile: string): void {
+  if (!existsSync(argvFile)) return;
+  for (const line of readFileSync(argvFile, "utf8").split("\n").filter(Boolean)) {
+    const { pid, args } = JSON.parse(line) as { pid: number; args: string[] };
+    const command = spawnSync("ps", ["-ww", "-o", "command=", "-p", String(pid)], { encoding: "utf8" }).stdout ?? "";
+    try {
+      if (command.trimEnd().endsWith(` ${args.join(" ")}`)) process.kill(pid, "SIGKILL");
+    } catch {
+      // Ended in between.
+    }
+  }
 }
 
 const GIB = 2 ** 30;

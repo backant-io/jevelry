@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { resolveKey } from "./key.js";
 
@@ -21,6 +21,8 @@ export interface LocalModel {
   port: number;
   /** The `--alias` the server answers as, like "local/vllm-d3-flash-Q8_0". */
   alias: string;
+  /** Parameter count, so a launch can check the model still fits; missing in configs written before it was kept. */
+  params?: number;
 }
 
 export interface Config {
@@ -38,10 +40,17 @@ export function readConfig(home: string): Config {
   }
 }
 
-/** Merges over what is there, like the TUI's theme file, so a key this build does not know survives a write. */
+/**
+ * Merges over what is there, like the TUI's theme file, so a key this build does not know survives a write.
+ * Written aside and renamed over the file: an ask reading it meanwhile never sees half a file, which reads
+ * as no config and would send a private state to hosted Jev.
+ */
 export function writeConfig(home: string, update: Config): void {
   mkdirSync(home, { recursive: true });
-  writeFileSync(join(home, CONFIG_FILE), `${JSON.stringify({ ...readConfig(home), ...update }, null, 2)}\n`);
+  const file = join(home, CONFIG_FILE);
+  const aside = `${file}.${process.pid}.tmp`;
+  writeFileSync(aside, `${JSON.stringify({ ...readConfig(home), ...update }, null, 2)}\n`);
+  renameSync(aside, file);
 }
 
 /** The local model, only while the backend is local: switching to TypeSafe keeps the model on disk for a switch back. */

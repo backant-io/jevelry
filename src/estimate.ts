@@ -39,6 +39,11 @@ export function detectMachine(env: NodeJS.ProcessEnv = process.env): Machine {
   };
 }
 
+/** This machine whatever `JEVELRY_MACHINE` says: browsing another machine's picks must never load a model this one cannot hold. */
+export function realMachine(): Machine {
+  return detectMachine({});
+}
+
 function nvidiaGpu(): Machine["gpu"] {
   const found = spawnSync("nvidia-smi", ["--query-gpu=name,memory.total", "--format=csv,noheader,nounits"], { encoding: "utf8", timeout: 3000 });
   if (found.status !== 0) return null;

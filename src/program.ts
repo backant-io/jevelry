@@ -156,20 +156,27 @@ function cliSetupIO(yes: boolean): SetupIO {
   };
 }
 
-/** The existing key flow: a key that is already reachable is left alone, else one is asked for on the terminal. */
-async function storeAKey(): Promise<void> {
+/** The existing key flow: a key that is already reachable is left alone, else one is asked for on the terminal. True when there is a key after it. */
+async function storeAKey(): Promise<boolean> {
   // The installer's job is a first key, not a second copy of one in a place the host did not choose.
   if (resolveKey(process.env, home()) !== undefined) {
     say("a TypeSafe key is already available");
-    return;
+    return true;
   }
   const value = await promptForKey(home());
   if (value === undefined) {
     say(whereToPutTheKey(home()));
-    return;
+    return false;
   }
   const where = storeKey(value, process.env, home());
   say(where === "keychain" ? "key stored in the keychain" : `key stored in ${join(home(), "env")}`);
+  return true;
+}
+
+/** Hosted Jev only once there is a key: switching without one would turn every ask that the local model answers into an auth failure. */
+async function switchToTypesafe(): Promise<void> {
+  if (await storeAKey()) useTypesafe(home());
+  else say("nothing changed");
 }
 
 /**
@@ -500,6 +507,11 @@ export function buildProgram(): Command {
     .option("--local", "the decision models on Hugging Face, ranked, with what each needs and how fast it would answer here")
     .option("--json", "with --local, machine-readable rows")
     .action(async (opts: { local?: boolean; json?: boolean }) => {
+      if (opts.json && !opts.local) {
+        say("--json needs --local");
+        process.exitCode = 2;
+        return;
+      }
       try {
         if (opts.local) {
           const machine = detectMachine(process.env);
@@ -542,7 +554,7 @@ export function buildProgram(): Command {
     .command("stop")
     .description("stop the local model server jevelry started")
     .action(() => {
-      say(stopServer(home()) ? "stopped the local model server" : "no local model server was running");
+      say(stopServer(home()) !== null ? "stopped the local model server" : "no local model server was running");
     });
 
   program
@@ -558,8 +570,7 @@ export function buildProgram(): Command {
       installed(opts.project === true, opts.agent);
       if (!opts.key) return;
       if (opts.typesafe) {
-        useTypesafe(home());
-        await storeAKey();
+        await switchToTypesafe();
         return;
       }
       if (opts.local !== undefined) {
@@ -580,8 +591,7 @@ export function buildProgram(): Command {
       }
       const reply = await questionOnTty("How should jevelry ask Jev?\n  1  TypeSafe, hosted: needs an API key\n  2  A model on this machine: free and private, downloads 1 to 30 GB\nChoose 1 or 2: ");
       if (reply?.trim() === "1") {
-        useTypesafe(home());
-        await storeAKey();
+        await switchToTypesafe();
       } else if (reply?.trim() === "2") {
         await installLocalModel(undefined, opts.yes === true);
       } else {

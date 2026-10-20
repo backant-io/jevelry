@@ -27,16 +27,17 @@ const SDK_LOGGER = { debug: toStderr, info: toStderr, warn: toStderr, error: toS
  * waits for the model to load, so it also is what the installer's setup check asks through.
  */
 export function localClient(home: string, local: LocalModel, env: NodeJS.ProcessEnv): TypeSafeClient {
+  // A first ask also waits for the model to load.
+  const timeout = Number(env.JEVELRY_TIMEOUT_MS ?? 300000);
   return new TypeSafeClient({
-    // A first ask also waits for the model to load.
-    timeout: Number(env.JEVELRY_TIMEOUT_MS ?? 300000),
+    timeout,
     logger: SDK_LOGGER,
     apiKey: "local",
     baseURL: `http://127.0.0.1:${local.port}`,
     defaultModel: local.alias,
     // A local 5xx is a real answer, not a blip a retry would get past.
     retry: { maxRetries: 0 },
-    fetch: localFetch(home, local, env),
+    fetch: localFetch(home, local, env, timeout),
   });
 }
 

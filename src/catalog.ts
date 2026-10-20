@@ -103,6 +103,15 @@ export async function hfJson(url: string, fetcher: typeof fetch = fetch): Promis
 
 const text = (v: unknown): string | undefined => (typeof v === "string" && v !== "" ? v : undefined);
 
+/**
+ * A repo or file name from Hugging Face becomes a path under `$JEVELRY_HOME/models`: every segment is a
+ * plain name, never "." or "..", so no name can write outside it. A repo is exactly owner/name.
+ */
+export function safePath(path: string, segments?: number): boolean {
+  const parts = path.split("/");
+  return (segments === undefined || parts.length === segments) && parts.every((p) => /^[A-Za-z0-9._-]+$/.test(p) && p !== "." && p !== "..");
+}
+
 /** A listing row as a model jevelry can run, or undefined for one it cannot or should not offer. */
 function modelOf(row: HfRow): CatalogModel | undefined {
   const repo = text(row.id);
@@ -113,7 +122,7 @@ function modelOf(row: HfRow): CatalogModel | undefined {
   if (id.includes("for-testing")) return undefined;
   // A clef decision header on another architecture is a broken conversion, not a clef model.
   if (type === "clef" && row.gguf?.architecture !== "clef") return undefined;
-  const files = (row.siblings ?? []).map((s) => text(s.rfilename)).filter((f): f is string => f !== undefined && !f.toLowerCase().includes("mmproj"));
+  const files = (row.siblings ?? []).map((s) => text(s.rfilename)).filter((f): f is string => f !== undefined && safePath(f) && !f.toLowerCase().includes("mmproj"));
   const quants: Quant[] = QUANTS.flatMap(({ quant, suffix, perParam }) => {
     const file = files.find((f) => f.toLowerCase().endsWith(suffix));
     return file ? [{ quant, file, bytes: Math.round(params * perParam) }] : [];

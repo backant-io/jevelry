@@ -1,10 +1,9 @@
 import { Box, Text, useInput } from "ink";
 import { useEffect, useState } from "react";
-import { type CatalogModel, type Choice, INDEX, MIN_BUILD, hfUrl, licenceLabel, listModels, rank } from "../catalog.js";
+import { type CatalogModel, type Choice, INDEX, hfUrl, licenceLabel, listModels, rank } from "../catalog.js";
 import type { LocalModel } from "../config.js";
 import { type Fit, GIB, type Machine, budgetBytes, detectMachine } from "../estimate.js";
-import { llamaServerPath, serverBuild } from "../server.js";
-import { type SetupIO, installLocal } from "../setup.js";
+import { type SetupIO, installLocal, runtimeReady } from "../setup.js";
 import { bar } from "./charts.js";
 import { Dialog, type Hint, SelectDialog } from "./dialog.js";
 import { wrapLine } from "./history.js";
@@ -19,13 +18,8 @@ export interface SetupSeam {
   runtimeNeeded?: (type: string) => boolean;
 }
 
-/** The same test installRuntime makes: no llama-server, or one whose known build is older than the type needs. */
-function runtimeNeeded(type: string): boolean {
-  const path = llamaServerPath(process.env);
-  if (path === undefined) return true;
-  const build = serverBuild(path);
-  return build !== null && build < (MIN_BUILD[type] ?? 0);
-}
+/** The same test installRuntime makes, so the confirm screen says Homebrew exactly when the install will ask for it. */
+const runtimeNeeded = (type: string): boolean => !runtimeReady(type, process.env);
 
 const gb = (bytes: number): string => `${(bytes / 1e9).toFixed(1)} GB`;
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e));

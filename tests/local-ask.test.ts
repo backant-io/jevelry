@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { type LocalModel, writeConfig } from "../src/config.js";
 import { SERVER_FILE, stopServer } from "../src/server.js";
-import { sandboxEnv } from "./fixtures/sandbox.js";
+import { killFakes, sandboxEnv } from "./fixtures/sandbox.js";
 import { type TestServer, startServer as startTypesafe } from "./fixtures/server.js";
 
 const QUESTIONS = JSON.stringify({ urgent: { type: "noul", instructions: "Is it urgent?" } });
@@ -36,15 +36,21 @@ const run = (args: string[], env: NodeJS.ProcessEnv, input = "") =>
     child.stdin.end(input);
   });
 
-// Every home is stopped after its test: a fake server started by a spawned jevelry outlives that process by design.
+// Every home is stopped after its test, and its fakes killed whatever stopServer did: a fake server
+// started by a spawned jevelry outlives that process by design.
 const homes: string[] = [];
-afterEach(() => { for (const home of homes.splice(0)) stopServer(home); });
+afterEach(() => {
+  for (const home of homes.splice(0)) {
+    stopServer(home);
+    killFakes(join(home, "argv.ndjson"));
+  }
+});
 
 let typesafe: TestServer;
 beforeAll(async () => { typesafe = await startTypesafe(); });
 afterAll(async () => typesafe.close());
 
-async function fixture() {
+async function fixture(extra: Record<string, string> = {}) {
   const home = mkdtempSync(join(tmpdir(), "jevelry-local-ask-"));
   homes.push(home);
   const path = join(home, "vllm-d3-flash-Q8_0.gguf");
@@ -55,7 +61,7 @@ async function fixture() {
   };
   writeConfig(home, { backend: "local", local });
   const argv = join(home, "argv.ndjson");
-  const env = sandboxEnv(home, { FAKE_LLAMA_ARGV_FILE: argv, FAKE_LLAMA_LOAD_MS: "200" });
+  const env = sandboxEnv(home, { FAKE_LLAMA_ARGV_FILE: argv, FAKE_LLAMA_LOAD_MS: "200", ...extra });
   const starts = (): number => (existsSync(argv) ? readFileSync(argv, "utf8").trim().split("\n").length : 0);
   return { home, local, env, starts };
 }
@@ -88,16 +94,16 @@ describe("jevelry ask in local mode", () => {
     expect(starts()).toBe(1);
   });
 
-  // Agents run commands in parallel: two cold asks may both start a server, and the one that lost the
-  // port must not leave its dead pid on record, or `jevelry stop` could never stop the one that serves.
-  it("records the server that serves when two jevelry processes start it at once", async () => {
-    const { home, env, starts } = await fixture();
+  // Agents run commands in parallel: each cold ask starting its own server would load the model once
+  // per process. The server listens late, so every ask finds the port down and must find the others' launch.
+  it("starts exactly one server when jevelry processes ask at once on a cold start", async () => {
+    const { home, env, starts } = await fixture({ FAKE_LLAMA_LISTEN_DELAY_MS: "1500" });
     const ask = () => run(["ask", "--questions", QUESTIONS, "--state", '"Help!"'], env);
     const results = await Promise.all([ask(), ask(), ask()]);
     expect(results.map((r) => r.status)).toEqual([0, 0, 0]);
-    expect(starts()).toBeGreaterThanOrEqual(1);
-    const { pid } = JSON.parse(readFileSync(join(home, SERVER_FILE), "utf8")) as { pid: number };
-    expect(() => process.kill(pid, 0)).not.toThrow();
+    expect(starts()).toBe(1);
+    const started = JSON.parse(readFileSync(env.FAKE_LLAMA_ARGV_FILE!, "utf8")) as { pid: number };
+    expect(JSON.parse(readFileSync(join(home, SERVER_FILE), "utf8"))).toMatchObject({ pid: started.pid });
   });
 
   // The environment wins everywhere in jevelry: a host that exports a base URL for one command gets exactly that server.
@@ -108,6 +114,31 @@ describe("jevelry ask in local mode", () => {
     expect((JSON.parse(r.stdout) as { model: string }).model).toBe("jev-1.13.0");
     expect(starts()).toBe(0);
     expect(existsSync(join(home, SERVER_FILE))).toBe(false);
+  });
+
+  // JEVELRY_TIMEOUT_MS is how a host bounds an ask; a model still loading must not hold it for the whole load.
+  it("fails after about JEVELRY_TIMEOUT_MS while the model loads, not after the load", async () => {
+    const { env } = await fixture({ FAKE_LLAMA_LOAD_MS: "4000", JEVELRY_TIMEOUT_MS: "1000" });
+    const started = Date.now();
+    const r = await run(["ask", "--questions", QUESTIONS, "--state", '"Help!"'], env);
+    expect(r.status).toBe(6);
+    expect(Date.now() - started).toBeLessThan(3000);
+  });
+
+  // With room under the timeout, the error a person reads points at the server's log, not at a generic SDK timeout.
+  it("names the server log when the model does not load within JEVELRY_TIMEOUT_MS", async () => {
+    const { env } = await fixture({ FAKE_LLAMA_LOAD_MS: "6000", JEVELRY_TIMEOUT_MS: "3000" });
+    const r = await run(["ask", "--questions", QUESTIONS, "--state", '"Help!"'], env);
+    expect(r.status).toBe(6);
+    expect(JSON.parse(r.stdout)).toMatchObject({ error: { code: "transport", message: expect.stringMatching(/the local model server did not become ready in 1 s; see .*llama-server\.log$/) } });
+  });
+
+  // A failure on this machine is the local server's, not TypeSafe's, and its reason is in the server's log.
+  it("names the local model server and its log when it answers 500", async () => {
+    const { env } = await fixture({ FAKE_LLAMA_ANSWER_STATUS: "500" });
+    const r = await run(["ask", "--questions", QUESTIONS, "--state", '"Help!"'], env);
+    expect(r.status).toBe(6);
+    expect(JSON.parse(r.stdout)).toMatchObject({ error: { code: "transport", message: expect.stringMatching(/^the local model server answered 500: .*; see llama-server\.log in \$JEVELRY_HOME$/) } });
   });
 
   // A local server that cannot start is a transport failure like a network one: exit 6, with the reason to act on.

@@ -8,7 +8,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { type LocalModel, readConfig, writeConfig } from "../src/config.js";
 import { SERVER_FILE, stopServer } from "../src/server.js";
 import { type FakeHf, startHf } from "./fixtures/hf.js";
-import { M2_16, M4_PRO_24, sandboxEnv } from "./fixtures/sandbox.js";
+import { M2_16, M4_PRO_24, killFakes, sandboxEnv } from "./fixtures/sandbox.js";
 import type { Machine } from "../src/estimate.js";
 
 const QUESTIONS = JSON.stringify({ urgent: { type: "noul", instructions: "Is it urgent?" } });
@@ -52,9 +52,15 @@ let hf: FakeHf;
 beforeAll(async () => { hf = await startHf(); });
 afterAll(async () => hf.close());
 
-// Every home is stopped after its test: a fake server started by a spawned jevelry outlives that process by design.
+// Every home is stopped after its test, and its fakes killed whatever stopServer did: a fake server
+// started by a spawned jevelry outlives that process by design.
 const homes: string[] = [];
-afterEach(() => { for (const dir of homes.splice(0)) stopServer(dir); });
+afterEach(() => {
+  for (const dir of homes.splice(0)) {
+    stopServer(dir);
+    killFakes(join(dir, "argv.ndjson"));
+  }
+});
 
 const envFor = (home: string, machine: Machine, extra: Record<string, string> = {}): NodeJS.ProcessEnv =>
   sandboxEnv(home, { JEVELRY_HF_URL: hf.url, JEVELRY_MACHINE: JSON.stringify(machine), FAKE_LLAMA_LOAD_MS: "100", ...extra });
@@ -112,6 +118,15 @@ describe("jevelry models --local", () => {
     expect(rows.map((row) => order.indexOf(row.fit))).toEqual([...rows.map((row) => order.indexOf(row.fit))].sort());
   });
 
+  // --json is the ranked rows of --local; alone there are none, and an agent must be told, not handed nothing to parse.
+  it("exits 2 for --json without --local", async () => {
+    const { env } = fixture();
+    const r = await run(["models", "--json"], env);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toBe("jevelry: --json needs --local\n");
+    expect(r.stdout).toBe("");
+  });
+
   // In local mode there is one model, the one on this machine: listing it must not start a server to ask it.
   it("names the local model without starting its server when jevelry runs one", async () => {
     const { home, env } = fixture();
@@ -135,7 +150,10 @@ describe("jevelry install --local <model> --yes, then ask and stop", () => {
     localEnv = envFor(home, M4_PRO_24, { FAKE_LLAMA_ARGV_FILE: argv });
     installed = await run(["install", "--local", "vllm-d3-flash", "--yes"], localEnv);
   });
-  afterAll(() => { stopServer(home); });
+  afterAll(() => {
+    stopServer(home);
+    killFakes(argv);
+  });
 
   // The whole first run from one command an agent can type: verified file, config, running server, and an answer.
   it("writes config.json, starts the server and prints the smoke answer", () => {
@@ -209,6 +227,42 @@ describe("jevelry install --local refusals", () => {
     expect(existsSync(join(home, "models"))).toBe(false);
   });
 
+  // A forced quant and a row number skip the table's advice, so they must meet the same refusal: a 27B crashed
+  // this 24 GB machine's GPU.
+  it("refuses a forced vllm-d3:Q8_0 and the 27B's row number, creating no models folder", async () => {
+    const { home, env } = fixture();
+    const rows = JSON.parse((await run(["models", "--local", "--json"], env)).stdout) as Array<{ id: string }>;
+    const row = rows.findIndex((r) => r.id === "vllm-d3") + 1;
+    expect(row).toBeGreaterThan(0);
+    for (const wanted of ["vllm-d3:Q8_0", String(row)]) {
+      const r = await run(["install", "--local", wanted, "--yes"], env);
+      expect(r.status).toBe(1);
+      expect(r.stderr).toMatch(/jevelry: vLLM-SR d3 27B needs about \d+\.\d GB and this machine has about 17\.2 GB for models\n/);
+    }
+    expect(existsSync(join(home, "models"))).toBe(false);
+    expect(existsSync(join(home, "config.json"))).toBe(false);
+  });
+
+  // Ctrl-C or a kill while the model loads must not leave it in the GPU's memory with no config naming it.
+  it("stops the new server and exits 130 or 143 when the install is interrupted while the model loads", async () => {
+    for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
+      const { home, env } = fixture();
+      const child = spawn(process.execPath, ["bin/jevelry.js", "install", "--local", "vllm-d3-flash", "--yes"], { env: { ...env, FAKE_LLAMA_LOAD_MS: "20000" }, stdio: "ignore" });
+      const exited = new Promise<number | null>((resolve) => child.on("exit", resolve));
+      try {
+        for (let i = 0; i < 200 && !existsSync(join(home, SERVER_FILE)); i++) await sleep(50);
+        const { pid } = JSON.parse(readFileSync(join(home, SERVER_FILE), "utf8")) as { pid: number };
+        child.kill(signal);
+        expect(await exited).toBe(code);
+        for (let i = 0; i < 60 && alive(pid); i++) await sleep(50);
+        expect(alive(pid)).toBe(false);
+        expect(existsSync(join(home, "config.json"))).toBe(false);
+      } finally {
+        child.kill("SIGKILL");
+      }
+    }
+  });
+
   // A tight fit leaves the machine little memory, so without a terminal it waits for --yes instead of installing anyway.
   it("installs a tight fit only with --yes when nobody can answer", async () => {
     const { home, env } = fixture(M2_16);
@@ -251,9 +305,20 @@ describe("jevelry install without --local", () => {
   it("switches to TypeSafe with --typesafe and keeps the local model on file", async () => {
     const { home, env } = fixture();
     const local = await configuredLocal(home);
-    const r = await run(["install", "--typesafe"], env);
+    const r = await run(["install", "--typesafe"], { ...env, TYPESAFE_API_KEY: "test-key" });
     expect(r.status).toBe(0);
     expect(readConfig(home)).toEqual({ backend: "typesafe", local });
+    expect(r.stderr).toContain("jevelry: a TypeSafe key is already available\n");
+  });
+
+  // Hosted Jev without a key fails every ask: the model that answers now stays the one jevelry asks.
+  it("keeps the local setup when --typesafe finds no key", async () => {
+    const { home, env } = fixture();
+    const local = await configuredLocal(home);
+    const r = await run(["install", "--typesafe"], env);
+    expect(r.status).toBe(0);
+    expect(readConfig(home)).toEqual({ backend: "local", local });
     expect(r.stderr).toContain("jevelry: no key stored;");
+    expect(r.stderr).toContain("jevelry: nothing changed\n");
   });
 });

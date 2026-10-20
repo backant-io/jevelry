@@ -1,4 +1,5 @@
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -6,10 +7,11 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { type CatalogModel, listModels, rank } from "../src/catalog.js";
 import { readConfig, writeConfig } from "../src/config.js";
 import { modelPath } from "../src/download.js";
+import { budgetBytes, realMachine } from "../src/estimate.js";
 import { SERVER_FILE, health, stopServer } from "../src/server.js";
-import { SetupError, type SetupIO, installLocal, installRuntime, useTypesafe } from "../src/setup.js";
+import { SetupError, type SetupIO, installLocal, installRuntime, runtimeReady, useTypesafe } from "../src/setup.js";
 import { type FakeHf, fileBytes, startHf } from "./fixtures/hf.js";
-import { FAKE_BREW, FAKE_LLAMA, M4_PRO_24, sandboxEnv, sandboxPath } from "./fixtures/sandbox.js";
+import { FAKE_BREW, FAKE_LLAMA, M4_PRO_24, killFakes, sandboxEnv, sandboxPath } from "./fixtures/sandbox.js";
 
 /** What the installer said, showed and asked, with every question answered `answer`. */
 function recorder(answer: boolean) {
@@ -27,6 +29,23 @@ function recorder(answer: boolean) {
   return { io, said, progress, asked };
 }
 const home = () => mkdtempSync(join(tmpdir(), "jevelry-setup-"));
+const alive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+const gone = async (pid: number): Promise<boolean> => {
+  for (let i = 0; i < 60 && alive(pid); i++) await sleep(50);
+  return !alive(pid);
+};
+/** How many fake llama-servers started in this home. */
+const starts = (dir: string): number => {
+  const argv = join(dir, "argv.ndjson");
+  return existsSync(argv) ? readFileSync(argv, "utf8").trim().split("\n").length : 0;
+};
 
 describe("installRuntime", () => {
   // A llama-server that is new enough is used as it is: nobody is asked to install anything.
@@ -68,6 +87,14 @@ describe("installRuntime", () => {
     expect(r.asked).toEqual(["install llama.cpp with Homebrew (brew install llama.cpp)?"]);
   });
 
+  // The TUI's confirm screen says Homebrew will run exactly when the install would ask for it, so both use this one test.
+  it("says whether the llama-server there can run a type: missing, too old or new enough", () => {
+    expect(runtimeReady("vllm-d3", sandboxEnv(home()))).toBe(true);
+    // granite-switch needs build 11700; the fake reports 11669.
+    expect(runtimeReady("granite-switch", sandboxEnv(home()))).toBe(false);
+    expect(runtimeReady("vllm-d3", { PATH: sandboxPath(false) })).toBe(false);
+  });
+
   // Without Homebrew there is nothing jevelry may run for the person; it says how to get llama.cpp instead.
   it("gives the install instructions without asking when there is no brew", async () => {
     const r = recorder(true);
@@ -85,7 +112,10 @@ describe("installLocal", () => {
     models = await listModels({ hfUrl: hf.url });
   });
   afterEach(() => {
-    for (const h of homes) stopServer(h);
+    for (const h of homes) {
+      stopServer(h);
+      killFakes(join(h, "argv.ndjson"));
+    }
     for (const key of Object.keys(hf.behaviour)) delete hf.behaviour[key as keyof FakeHf["behaviour"]];
   });
   afterAll(async () => {
@@ -104,7 +134,8 @@ describe("installLocal", () => {
     const r = recorder(true);
     const local = await installLocal(choice("vllm-d3-flash"), dir, r.io, env);
     const path = modelPath(dir, "ggml-org/vllm-d3-flash-GGUF", "vllm-d3-flash-Q8_0.gguf");
-    expect(local).toMatchObject({ repo: "ggml-org/vllm-d3-flash-GGUF", file: "vllm-d3-flash-Q8_0.gguf", quant: "Q8_0", name: "vLLM-SR d3-flash 9B", decisionType: "vllm-d3", path, alias: "local/vllm-d3-flash-Q8_0" });
+    // params is kept so every later start can check the model still fits the machine it runs on.
+    expect(local).toMatchObject({ repo: "ggml-org/vllm-d3-flash-GGUF", file: "vllm-d3-flash-Q8_0.gguf", quant: "Q8_0", name: "vLLM-SR d3-flash 9B", decisionType: "vllm-d3", path, alias: "local/vllm-d3-flash-Q8_0", params: 8.95e9 });
     expect(readConfig(dir)).toEqual({ backend: "local", local });
     expect(readFileSync(path)).toEqual(fileBytes("vllm-d3-flash-Q8_0.gguf"));
     expect(await health(local.port)).toBe("ok");
@@ -133,6 +164,27 @@ describe("installLocal", () => {
     expect(alive).toBe(false);
   });
 
+  // An old server that ignores SIGTERM (a model still unloading, a wedged process) must not stay beside the new
+  // model: two models at once is how a GPU runs out. It is killed, and the new model starts only once it is gone.
+  it("kills a previous server that ignores SIGTERM before the new model starts", async () => {
+    const { dir, env } = fixture();
+    const path = join(dir, "old.gguf");
+    const old = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000); console.log('ready')", "--", "-m", path, "--port", "1"], { stdio: ["ignore", "pipe", "ignore"] });
+    try {
+      await new Promise((resolve) => old.stdout.once("data", resolve));
+      writeFileSync(join(dir, SERVER_FILE), JSON.stringify({ pid: old.pid, port: 1, path, alias: "local/old" }));
+      // Counted the moment the old process is gone: no new server may have started by then.
+      let startsWhenGone = -1;
+      old.once("exit", () => { startsWhenGone = starts(dir); });
+      await installLocal(choice("d1-3b"), dir, recorder(true).io, env);
+      expect(old.signalCode).toBe("SIGKILL");
+      expect(startsWhenGone).toBe(0);
+      expect(starts(dir)).toBe(1);
+    } finally {
+      old.kill("SIGKILL");
+    }
+  }, 30000);
+
   // A model too big for this machine is refused before a single byte is downloaded.
   it("refuses a model that won't fit before any request", async () => {
     const { dir, env } = fixture();
@@ -140,6 +192,18 @@ describe("installLocal", () => {
     await expect(installLocal(choice("vllm-d3"), dir, recorder(true).io, env)).rejects.toThrow(/^vLLM-SR d3 27B needs about 22\.\d GB and this machine has about 17\.2 GB for models$/);
     expect(hf.requests.length).toBe(before);
     expect(existsSync(join(dir, "config.json"))).toBe(false);
+  });
+
+  // JEVELRY_MACHINE is for browsing what another machine could run. Left exported in a shell, it must not
+  // install a model this machine cannot hold, which is what crashed its GPU.
+  it("refuses a model whose exact size won't fit this machine even when JEVELRY_MACHINE is bigger", async () => {
+    const { dir } = fixture();
+    const env = sandboxEnv(dir, { JEVELRY_HF_URL: hf.url, JEVELRY_MACHINE: JSON.stringify({ ...M4_PRO_24, ramBytes: 2 ** 50 }) });
+    const real = budgetBytes(realMachine());
+    hf.behaviour.size = Math.round(real);
+    const before = hf.requests.length;
+    await expect(installLocal(choice("vllm-d3-flash"), dir, recorder(true).io, env)).rejects.toThrow(`and this machine has about ${(real / 1e9).toFixed(1)} GB for models`);
+    expect(hf.requests.slice(before).some((req) => req.url.includes("/resolve/"))).toBe(false);
   });
 
   // The catalog's size is an estimate; the exact size from Hugging Face decides, before the download.
@@ -153,13 +217,28 @@ describe("installLocal", () => {
 
   // Someone switching from hosted Jev to a model that then fails to start must still have the
   // hosted Jev that worked: the config changes only once the new model has answered.
-  it("leaves the previous config and no server behind when the new model fails its check", async () => {
+  it("leaves the previous config and no server behind when the new model's server dies while starting", async () => {
     const { dir } = fixture();
     useTypesafe(dir);
     const env = sandboxEnv(dir, { JEVELRY_HF_URL: hf.url, JEVELRY_MACHINE: JSON.stringify(M4_PRO_24), FAKE_LLAMA_FAIL: "1" });
     await expect(installLocal(choice("vllm-d3-flash"), dir, recorder(true).io, env)).rejects.toThrow(/the local model server stopped while starting/);
     expect(readConfig(dir)).toEqual({ backend: "typesafe" });
     expect(existsSync(join(dir, SERVER_FILE))).toBe(false);
+  });
+
+  // A server that starts but cannot answer is not a working install: the setup that worked before stays,
+  // and the new model does not stay in memory.
+  it("leaves the previous config and no server behind when the new model answers its check with an error", async () => {
+    const { dir } = fixture();
+    useTypesafe(dir);
+    const env = sandboxEnv(dir, { JEVELRY_HF_URL: hf.url, JEVELRY_MACHINE: JSON.stringify(M4_PRO_24), FAKE_LLAMA_LOAD_MS: "100", FAKE_LLAMA_ANSWER_STATUS: "500" });
+    const error = await installLocal(choice("vllm-d3-flash"), dir, recorder(true).io, env).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(SetupError);
+    expect((error as Error).message).toMatch(/^vLLM-SR d3-flash 9B did not answer the setup check: the local model server answered 500/);
+    expect(readConfig(dir)).toEqual({ backend: "typesafe" });
+    expect(existsSync(join(dir, SERVER_FILE))).toBe(false);
+    const { pid } = JSON.parse(readFileSync(join(dir, "argv.ndjson"), "utf8")) as { pid: number };
+    expect(await gone(pid)).toBe(true);
   });
 
   // A base URL exported in the shell points every ask elsewhere; the setup check must still ask the
@@ -191,5 +270,19 @@ describe("useTypesafe", () => {
     writeConfig(dir, { backend: "local", local });
     useTypesafe(dir);
     expect(readConfig(dir)).toEqual({ backend: "typesafe", local });
+  });
+
+  // Hosted Jev chosen, the local model must leave the GPU's memory now, not after its idle timeout.
+  it("stops the local model's server", async () => {
+    const dir = home();
+    const path = join(dir, "m.gguf");
+    const server = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)", "--", "-m", path, "--port", "1"], { stdio: "ignore" });
+    try {
+      writeFileSync(join(dir, SERVER_FILE), JSON.stringify({ pid: server.pid, port: 1, path, alias: "local/m" }));
+      useTypesafe(dir);
+      expect(await gone(server.pid!)).toBe(true);
+    } finally {
+      server.kill("SIGKILL");
+    }
   });
 });
