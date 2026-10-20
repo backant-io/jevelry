@@ -71,7 +71,7 @@ jevelry install
       2  A model on this machine: free and private, downloads 1 to 30 GB
     Choose 1 or 2:
 
-With 1 it asks for your TypeSafe key, which you can skip with Enter and add later. Get a key at https://docs.typesafe.ai. With 2 it shows the models this machine can run and sets up the one you pick, as [Run Jev on this machine](#run-jev-on-this-machine) describes. Once jevelry asks somewhere, `install` leaves that alone and says so, and `jevelry install --typesafe` or `jevelry install --local` switches. Without a terminal, in a pipe or a CI job, it names both ways and changes nothing.
+With 1 it asks for your TypeSafe key, which you can skip with Enter and add later. Get a key at https://docs.typesafe.ai. With 2 it first offers a Jev server that already runs on this machine, as [Use a Jev server you already run](#use-a-jev-server-you-already-run) describes, then shows the models this machine can run and sets up the one you pick, as [Run Jev on this machine](#run-jev-on-this-machine) describes. Once jevelry asks somewhere, `install` leaves that alone and says so, and `jevelry install --typesafe` or `jevelry install --local` switches. Without a terminal, in a pipe or a CI job, it names both ways and changes nothing.
 
 ### As a library in your project
 
@@ -215,6 +215,24 @@ In `jevelry tui`, press `s` on the start screen or choose `Set up Jev` in `ctrl+
 
 `jevelry install --typesafe` goes back to hosted Jev once there is a key, asking for one when there is none, and stops the local server. Without a key it changes nothing. The model stays on disk, so `jevelry install --local <id>` switches back without a new download.
 
+### Use a Jev server you already run
+
+When a Jev System One server already runs on this machine, like candle-jev's `jevd` on `127.0.0.1:8741`, jevelry can ask it instead of downloading a model, so there is one copy on disk and one model in memory:
+
+```sh
+jevelry install --local-url http://127.0.0.1:8741
+```
+
+It reads the model the server lists at `GET /v1/models` (the first one when it lists several), asks it one setup check, stops the `llama-server` jevelry runs when there is one, and writes `$JEVELRY_HOME/config.json`:
+
+```json
+{ "backend": "server", "server": { "url": "http://127.0.0.1:8741", "model": "jevk5-v0.3-mlx8" } }
+```
+
+Every ask then sends the server's own model whatever the jevel pins, and no `x-jev-lane` header, so jevd answers jevelry on its research lane, behind the program it runs for. The answer's `model` reads `local/<model>`, like `local/jevk5-v0.3-mlx8`, and Try counts it as $0. When no Jev server answers at the URL, or it fails the setup check, the install exits 1 and changes nothing.
+
+`jevelry models --local`, `jevelry install --local` and `A model on this machine` in the TUI look for such a server first, with `GET /v1/models` on the URLs in `JEVELRY_KNOWN_SERVERS` (`http://127.0.0.1:8741` unless you set it), and offer it before any download. A server that lists only `local/` models is a `llama-server` of jevelry's own and is not offered. jevelry does not start or stop a server it did not start: `jevelry stop` says so and stops only jevelry's own `llama-server`. `jevelry install --local <id>` or `--typesafe` switches away again.
+
 ## Command-line reference
 
 | Command | What it does |
@@ -229,7 +247,7 @@ In `jevelry tui`, press `s` on the start screen or choose `Set up Jev` in `ctrl+
 | `jevelry check <jevel>` | refuses a defective jevel with exit 2 and warns about questions Jev handles poorly |
 | `jevelry types` | writes a TypeScript declaration so `jevel(name).decide()` returns each jevel's own answer types |
 | `jevelry models` | the model names your account may send, from `GET /v1/models`; `--local` ranks the decision models this machine can run |
-| `jevelry stop` | stops the local model server jevelry started, and any it did not record, and waits until they have exited |
+| `jevelry stop` | stops the local model server jevelry started, and any it did not record, and waits until they have exited; a Jev server jevelry did not start keeps running |
 | `jevelry install` | installs the skill into your coding agents, then sets up Jev: a TypeSafe key or a model on this machine |
 | `jevelry install-skill` | installs the skill into your coding agents, and asks for no key |
 | `jevelry help [command]` | the help of one command |
@@ -311,7 +329,7 @@ printf '%s\n' '{"id":"a","jevel":"ticket-triage","state":{"ticket":{"subject":"C
 | `--local` | the decision models on Hugging Face, ranked for this machine, with what each needs and how fast it would answer here |
 | `--json` | with `--local`, one object per row: `id`, `repo`, `name`, `quant`, `file`, `download_bytes`, `need_bytes`, `fit`, `score`, `seconds_per_question`, `licence`, `decision_type` |
 
-With a local model set up and no `TYPESAFE_BASE_URL`, `jevelry models` prints the model's alias and name and asks nothing.
+With a local model or a running Jev server set up and no `TYPESAFE_BASE_URL`, `jevelry models` prints its `local/` name and asks nothing. With `--local`, a Jev server already running here is named on the first line, above the table; `--json` lists only the models to download.
 
 ### `install`, `install-skill`
 
@@ -322,6 +340,7 @@ With a local model set up and no `TYPESAFE_BASE_URL`, `jevelry models` prints th
 | `--no-key` | `install` only: installs the skill and sets up nothing else |
 | `--typesafe` | `install` only: stores a TypeSafe key when none is there, then asks hosted Jev; without a key nothing changes |
 | `--local [model]` | `install` only: runs that model on this machine, an id or a row number from `jevelry models --local`, or shows the list to choose from |
+| `--local-url <url>` | `install` only: asks the Jev server that already runs at this URL, after one setup check; no download |
 | `--yes` | `install` only: answers yes to the Homebrew and tight-fit questions, needed without a terminal |
 
 ## Keyboard shortcuts
@@ -566,6 +585,7 @@ OpenJev 27B is not on the index; its card reports 84.0% against hosted Jev's 85.
 | `JEVELRY_HF_URL` | the Hugging Face root for the model list and downloads | `https://huggingface.co` |
 | `JEVELRY_LLAMA_SERVER` | the `llama-server` to run | the one on `PATH` |
 | `JEVELRY_BREW` | the `brew` that installs llama.cpp | the one on `PATH` |
+| `JEVELRY_KNOWN_SERVERS` | comma-separated URLs where a Jev server may already run, offered before a download; empty looks for none | `http://127.0.0.1:8741` |
 
 The model an ask uses is the first one set of `--model`, the jevel's `model`, `JEVELRY_MODEL` and `TYPESAFE_DEFAULT_MODEL`.
 
@@ -590,12 +610,12 @@ A command started by `jevelry run` gets these, and `TYPESAFE_API_KEY` is removed
 | `env` | the key, when the keychain is unavailable |
 | `tui.json` | the TUI theme, `dark` or `light`, set from `ctrl+p` |
 | `jevels/` | your own jevels for every project on this machine |
-| `config.json` | which way jevelry asks, `typesafe` or `local`, and the local model's file, port and alias; nothing secret |
+| `config.json` | which way jevelry asks, `typesafe`, `local` or `server`, the local model's file, port and alias, and the running server's `url` and `model`; nothing secret |
 | `models/` | the downloaded models, one folder per Hugging Face repo |
 | `server.json` | the process, port and model of the `llama-server` jevelry started, so `jevelry stop` stops that one and nothing else; it stays until that process has exited |
 | `llama-server.log` | what `llama-server` printed, appended on every start |
 
-jevelry starts the local server as `llama-server -m <model> --host 127.0.0.1 --port <port> --alias local/<file> --no-webui --no-mmproj -c 8192 -b 4096 -ub 4096 -np 1 --sleep-idle-seconds 300`. The port is picked at install and stays the same. A chosen local model wins over a key, and a `TYPESAFE_BASE_URL` in the environment wins over the local model.
+jevelry starts the local server as `llama-server -m <model> --host 127.0.0.1 --port <port> --alias local/<file> --no-webui --no-mmproj -c 8192 -b 4096 -ub 4096 -np 1 --sleep-idle-seconds 300`. The port is picked at install and stays the same. A chosen local model or server wins over a key, and a `TYPESAFE_BASE_URL` in the environment wins over both.
 
 ## When it fails
 
@@ -615,9 +635,11 @@ jevelry starts the local server as `llama-server -m <model> --host 127.0.0.1 --p
 
 When `jevelry run` runs a command, it exits with that command's exit code.
 
-With a local model, exit 6 says what to do: run `jevelry install --local` when `llama-server` or the model file is missing, read the last lines of `llama-server.log` it quotes when the server stopped while starting, or pick a new port with `jevelry install --local` when another program answers on the model's port. Two refusals keep a second model out of memory, and `jevelry stop` clears both: "a different local model is running" when a server for another model is up, for example a program still holding the config from before a switch or an install that was interrupted while its server exits, and "a local model server jevelry did not record is running (pid N)" when a jevelry was killed between starting a server and writing it down. An error from the server itself names the local model server, not TypeSafe, and points at `llama-server.log` in `$JEVELRY_HOME`.
+With a local model, exit 6 says what to do: run `jevelry install --local` when `llama-server` or the model file is missing, read the last lines of `llama-server.log` it quotes when the server stopped while starting, or pick a new port with `jevelry install --local` when another program answers on the model's port. Two refusals keep a second model out of memory, and `jevelry stop` clears both: "a different local model is running" when a server for another model is up, for example a program still holding the config from before a switch or an install that was interrupted while its server exits, and "a local model server jevelry did not record is running (pid N)" when a jevelry was killed between starting a server and writing it down. An error from the server itself names the local model server, not TypeSafe, and points at `llama-server.log` in `$JEVELRY_HOME`. An error from a Jev server jevelry did not start names it as "the local Jev server at <url>", whose log is wherever it was started.
 
 `jevelry install --local` exits 2 when it does not know the model you named, or when you named none and there is no terminal to choose on. It exits 1 when the setup cannot finish: the model won't fit, llama.cpp is missing or too old and Homebrew was not allowed, Hugging Face cannot be reached, the disk is too full, the download does not match its sha256, or the previous model's server did not stop.
+
+`jevelry install --local-url` exits 1 with "no Jev server answers at <url>" when nothing at the URL lists a model, and with the reason when the server fails the setup check or jevelry's own server does not stop; it changes nothing then.
 
 `jevelry stop` exits 1 with "the local model server (pid N) did not stop" when a server is still running 5 seconds after it was killed; stop that process yourself.
 

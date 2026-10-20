@@ -10,11 +10,12 @@ import { render } from "ink-testing-library";
 import { createElement } from "react";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type CatalogModel, type Choice, listModels, rank } from "../src/catalog.js";
-import type { LocalModel } from "../src/config.js";
+import { type LocalModel, readConfig } from "../src/config.js";
 import { SetupError, type SetupIO } from "../src/setup.js";
 import { App } from "../src/tui/app.js";
 import type { SetupSeam } from "../src/tui/setup.js";
 import { type FakeHf, startHf } from "./fixtures/hf.js";
+import { type FakeJevd, startJevd } from "./fixtures/jevd.js";
 import { M4_PRO_24 } from "./fixtures/sandbox.js";
 
 const PEEK = process.env.PEEK === "1";
@@ -27,12 +28,17 @@ const DOWN = "\u001B[B";
 const CTRL_P = "\u0010";
 
 let hf: FakeHf;
+let jevd: FakeJevd;
 let models: CatalogModel[];
 beforeAll(async () => {
   hf = await startHf();
+  jevd = await startJevd();
   models = await listModels({ hfUrl: hf.url });
 });
-afterAll(async () => hf.close());
+afterAll(async () => {
+  await hf.close();
+  await jevd.close();
+});
 
 /** A temp home; with a stored key it is a jevelry already set up with TypeSafe. */
 const home = (key = false): string => {
@@ -67,13 +73,13 @@ const until = async (frame: () => string | undefined, text: string) => {
 
 /**
  * The App with every part of setup replaced: the 24 GB Mac a too-big model crashed, the fake Hugging Face's models,
- * llama.cpp already in place, and an install that never runs anything. No test here reaches a real binary or the network.
+ * llama.cpp already in place, no Jev server running, and an install that never runs anything. No test here reaches a real binary or the network.
  * `press` waits for what a key opens and a moment more, because a screen takes keys only once its effects have run.
  */
 const app = async (h: string, size: Size, setup: SetupSeam = {}) => {
   const r = render(createElement(App, {
     home: h, dirs: [], lines: [], version: "9.9.9", size,
-    setup: { machine: M4_PRO_24, listModels: () => Promise.resolve(models), runtimeNeeded: () => false, install: fakeInstall().install, ...setup },
+    setup: { machine: M4_PRO_24, listModels: () => Promise.resolve(models), runtimeNeeded: () => false, install: fakeInstall().install, findServers: () => Promise.resolve([]), ...setup },
   }));
   const press = async (key: string, shows: string) => {
     r.stdin.write(key);
@@ -189,6 +195,40 @@ describe("setup with a model on this machine", () => {
       expect(lastFrame()).not.toContain("won't fit");
       unmount();
     }
+  });
+
+  // A model already running here needs no download and no second copy in memory: it is the first row, and enter
+  // switches to it with the same setup check as jevelry install --local-url.
+  it("offers a Jev server already running as the first row and switches to it on enter, at 80x24 and 120x40", async () => {
+    for (const size of SIZES) {
+      const h = home();
+      const { lastFrame, press, unmount } = await app(h, size, { findServers: () => Promise.resolve([{ url: jevd.url, model: jevd.id }]) });
+      await toList(press);
+      fills(lastFrame(), size);
+      const lines = (lastFrame() ?? "").split("\n");
+      const first = lines.findIndex((l) => l.includes("> Use jevk5-v0.3-mlx8, already running"));
+      expect(lines[first]).toContain(`${jevd.url.replace("http://", "")} · no download`);
+      expect(lines[first + 1]).toContain("vLLM-SR d3-flash 9B Q8_0");
+      await press(ENTER, "Jev now runs on jevk5-v0.3-mlx8 on this machine");
+      expect(readConfig(h)).toEqual({ backend: "server", server: { url: jevd.url, model: jevd.id } });
+      expect(lastFrame()).not.toContain("Set up Jev");
+      unmount();
+    }
+  });
+
+  // A model that already runs needs nothing from Hugging Face: an unreachable Hugging Face must not hide it.
+  it("still offers a running Jev server when Hugging Face cannot be reached", async () => {
+    const h = home();
+    const { lastFrame, press, unmount } = await app(h, SIZES[0]!, {
+      findServers: () => Promise.resolve([{ url: jevd.url, model: jevd.id }]),
+      listModels: () => Promise.reject(new Error("could not reach Hugging Face: connect ECONNREFUSED 127.0.0.1:9")),
+    });
+    await toList(press);
+    expect(lastFrame()).toContain("> Use jevk5-v0.3-mlx8, already running");
+    expect(lastFrame()).not.toContain("could not reach Hugging Face");
+    await press(ENTER, "Jev now runs on jevk5-v0.3-mlx8 on this machine");
+    expect(readConfig(h)).toEqual({ backend: "server", server: { url: jevd.url, model: jevd.id } });
+    unmount();
   });
 
   // A 27B model on a 24 GB Mac is what crashed this machine's GPU: the TUI says why and never starts the install.

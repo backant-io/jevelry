@@ -8,7 +8,7 @@ import { createInterface } from "node:readline/promises";
 import { ask, errorBody, stateHash } from "./ask.js";
 import { askAndLog, askBatch } from "./batch.js";
 import { type Choice, findModel, hfUrl, licenceLabel, listModels, rank, renderTable } from "./catalog.js";
-import { configured, localModel } from "./config.js";
+import { configured, jevServer, localModel } from "./config.js";
 import { installSkill, knownAgents, promptForKey, unknownAgents, whereToPutTheKey } from "./install.js";
 import { JevelError, checkState, discoveryDirs, expandQuestions, isEntry, listJevels, loadJevel } from "./jevel.js";
 import { defaultClient, fallenAnswers, renderTypes } from "./decide.js";
@@ -18,8 +18,8 @@ import { jevelryHome, logAsk, logStateFromEnv, readLog, recordOutcome } from "./
 import { type AskDocument, EXIT, type ErrorBody, type ErrorDocument, PROTOCOL, type RunReport } from "./protocol.js";
 import { type Call, dispatcherOf, execute, logRun, planCall } from "./run.js";
 import { renderReport, report } from "./report.js";
-import { stopServerAndWait } from "./server.js";
-import { type SetupIO, installLocal, useTypesafe } from "./setup.js";
+import { findRunningServers, serverModels, stopServerAndWait } from "./server.js";
+import { type SetupIO, installLocal, useServer, useTypesafe } from "./setup.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(here, "..", "package.json"), "utf8")) as { version: string };
@@ -180,10 +180,53 @@ async function switchToTypesafe(): Promise<void> {
 }
 
 /**
+ * `install --local-url`: the model the server lists, the first when it lists several, then the setup check and
+ * the switch. A URL where no Jev server answers is a setup that cannot finish, exit 1, and changes nothing.
+ */
+async function installServer(given: string, model?: string): Promise<void> {
+  const url = given.trim().replace(/\/+$/, "");
+  if (model === undefined) {
+    const models = await serverModels(url);
+    if (models.length === 0) {
+      say(`no Jev server answers at ${url}`);
+      process.exitCode = 1;
+      return;
+    }
+    if (models.length > 1) say(`the server lists several models; using ${models[0]}`);
+    model = models[0]!;
+  }
+  try {
+    await useServer(url, model, home(), cliSetupIO(false), process.env);
+    say(`jevelry now asks ${model} at ${url}; jevelry does not start or stop that server`);
+  } catch (error) {
+    say(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  }
+}
+
+/**
  * The local half of `install`: the ranked list, the person's pick, then the installer. A pick that
  * names nothing is the host's mistake (exit 2, like any bad input); a setup that cannot finish is exit 1.
  */
 async function installLocalModel(wanted: string | undefined, yes: boolean): Promise<void> {
+  // A server already holding a Jev model is offered before Hugging Face: no download, and no second model in memory.
+  const running = wanted === undefined ? (await findRunningServers())[0] : undefined;
+  if (running) {
+    say(`A Jev server already runs on this machine: ${running.model} at ${running.url} (no download, no second model in memory)`);
+    if (!process.stdin.isTTY) {
+      say(`use it with jevelry install --local-url ${running.url}`);
+    } else {
+      const reply = await questionOnTty("Use it? [Y/n] ");
+      if (reply === undefined) {
+        say("nothing changed");
+        return;
+      }
+      if (/^(y(es)?)?$/i.test(reply.trim())) {
+        await installServer(running.url, running.model);
+        return;
+      }
+    }
+  }
   const io = cliSetupIO(yes);
   let machine: Machine;
   let choices: Choice[];
@@ -517,6 +560,7 @@ export function buildProgram(): Command {
           const machine = detectMachine(process.env);
           const choices = rank(await listModels({ hfUrl: hfUrl(process.env) }), machine);
           if (!opts.json) {
+            for (const s of await findRunningServers()) process.stdout.write(`Already running here: ${s.model} at ${s.url}; jevelry install --local-url ${s.url} uses it with no download\n`);
             process.stdout.write(renderTable(choices, machine));
             return;
           }
@@ -538,9 +582,10 @@ export function buildProgram(): Command {
         }
         // The same rule as defaultClient: a base URL in the environment wins over the local model.
         const local = localModel(home());
-        if (local && (process.env.TYPESAFE_BASE_URL ?? "").trim() === "") {
-          // The local server answers as its alias whatever is asked, so there is nothing to ask it.
-          process.stdout.write(`${local.alias}\tlocal\t${local.name} on this machine\n`);
+        const server = jevServer(home());
+        if ((local || server) && (process.env.TYPESAFE_BASE_URL ?? "").trim() === "") {
+          // The local server answers as its alias whatever is asked, and a running server as its one model, so there is nothing to ask either.
+          process.stdout.write(local ? `${local.alias}\tlocal\t${local.name} on this machine\n` : `local/${server!.model}\tlocal\t${server!.model} at ${server!.url}\n`);
           return;
         }
         const models = await defaultClient(home()).models.list();
@@ -554,6 +599,9 @@ export function buildProgram(): Command {
     .command("stop")
     .description("stop the local model server jevelry started")
     .action(async () => {
+      // A server jevelry did not start serves someone else too, like the program candle-jev's jevd runs for.
+      const server = jevServer(home());
+      if (server) say(`jevelry does not manage the server at ${server.url}; stop it where it was started`);
       // "stopped" only once the process is gone: a model still unloading holds the GPU's memory.
       const { found, left } = await stopServerAndWait(home());
       if (left.length > 0) {
@@ -561,7 +609,8 @@ export function buildProgram(): Command {
         process.exitCode = 1;
         return;
       }
-      say(found.length > 0 ? "stopped the local model server" : "no local model server was running");
+      if (found.length > 0) say("stopped the local model server");
+      else if (!server) say("no local model server was running");
     });
 
   program
@@ -571,11 +620,16 @@ export function buildProgram(): Command {
     .option("--project", "install into this project instead of this machine")
     .option("--agent <names...>", "only these agents, by name, instead of every one found")
     .addOption(new Option("--local [model]", "run a model on this machine: that one (an id or row from jevelry models --local), or choose from the list").conflicts("typesafe"))
+    .addOption(new Option("--local-url <url>", "ask a Jev server that already runs, like jevd at http://127.0.0.1:8741: no download, no second model").conflicts(["local", "typesafe"]))
     .option("--typesafe", "ask hosted Jev with a TypeSafe key")
     .option("--yes", "answer yes to the Homebrew and tight-fit questions (needed without a terminal)")
-    .action(async (opts: { key: boolean; project?: boolean; agent?: string[]; local?: string | true; typesafe?: boolean; yes?: boolean }) => {
+    .action(async (opts: { key: boolean; project?: boolean; agent?: string[]; local?: string | true; localUrl?: string; typesafe?: boolean; yes?: boolean }) => {
       installed(opts.project === true, opts.agent);
       if (!opts.key) return;
+      if (opts.localUrl !== undefined) {
+        await installServer(opts.localUrl);
+        return;
+      }
       if (opts.typesafe) {
         await switchToTypesafe();
         return;
@@ -587,7 +641,9 @@ export function buildProgram(): Command {
       // A jevelry that already asks somewhere is left alone; switching is a deliberate flag.
       const now = configured(process.env, home());
       if (now !== null) {
-        say(`jevelry asks ${now === "local" ? `${localModel(home())!.name} on this machine` : "hosted Jev with your TypeSafe key"}; jevelry install --local or --typesafe changes it`);
+        const server = jevServer(home());
+        const where = server ? `${server.model} at ${server.url}` : now === "local" ? `${localModel(home())!.name} on this machine` : "hosted Jev with your TypeSafe key";
+        say(`jevelry asks ${where}; jevelry install --local or --typesafe changes it`);
         return;
       }
       // A pipe or a CI job: nothing can be chosen, so both ways are named instead of waiting for a line.

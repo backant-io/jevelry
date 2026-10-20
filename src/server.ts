@@ -261,7 +261,14 @@ function lastLines(file: string, count: number): string {
   }
 }
 
-async function waitReady(home: string, local: LocalModel, env: NodeJS.ProcessEnv, options: { timeoutMs?: number; onWait?: (state: "starting" | "loading") => void }): Promise<void> {
+type WaitOptions = {
+  timeoutMs?: number;
+  onWait?: (state: "starting" | "loading") => void;
+  /** Whether this model is still the one to run, asked right before a server is started. */
+  still?: () => boolean;
+};
+
+async function waitReady(home: string, local: LocalModel, env: NodeJS.ProcessEnv, options: WaitOptions): Promise<void> {
   if (process.platform === "win32") throw new Error(WINDOWS);
   const log = join(home, SERVER_LOG);
   const timeoutMs = options.timeoutMs ?? 300000;
@@ -286,7 +293,11 @@ async function waitReady(home: string, local: LocalModel, env: NodeJS.ProcessEnv
     if (state !== "down" && !isOurs(recorded(home).pid, local)) refuse();
     if (state === "ok") break;
     if (state === "down") {
-      if (pid === undefined) ({ pid, spawned } = await launch(home, local, env));
+      if (pid === undefined) {
+        // An ask that began before jevelry was switched to another backend must not bring the old model back beside the new one.
+        if (options.still?.() === false) throw new Error("jevelry was switched to another backend while this ask waited; ask again");
+        ({ pid, spawned } = await launch(home, local, env));
+      }
       // Down while ours is gone is a server that died; down while ours lives is one still starting.
       else if (!alive(pid)) throw new Error(`the local model server stopped while starting; the last lines of ${log}:\n${lastLines(log, 5)}`);
     }
@@ -305,7 +316,7 @@ async function waitReady(home: string, local: LocalModel, env: NodeJS.ProcessEnv
 const waits = new Map<number, Promise<void>>();
 
 /** Resolves once the server for `local` is ours and ready, starting it when nothing listens on its port. */
-export function ensureServer(home: string, local: LocalModel, env: NodeJS.ProcessEnv, options: { timeoutMs?: number; onWait?: (state: "starting" | "loading") => void } = {}): Promise<void> {
+export function ensureServer(home: string, local: LocalModel, env: NodeJS.ProcessEnv, options: WaitOptions = {}): Promise<void> {
   let wait = waits.get(local.port);
   if (!wait) {
     // Forgotten once settled: the next ask checks again, so a server stopped in the meantime is started again.
@@ -430,9 +441,9 @@ export async function stopServerAndWait(home: string, { killAfterMs = 15000 }: {
  * starts it. The SDK's timeout and a caller's abort end the wait for a slow load too, and the wait
  * gives up 2 s before the SDK does, so the error a person reads names the log.
  */
-export function localFetch(home: string, local: LocalModel, env: NodeJS.ProcessEnv, timeoutMs?: number): (input: string, init?: RequestInit) => Promise<Response> {
+export function localFetch(home: string, local: LocalModel, env: NodeJS.ProcessEnv, timeoutMs?: number, still?: () => boolean): (input: string, init?: RequestInit) => Promise<Response> {
   // Never under 1 s: a shorter wait would give up the moment the server is spawned.
-  const options = timeoutMs === undefined ? {} : { timeoutMs: Math.max(timeoutMs - 2000, 1000) };
+  const options: WaitOptions = { ...(timeoutMs === undefined ? {} : { timeoutMs: Math.max(timeoutMs - 2000, 1000) }), ...(still ? { still } : {}) };
   return async (input, init) => {
     const signal = init?.signal;
     signal?.throwIfAborted();
@@ -441,5 +452,70 @@ export function localFetch(home: string, local: LocalModel, env: NodeJS.ProcessE
       ensureServer(home, local, env, options).then(resolve, reject);
     });
     return fetch(input, init);
+  };
+}
+
+/**
+ * Where a Jev server may already run on this machine: candle-jev's jevd listens on 8741 by default. Asking it
+ * instead of downloading a model keeps one copy on disk and one model in the GPU's memory.
+ */
+export const KNOWN_SERVERS = ["http://127.0.0.1:8741"];
+
+/** `JEVELRY_KNOWN_SERVERS`, comma-separated URLs, replaces the list, so a test points it at fakes and a person adds their own; empty means none. */
+export function knownServers(env: NodeJS.ProcessEnv): string[] {
+  const given = env.JEVELRY_KNOWN_SERVERS;
+  return given === undefined ? KNOWN_SERVERS : given.split(",").map((url) => url.trim().replace(/\/+$/, "")).filter((url) => url !== "");
+}
+
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+
+/**
+ * The models a Jev server at `url` lists at GET /v1/models: TypeSafe's `models[].name`, or OpenAI's `data[].id`
+ * that llama-server answers too. Empty when nothing answers in a second or what answers is no Jev server.
+ */
+export async function serverModels(url: string, fetchImpl: typeof fetch = fetch): Promise<string[]> {
+  try {
+    const response = await fetchImpl(`${url}/v1/models`, { signal: AbortSignal.timeout(1000) });
+    const body: unknown = response.status === 200 ? await response.json() : null;
+    const pick = (list: unknown, key: string): string[] => (Array.isArray(list) ? list.map((m) => (isObject(m) ? m[key] : null)).filter((n): n is string => typeof n === "string" && n !== "") : []);
+    if (!isObject(body)) return [];
+    const named = pick(body.models, "name");
+    return named.length > 0 ? named : pick(body.data, "id");
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The Jev servers already running at `urls`, one row per model, asked in parallel with GET /v1/models and
+ * nothing else. A `local/` model is a llama-server jevelry started itself, not a server to adopt.
+ */
+export async function findRunningServers(urls: string[] = knownServers(process.env), fetchImpl: typeof fetch = fetch): Promise<Array<{ url: string; model: string }>> {
+  const found = await Promise.all(urls.map(async (url) => (await serverModels(url, fetchImpl)).filter((model) => !model.startsWith("local/")).map((model) => ({ url, model }))));
+  return found.flat();
+}
+
+/**
+ * The SDK's fetch for a server jevelry did not start. A jevel pins a hosted model the server does not serve
+ * (jevd answers 400 to any other id), so every request asks for the server's own model. Its answer's model
+ * reads as `local/<model>`, so the log, the TUI's $0 cost and the error wording treat it as a model on this
+ * machine. Everything else passes through.
+ */
+export function serverFetch(model: string, fetchImpl: typeof fetch = fetch): (input: string, init?: RequestInit) => Promise<Response> {
+  return async (input, init) => {
+    let sent = init;
+    if (typeof init?.body === "string") {
+      try {
+        const body: unknown = JSON.parse(init.body);
+        if (isObject(body) && "model" in body) sent = { ...init, body: JSON.stringify({ ...body, model }) };
+      } catch {
+        // Not JSON: sent as it is.
+      }
+    }
+    const response = await fetchImpl(input, sent);
+    if (response.status !== 200) return response;
+    const answer: unknown = await response.clone().json().catch(() => null);
+    if (!isObject(answer) || typeof answer.model !== "string" || answer.model.startsWith("local/")) return response;
+    return new Response(JSON.stringify({ ...answer, model: `local/${answer.model}` }), { status: 200, headers: { "content-type": "application/json" } });
   };
 }

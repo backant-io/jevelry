@@ -1,9 +1,10 @@
 import { Box, Text, useInput } from "ink";
 import { useEffect, useState } from "react";
 import { type CatalogModel, type Choice, INDEX, hfUrl, licenceLabel, listModels, rank } from "../catalog.js";
-import type { LocalModel } from "../config.js";
+import type { JevServer, LocalModel } from "../config.js";
 import { type Fit, GIB, type Machine, budgetBytes, detectMachine } from "../estimate.js";
-import { type SetupIO, installLocal, runtimeReady } from "../setup.js";
+import { findRunningServers } from "../server.js";
+import { type SetupIO, installLocal, runtimeReady, useServer } from "../setup.js";
 import { bar } from "./charts.js";
 import { Dialog, type Hint, SelectDialog } from "./dialog.js";
 import { wrapLine } from "./history.js";
@@ -16,6 +17,8 @@ export interface SetupSeam {
   install?: (choice: Choice, io: SetupIO) => Promise<LocalModel>;
   /** Whether Homebrew would have to install or upgrade llama.cpp before a model of this decision type runs. */
   runtimeNeeded?: (type: string) => boolean;
+  /** The Jev servers already running on this machine, offered before any download. */
+  findServers?: () => Promise<JevServer[]>;
 }
 
 /** The same test installRuntime makes, so the confirm screen says Homebrew exactly when the install will ask for it. */
@@ -37,9 +40,10 @@ type Step =
   | { at: "choose" }
   | { at: "typesafe" }
   | { at: "loading" }
-  | { at: "pick"; machine: Machine; choices: Choice[] }
-  | { at: "confirm"; machine: Machine; choices: Choice[]; choice: Choice; brew: boolean }
+  | { at: "pick"; machine: Machine; choices: Choice[]; servers: JevServer[] }
+  | { at: "confirm"; machine: Machine; choices: Choice[]; servers: JevServer[]; choice: Choice; brew: boolean }
   | { at: "installing"; choice: Choice; step: string; done?: number; total?: number }
+  | { at: "checking"; server: JevServer }
   | { at: "error"; message: string };
 
 const KEYS: Record<Step["at"], Hint[]> = {
@@ -50,6 +54,7 @@ const KEYS: Record<Step["at"], Hint[]> = {
   confirm: [["enter", "install"], ["esc", "back"]],
   // The download and the model load cannot be left halfway from here; ctrl+c still quits, and a later install resumes the download.
   installing: [],
+  checking: [],
   error: [["esc", "close"]],
 };
 
@@ -64,7 +69,8 @@ export function SetupDialog(props: {
   seam?: SetupSeam;
   onKeys: (hints: Hint[]) => void;
   onToast: (text: string, error: boolean) => void;
-  onDone: (local: LocalModel) => void;
+  /** The name of the model Jev now runs on. */
+  onDone: (name: string) => void;
   onClose: () => void;
 }): React.JSX.Element {
   const theme = useTheme();
@@ -78,8 +84,13 @@ export function SetupDialog(props: {
     Promise.resolve()
       .then(async () => {
         const machine = seam.machine ?? detectMachine(process.env);
-        const models = await (seam.listModels ?? (() => listModels({ hfUrl: hfUrl(process.env) })))();
-        return { machine, choices: rank(models, machine) };
+        const servers = await (seam.findServers ?? findRunningServers)();
+        // A server already running needs no download, so it is offered even when Hugging Face cannot be reached.
+        const models = await (seam.listModels ?? (() => listModels({ hfUrl: hfUrl(process.env) })))().catch((e: unknown) => {
+          if (servers.length === 0) throw e;
+          return [];
+        });
+        return { machine, servers, choices: rank(models, machine) };
       })
       .then((found) => setStep({ at: "pick", ...found }), (e: unknown) => setStep({ at: "error", message: message(e) }));
   };
@@ -93,7 +104,15 @@ export function SetupDialog(props: {
       confirm: async () => true,
     };
     (seam.install ?? ((c: Choice, i: SetupIO) => installLocal(c, props.home, i, process.env)))(choice, io)
-      .then(props.onDone, (e: unknown) => setStep({ at: "error", message: message(e) }));
+      .then((local) => props.onDone(local.name), (e: unknown) => setStep({ at: "error", message: message(e) }));
+  };
+
+  /** The same check and switch as jevelry install --local-url; it says nothing worth a step of its own. */
+  const adopt = (server: JevServer): void => {
+    setStep({ at: "checking", server });
+    const io: SetupIO = { say: () => undefined, progress: () => undefined, confirm: async () => true };
+    useServer(server.url, server.model, props.home, io, process.env)
+      .then(() => props.onDone(server.model), (e: unknown) => setStep({ at: "error", message: message(e) }));
   };
 
   // Every branch names its step: a listener from the step before can still be attached for a moment and sees the new
@@ -101,7 +120,7 @@ export function SetupDialog(props: {
   useInput((_input, key) => {
     if (step.at === "confirm") {
       if (key.return) install(step.choice);
-      else if (key.escape) setStep({ at: "pick", machine: step.machine, choices: step.choices });
+      else if (key.escape) setStep({ at: "pick", machine: step.machine, choices: step.choices, servers: step.servers });
     } else if (step.at === "typesafe" || step.at === "error") {
       if (key.escape || key.return) props.onClose();
     } else if (step.at === "loading" && key.escape) props.onClose();
@@ -117,12 +136,18 @@ export function SetupDialog(props: {
   }
   if (step.at === "pick") {
     return (
-      <SelectDialog<Choice> key="pick" title={machineLine(step.machine)} width={76} columns={columns} rows={rows}
-        items={step.choices.map((c) => ({ label: `${c.model.name} ${c.quant.quant}`, value: c, hint: choiceHint(c) }))}
+      <SelectDialog<Choice | JevServer> key="pick" title={machineLine(step.machine)} width={76} columns={columns} rows={rows}
+        items={[
+          // A server already running needs no download and puts no second model in memory, so it comes first. The
+          // hint leaves out the scheme, so the row fits at 80 columns.
+          ...step.servers.map((s) => ({ label: `Use ${s.model}, already running`, value: s, hint: `${s.url.replace(/^https?:\/\//, "")} · no download` })),
+          ...step.choices.map((c) => ({ label: `${c.model.name} ${c.quant.quant}`, value: c, hint: choiceHint(c) })),
+        ]}
         onClose={() => setStep({ at: "choose" })}
         onSelect={(c) => {
+          if ("url" in c) adopt(c);
           // A model too big for the GPU's memory is what crashed a machine once: it is never installed from here.
-          if (c.fit === "won't fit") props.onToast(`needs about ${gb(c.need)}; this machine has about ${gb(budgetBytes(step.machine))} for models`, true);
+          else if (c.fit === "won't fit") props.onToast(`needs about ${gb(c.need)}; this machine has about ${gb(budgetBytes(step.machine))} for models`, true);
           else setStep({ ...step, at: "confirm", choice: c, brew: (seam.runtimeNeeded ?? runtimeNeeded)(c.model.decisionType) });
         }} />
     );
@@ -145,6 +170,14 @@ export function SetupDialog(props: {
   }
   const width = 66;
   const inner = Math.min(width, columns - 4) - 4;
+  if (step.at === "checking") {
+    return (
+      <Dialog title={`Using ${step.server.model}`} width={width} columns={columns} rows={rows} height={7}>
+        <Text> </Text>
+        <Text color={theme.muted} wrap="truncate">Asking {step.server.url} one setup check</Text>
+      </Dialog>
+    );
+  }
   if (step.at === "error") {
     // As many lines of the message as fit above the footer, so a long brew log never pushes the screen past its rows.
     const lines = step.message.split("\n").flatMap((l) => wrapLine(l, inner)).slice(0, Math.max(1, rows - 12));

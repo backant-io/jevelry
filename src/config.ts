@@ -25,9 +25,18 @@ export interface LocalModel {
   params?: number;
 }
 
+/** A Jev server that already runs on this machine, like candle-jev's jevd: jevelry asks it and never starts or stops it. */
+export interface JevServer {
+  /** Without a trailing slash, like "http://127.0.0.1:8741". */
+  url: string;
+  /** The one model id the server serves, like "jevk5-v0.3-mlx8". */
+  model: string;
+}
+
 export interface Config {
-  backend?: "typesafe" | "local";
+  backend?: "typesafe" | "local" | "server";
   local?: LocalModel;
+  server?: JevServer;
 }
 
 /** Empty when the file is missing, is not JSON or is not an object: an unreadable config is an unconfigured jevelry, never a crash. */
@@ -59,8 +68,14 @@ export function localModel(home: string): LocalModel | undefined {
   return config.backend === "local" ? config.local : undefined;
 }
 
-/** A chosen local model wins over a key, because choosing it was the later and more deliberate act. */
+/** The running server jevelry asks, only while the backend is server, as with localModel. */
+export function jevServer(home: string): JevServer | undefined {
+  const config = readConfig(home);
+  return config.backend === "server" ? config.server : undefined;
+}
+
+/** A chosen local model or server wins over a key, because choosing it was the later and more deliberate act. Both run on this machine. */
 export function configured(env: NodeJS.ProcessEnv, home: string): "typesafe" | "local" | null {
-  if (localModel(home)) return "local";
+  if (localModel(home) || jevServer(home)) return "local";
   return resolveKey(env, home) !== undefined ? "typesafe" : null;
 }

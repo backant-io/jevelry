@@ -26,7 +26,7 @@ export function sandboxPath(fakes = true): string {
 
 /**
  * The environment every local-model test runs with: fakes for every binary, the file key store, a temp
- * home, and every fake llama-server recorded in `argv.ndjson` there, so killFakes can end it.
+ * home, no known Jev servers, and every fake llama-server recorded in `argv.ndjson` there, so killFakes can end it.
  */
 export function sandboxEnv(home: string, extra: Record<string, string | undefined> = {}): NodeJS.ProcessEnv {
   return {
@@ -37,6 +37,8 @@ export function sandboxEnv(home: string, extra: Record<string, string | undefine
     JEVELRY_LLAMA_SERVER: FAKE_LLAMA,
     JEVELRY_BREW: FAKE_BREW,
     FAKE_LLAMA_ARGV_FILE: join(home, "argv.ndjson"),
+    // Never the Jev server that may run on this machine: a test that needs one points this at a fake.
+    JEVELRY_KNOWN_SERVERS: "",
     ...extra,
   };
 }

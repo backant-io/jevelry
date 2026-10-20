@@ -4,8 +4,8 @@ import { createServer } from "node:net";
 import { createInterface } from "node:readline";
 import { ask } from "./ask.js";
 import { type Choice, MIN_BUILD, hfUrl } from "./catalog.js";
-import { type LocalModel, writeConfig } from "./config.js";
-import { localClient } from "./decide.js";
+import { type JevServer, type LocalModel, writeConfig } from "./config.js";
+import { localClient, serverClient } from "./decide.js";
 import { downloadFile, modelPath, remoteFile } from "./download.js";
 import { budgetBytes, detectMachine, fitOf, needBytes, realMachine } from "./estimate.js";
 import { WINDOWS, ensureServer, findOnPath, llamaServerPath, realHome, serverBuild, stopServer, stopServerAndWait } from "./server.js";
@@ -82,6 +82,9 @@ function freePort(): Promise<number> {
   });
 }
 
+/** The question every install asks once before it writes the config: a model that cannot answer it is not set up. */
+const CHECK = { state: "jevelry setup check", questions: { ok: { type: "noul", instructions: "Is this a setup check?" } } } as const;
+
 /**
  * Sets up `choice` end to end: llama.cpp, the verified download, the config, the server and one smoke
  * ask through the same client every jevelry ask uses. Every failure is a SetupError with its reason.
@@ -134,7 +137,7 @@ export async function installLocal(choice: Choice, home: string, io: SetupIO, en
       await ensureServer(home, local, env, { onWait: () => io.progress("loading the model") });
       const started = Date.now();
       // The new model's own client, not defaultClient: an exported TYPESAFE_BASE_URL would send the check elsewhere and pass it there.
-      const result = await ask({ client: localClient(home, local, env), state: "jevelry setup check", questions: { ok: { type: "noul", instructions: "Is this a setup check?" } } });
+      const result = await ask({ client: localClient(home, local, env), ...CHECK });
       if (!result.ok) throw new SetupError(`${model.name} did not answer the setup check: ${result.error.message}`);
       io.say(`${model.name} answered in ${Date.now() - started} ms on this machine`);
     } catch (error) {
@@ -150,6 +153,25 @@ export async function installLocal(choice: Choice, home: string, io: SetupIO, en
   } catch (error) {
     throw error instanceof SetupError ? error : new SetupError(error instanceof Error ? error.message : String(error));
   }
+}
+
+/**
+ * Switches jevelry to a Jev server that already runs at `url`, after one smoke ask through the client every ask
+ * will use. jevelry's own llama-server is stopped once the server answered, so no second model stays in memory.
+ * Every failure is a SetupError and leaves the config as it was.
+ */
+export async function useServer(url: string, model: string, home: string, io: SetupIO, env: NodeJS.ProcessEnv): Promise<JevServer> {
+  // A llama-server jevelry started is stopped below, and the config would then name a server that is gone.
+  if (model.startsWith("local/")) throw new SetupError(`${url} is a llama-server jevelry started; jevelry install --local switches to its model`);
+  const server = { url, model };
+  const started = Date.now();
+  const result = await ask({ client: serverClient(server, env), ...CHECK });
+  if (!result.ok) throw new SetupError(`${model} did not answer the setup check: ${result.error.message}`);
+  io.say(`${model} answered in ${Date.now() - started} ms at ${url}`);
+  const { left } = await stopServerAndWait(home);
+  if (left.length > 0) throw new SetupError(`the local model server (pid ${left.join(", ")}) did not stop; stop it and try again`);
+  writeConfig(home, { backend: "server", server });
+  return server;
 }
 
 /**

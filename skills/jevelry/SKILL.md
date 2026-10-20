@@ -15,7 +15,7 @@ Run this in the project:
 
 It puts this skill into every coding agent it finds on the machine and asks how jevelry should reach Jev: hosted with a TypeSafe key, which you can skip with Enter, or a model on this machine. When the person already has the key in their keychain or in `TYPESAFE_API_KEY`, or a local model is set up, you are done: `install` says which one jevelry asks and changes nothing. Without a terminal it changes nothing and names both ways. If you only need the skill, `npx jevelry install-skill` does that part alone.
 
-To run Jev on the machine instead of the hosted API, run `npx jevelry models --local`, which ranks the decision models on Hugging Face and says for each whether this machine can run it, then `npx jevelry install --local <id>`. The install may install llama.cpp with Homebrew and downloads 1 to 30 GB, so ask the person before you run it, and pass `--yes` only once they agreed, since that answers its Homebrew and tight-fit questions for them. A model the table marks `won't fit` is refused anyway. After the install every `ask`, `run` and `decide()` goes to a local server the first ask starts, the answer's `model` is `local/<file>`, and `npx jevelry install --typesafe` goes back to hosted Jev.
+To run Jev on the machine instead of the hosted API, run `npx jevelry models --local`, which ranks the decision models on Hugging Face and says for each whether this machine can run it, then `npx jevelry install --local <id>`. The install may install llama.cpp with Homebrew and downloads 1 to 30 GB, so ask the person before you run it, and pass `--yes` only once they agreed, since that answers its Homebrew and tight-fit questions for them. A model the table marks `won't fit` is refused anyway. After the install every `ask`, `run` and `decide()` goes to a local server the first ask starts, the answer's `model` is `local/<file>`, and `npx jevelry install --typesafe` goes back to hosted Jev. When `models --local` or `install --local` says a Jev server already runs on the machine, `npx jevelry install --local-url <url>` asks that one instead, with no download and no second model in memory.
 
 ## When to reach for a jevel
 
@@ -59,6 +59,7 @@ Each jevel's body says what its state looks like and its `example.json` is a sta
 | `npx jevelry install` | installs this skill into every agent found, then asks for the key (skippable) or a model on this machine |
 | `npx jevelry install --typesafe` | stores a key when none is there, then asks hosted Jev from now on; without a key nothing changes |
 | `npx jevelry install --local [<id>] [--yes]` | runs that model on this machine (an id or a row of `models --local`, `<id>:Q4_K_M` forces the quant), or shows the list to choose from; `--yes` answers the Homebrew and tight-fit questions |
+| `npx jevelry install --local-url <url>` | asks the Jev server that already runs at that URL (like jevd at `http://127.0.0.1:8741`) after one setup check; jevelry neither starts nor stops it |
 | `npx jevelry install-skill [--project]` | installs the skill only |
 | `npx jevelry list` | the jevels jevelry can find |
 | `npx jevelry show <jevel>` | the resolved frontmatter and the body |

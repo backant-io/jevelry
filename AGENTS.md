@@ -11,7 +11,7 @@ This installs the jevelry skill into every coding agent it finds and asks how je
     npx jevelry models --local
     npx jevelry install --local vllm-d3-flash
 
-The first ranks the decision models on Hugging Face by the Jev Decision Index and says for each whether this machine can run it and how many seconds a question takes. The second offers to install llama.cpp with Homebrew when it is missing or too old, downloads the model and checks its sha256, and from then on every ask goes to a local `llama-server` that the first ask starts. `npx jevelry stop` stops it, and `npx jevelry install --typesafe` goes back to hosted Jev. The install downloads 1 to 30 GB, so ask the person first.
+The first ranks the decision models on Hugging Face by the Jev Decision Index and says for each whether this machine can run it and how many seconds a question takes. The second offers to install llama.cpp with Homebrew when it is missing or too old, downloads the model and checks its sha256, and from then on every ask goes to a local `llama-server` that the first ask starts. `npx jevelry stop` stops it, and `npx jevelry install --typesafe` goes back to hosted Jev. The install downloads 1 to 30 GB, so ask the person first. When a Jev server already runs on the machine, like jevd on port 8741, `npx jevelry install --local-url http://127.0.0.1:8741` asks it instead, with no download, and `models --local` names one it finds.
 
 ## Ask
 

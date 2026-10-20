@@ -404,7 +404,7 @@ export function App(props: {
           ) : null}
           {dialog === "setup" ? (
             <SetupDialog home={props.home} columns={columns} rows={rows} {...(props.setup ? { seam: props.setup } : {})} onKeys={setSetupKeys} onToast={say}
-              onDone={(local) => { setDialog(null); setSetUp(true); say(`Jev now runs on ${local.name} on this machine`); }}
+              onDone={(name) => { setDialog(null); setSetUp(true); say(`Jev now runs on ${name} on this machine`); }}
               onClose={() => { setDialog(null); if (!setUp) setSetUp(isSetUp()); }} />
           ) : null}
           {dialog === "pick" ? (
