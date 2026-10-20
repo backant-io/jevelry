@@ -199,7 +199,19 @@ async function launch(home: string, local: LocalModel, env: NodeJS.ProcessEnv): 
   mkdirSync(home, { recursive: true });
   realHome(home);
   let caught: NodeJS.Signals | undefined;
-  const hold = (signal: NodeJS.Signals): void => { caught ??= signal; };
+  let holding = true;
+  const release = (): void => { for (const signal of HELD) process.off(signal, hold); };
+  // Until the record is written a signal is remembered; after it, one that arrives is raised again at once, as if
+  // jevelry had no handler. Node dispatches a signal on a later turn of the event loop, so a handler removed right
+  // after the record could drop one already on its way, and Ctrl-C would be swallowed.
+  const hold = (signal: NodeJS.Signals): void => {
+    if (holding) {
+      caught ??= signal;
+      return;
+    }
+    release();
+    process.kill(process.pid, signal);
+  };
   try {
     return await withLock(home, async () => {
       const server = recorded(home);
@@ -226,17 +238,20 @@ async function launch(home: string, local: LocalModel, env: NodeJS.ProcessEnv): 
         // Recorded before the lock is released, so a launch in another process finds it and waits for it.
         record(home, child.pid, local);
         child.unref();
-        // A signal reaches its handler on a later turn of the event loop: two turns pass before the handlers go.
-        await new Promise((resolve) => setImmediate(() => setImmediate(resolve)));
         return { pid: child.pid, spawned: true };
       } finally {
-        for (const signal of HELD) process.off(signal, hold);
+        holding = false;
+        // Long after any signal on its way has been dispatched; unref'd, so it never keeps jevelry running.
+        setTimeout(release, 1000).unref();
         closeSync(log);
       }
     });
   } finally {
     // Raised once the lock is released: with no handler of its own, jevelry then ends the way the signal says.
-    if (caught) process.kill(process.pid, caught);
+    if (caught) {
+      release();
+      process.kill(process.pid, caught);
+    }
   }
 }
 
