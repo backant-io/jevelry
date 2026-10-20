@@ -1,4 +1,6 @@
 process.env.TZ = "UTC";
+// Whether Jev is set up is read from the temp home's key file, never from this machine's keychain.
+process.env.JEVELRY_KEY_STORE = "file";
 
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -49,6 +51,8 @@ const press = async (stdin: { write: (s: string) => void }, ...keys: string[]) =
 const homeWith = (lines: LogLine[]): string => {
   const home = mkdtempSync(join(tmpdir(), "jevelry-review-"));
   writeFileSync(join(home, "log.jsonl"), lines.map((l) => `${JSON.stringify(l)}\n`).join(""));
+  // A stored key: Jev is set up, so the start screen opens on its usual rows, not on setup.
+  writeFileSync(join(home, "env"), "TYPESAFE_API_KEY=test-key\n");
   return home;
 };
 const review = (lines: LogLine[], size = { columns: 80, rows: 24 }) => {

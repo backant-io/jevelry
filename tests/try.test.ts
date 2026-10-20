@@ -1,4 +1,7 @@
 process.env.TZ = "UTC";
+// Whether Jev is set up is read from the temp home alone: never this machine's keychain, never a key the shell exported.
+process.env.JEVELRY_KEY_STORE = "file";
+delete process.env.TYPESAFE_API_KEY;
 
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -257,6 +260,44 @@ describe("Try", () => {
     stdin.write(ESC);
     await tick();
     expect(lastFrame()).not.toContain("Quit jevelry?");
+    unmount();
+  });
+});
+
+describe("Try and how Jev is set up", () => {
+  // Someone who opens Try first learns why enter does nothing and both ways to fix it, and nothing is sent anywhere.
+  it("says Jev is not set up yet and how to set it up, and enter asks nothing, when there is no key and no model", async () => {
+    const h = home();
+    const { stdin, lastFrame, unmount } = render(createElement(App, { home: h, dirs: [SHIPPED], lines: [], size: { columns: 80, rows: 24 }, screen: "try", jevel: "ticket-triage", version: "9.9.9" }));
+    await tick();
+    // The left column only, where the status sits under the state, at its 36 columns on an 80 column terminal.
+    const left = (lastFrame() ?? "").split("\n").map((l) => l.slice(1, 37)).join(" ").replace(/\s+/g, " ");
+    expect(left).toContain("Jev is not set up yet. Press s on the start screen, or run npx jevelry install in another terminal, then press enter here.");
+    stdin.write(ENTER);
+    await tick(200);
+    expect(await asks(h)).toEqual([]);
+    expect(lastFrame()).not.toContain("Asking Jev");
+    unmount();
+  });
+
+  // A model on this machine costs nothing, and Try says $0 rather than leaving the cost out.
+  it("shows $0 for an answer from a local model", async () => {
+    const h = home();
+    const local = new TypeSafeClient({
+      apiKey: "test-key", baseURL: server.url, retry: { maxRetries: 0 }, defaultModel: "local/vllm-d3-flash-Q8_0",
+      // The test server answers as hosted Jev; this answers as llama-server does, under the model's alias.
+      fetch: async (input: string, init?: RequestInit) => {
+        const response = await fetch(input, init);
+        const body = (await response.json()) as Record<string, unknown>;
+        return new Response(JSON.stringify({ ...body, model: "local/vllm-d3-flash-Q8_0" }), { status: response.status, headers: { "content-type": "application/json" } });
+      },
+    });
+    const { stdin, lastFrame, unmount } = render(createElement(App, { home: h, dirs: [SHIPPED], lines: [], size: { columns: 120, rows: 40 }, screen: "try", jevel: "ticket-triage", client: local, version: "9.9.9" }));
+    await tick();
+    stdin.write(ENTER);
+    await until(lastFrame, "team = billing");
+    expect(lastFrame()).toMatch(/local\/vllm-d3-flash-Q8_0 · \d+\.\ds · \d+ tokens · \$0 ·/);
+    expect((await asks(h))[0]?.model).toBe("local/vllm-d3-flash-Q8_0");
     unmount();
   });
 });

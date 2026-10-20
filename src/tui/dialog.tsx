@@ -102,6 +102,8 @@ export function SelectDialog<V>(props: {
   items: SelectItem<V>[];
   columns: number;
   rows: number;
+  /** Wider than the default 60 for rows that carry more, like the model picker's sizes and speeds. */
+  width?: number;
   onSelect: (value: V) => void;
   onClose: () => void;
 }): React.JSX.Element {
@@ -122,7 +124,7 @@ export function SelectDialog<V>(props: {
     else if (key.backspace || key.delete) { setQuery((q) => q.slice(0, -1)); setAt(0); }
     else if (!key.ctrl && !key.meta && input !== "" && !/[\u0000-\u001f]/.test(input)) { setQuery((q) => q + input); setAt(0); }
   });
-  const width = Math.min(60, props.columns - 4);
+  const width = Math.min(props.width ?? 60, props.columns - 4);
   const inner = width - 4;
   return (
     <Dialog title={props.title} width={width} columns={props.columns} rows={props.rows} height={10 + visible}>

@@ -1,5 +1,7 @@
 // "Today" is the local day; pin the zone so the fixture's hours fall on the same day everywhere.
 process.env.TZ = "UTC";
+// Whether Jev is set up is read from the temp home's key file, never from this machine's keychain.
+process.env.JEVELRY_KEY_STORE = "file";
 
 import { appendFileSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -46,6 +48,8 @@ const tick = (ms = 60) => new Promise((resolve) => setTimeout(resolve, ms));
 const homeWith = (lines: LogLine[]): string => {
   const home = mkdtempSync(join(tmpdir(), "jevelry-home-"));
   writeFileSync(join(home, "log.jsonl"), lines.map((l) => `${JSON.stringify(l)}\n`).join(""));
+  // A stored key: Jev is set up, so the start screen opens on its usual rows, not on setup.
+  writeFileSync(join(home, "env"), "TYPESAFE_API_KEY=test-key\n");
   return home;
 };
 const app = (lines: LogLine[], size = { columns: 80, rows: 24 }, screen: "dashboard" | "start" = "dashboard") =>
@@ -72,6 +76,14 @@ describe("home numbers", () => {
     expect(costOf([C])).toEqual({ dollars: 0, noUsage: 0, noPrice: 0 });
     expect(formatCost(costOf([C]))).toBe("$0");
     expect(formatCost({ dollars: 1.5, noUsage: 0, noPrice: 0 })).toBe("$1.50");
+  });
+
+  // A model on this machine is free: its asks add nothing and never turn the day's cost into "cost unknown", usage or not.
+  it("prices asks on a local/ model at $0, with or without usage", () => {
+    const local: AskLine = { ...A, model: "local/vllm-d3-flash-Q8_0" };
+    expect(costOf([local, { ...local, usage: null }])).toEqual({ dollars: 0, noUsage: 0, noPrice: 0 });
+    expect(formatCost(costOf([local, { ...local, usage: null }]))).toBe("$0");
+    expect(costOf([A, local]).dollars).toBeCloseTo((400 / 1_000_000) * 0.042, 12);
   });
 
   it("counts decisions per hour over the last 24 hours, the current hour last", () => {

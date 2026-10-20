@@ -62,6 +62,12 @@ export interface Cost {
   noPrice: number;
 }
 
+/** Dollars per million input tokens on `model`: 0 for a "local/" model, which runs on this machine, undefined when unknown. */
+export function priceOf(model: string | null): number | undefined {
+  if (model === null) return undefined;
+  return model.startsWith("local/") ? 0 : PRICE_PER_MTOK[model];
+}
+
 /**
  * What the input tokens of these asks cost, summing the asks that can be priced and counting the ones that cannot.
  * An ask Jev could not answer was not charged.
@@ -70,7 +76,9 @@ export function costOf(asks: AskLine[]): Cost {
   const cost: Cost = { dollars: 0, noUsage: 0, noPrice: 0 };
   for (const ask of asks) {
     if (ask.error) continue;
-    const price = ask.model === null ? undefined : PRICE_PER_MTOK[ask.model];
+    const price = priceOf(ask.model);
+    // A free model costs nothing whether or not its server reported usage.
+    if (price === 0) continue;
     if (!ask.usage) cost.noUsage += 1;
     else if (price === undefined) cost.noPrice += 1;
     else cost.dollars += (ask.usage.input_tokens / 1_000_000) * price;
@@ -514,11 +522,14 @@ export function StartView(props: {
   onTry: (jevel: string) => void;
   onPick: () => void;
   onGo: (screen: "dashboard" | "review" | "history") => void;
+  /** Given while Jev is not set up (no key and no local model): setup is then the first row, because Try cannot ask before it. */
+  onSetup?: () => void;
 }): React.JSX.Element {
   const theme = useTheme();
   const minute = Math.floor(props.now.getTime() / 60_000);
   const s = useMemo(() => homeStats(props.lines, props.now), [props.lines, minute]);
   const rows: Array<{ key: string; label: string; hint: string; open: () => void }> = [
+    ...(props.onSetup ? [{ key: "s", label: "Set up Jev: a TypeSafe key or a model on this machine", hint: "needed before Try", open: props.onSetup }] : []),
     s.empty
       ? { key: "t", label: "Try ticket-triage with a sample ticket", hint: "ask Jev live with an example", open: () => props.onTry("ticket-triage") }
       : { key: "t", label: "Try a jevel", hint: "ask Jev live with an example", open: props.onPick },
@@ -530,7 +541,7 @@ export function StartView(props: {
   ];
   const at = Math.min(props.cursor, rows.length - 1);
   useChrome([["j/k", "move"], ["enter", "open"]]);
-  // t, v, d and y are the shell's own keys, so each row's key works here and on every other screen.
+  // t, v, d and y are the shell's own keys, so each row's key works here and on every other screen; s is the shell's too, on this screen only.
   useInput((input, key) => {
     const step = moves(input, key);
     if (step !== 0) props.onCursor((c) => Math.max(0, Math.min(Math.min(c, rows.length - 1) + step, rows.length - 1)));
