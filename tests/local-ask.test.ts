@@ -3,10 +3,11 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { type LocalModel, writeConfig } from "../src/config.js";
 import { SERVER_FILE, stopServer } from "../src/server.js";
-import { killFakes, sandboxEnv } from "./fixtures/sandbox.js";
+import { killFakes, liveFakes, sandboxEnv } from "./fixtures/sandbox.js";
 import { type TestServer, startServer as startTypesafe } from "./fixtures/server.js";
 
 const QUESTIONS = JSON.stringify({ urgent: { type: "noul", instructions: "Is it urgent?" } });
@@ -149,4 +150,55 @@ describe("jevelry ask in local mode", () => {
     expect(r.status).toBe(6);
     expect(JSON.parse(r.stdout)).toMatchObject({ error: { code: "transport", message: expect.stringContaining("the model file is missing") } });
   });
+
+  // Ctrl-C lands at any moment. Between starting the server and writing down which process it is, it
+  // would leave a model loaded that nothing knows about: no stop finds it and the next ask loads another.
+  it("leaves no server without a record when jevelry ask gets SIGINT around the spawn, 60 runs", async () => {
+    const once = async (atUs: number | null): Promise<{ recordedAtUs: number; orphans: number[]; signal: unknown }> => {
+      // The model sits outside the models folder, so only holding the signal can pass, not the stray check.
+      const { home, env } = await fixture({ FAKE_LLAMA_LOAD_MS: "100", FAKE_LLAMA_LIFETIME_MS: "6000" });
+      const record = join(home, SERVER_FILE);
+      const t0 = process.hrtime.bigint();
+      const sinceUs = (): number => Number(process.hrtime.bigint() - t0) / 1000;
+      const child = spawn(process.execPath, ["bin/jevelry.js", "ask", "--questions", '{"q":{"type":"noul","instructions":"x"}}', "--state", '"x"'], { env, stdio: "ignore" });
+      const closed = new Promise((resolve) => child.on("close", (_code, signal) => resolve(signal)));
+      let recordedAtUs = -1;
+      // Busy loops, not timers: the window between spawn and record is about a millisecond wide.
+      if (atUs === null) {
+        while (recordedAtUs < 0 && sinceUs() < 3e6) if (existsSync(record)) recordedAtUs = sinceUs();
+      } else {
+        while (sinceUs() < atUs) {
+          // Wait for the moment to interrupt.
+        }
+        child.kill("SIGINT");
+      }
+      const signal = await closed;
+      // A server spawned just before the signal needs a moment to start and write its line.
+      await sleep(300);
+      let named: unknown = null;
+      try {
+        named = (JSON.parse(readFileSync(record, "utf8")) as { pid: unknown }).pid;
+      } catch {
+        // No record at all.
+      }
+      const orphans = liveFakes(join(home, "argv.ndjson")).map((f) => f.pid).filter((pid) => pid !== named);
+      stopServer(home);
+      killFakes(join(home, "argv.ndjson"));
+      return { recordedAtUs, orphans, signal };
+    };
+    const times: number[] = [];
+    for (let i = 0; i < 5; i++) times.push((await once(null)).recordedAtUs);
+    const center = times.sort((a, b) => a - b)[2]!;
+    expect(center).toBeGreaterThan(0);
+    const wrong: string[] = [];
+    for (let run = 0; run < 60; run++) {
+      // From 8 ms before to 2 ms after the moment the record usually appears.
+      const at = center - 8000 + Math.random() * 10000;
+      const { orphans, signal } = await once(at);
+      if (orphans.length > 0) wrong.push(`SIGINT at ${Math.round(at)} us left pid ${orphans.join(", ")}`);
+      // Held, never swallowed: Ctrl-C still ends the ask once the record is written.
+      if (signal !== "SIGINT") wrong.push(`SIGINT at ${Math.round(at)} us ended the ask with ${String(signal)}`);
+    }
+    expect(wrong).toEqual([]);
+  }, 180000);
 });

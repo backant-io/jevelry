@@ -37,10 +37,6 @@ const alive = (pid: number): boolean => {
     return false;
   }
 };
-const gone = async (pid: number): Promise<boolean> => {
-  for (let i = 0; i < 60 && alive(pid); i++) await sleep(50);
-  return !alive(pid);
-};
 /** How many fake llama-servers started in this home. */
 const starts = (dir: string): number => {
   const argv = join(dir, "argv.ndjson");
@@ -164,12 +160,12 @@ describe("installLocal", () => {
     expect(alive).toBe(false);
   });
 
-  // An old server that ignores SIGTERM (a model still unloading, a wedged process) must not stay beside the new
-  // model: two models at once is how a GPU runs out. It is killed, and the new model starts only once it is gone.
-  it("kills a previous server that ignores SIGTERM before the new model starts", async () => {
+  // An old server slow to exit (a model still unloading) must not stay beside the new model: two models at
+  // once is how a GPU runs out. The new model starts only once the old process is gone, not just signalled.
+  it("waits for a previous server slow to exit before the new model starts", async () => {
     const { dir, env } = fixture();
     const path = join(dir, "old.gguf");
-    const old = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000); console.log('ready')", "--", "-m", path, "--port", "1"], { stdio: ["ignore", "pipe", "ignore"] });
+    const old = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => setTimeout(() => process.exit(0), 1000)); setInterval(() => {}, 1000); console.log('ready')", "--", "-m", path, "--port", "1", "--alias", "local/old"], { stdio: ["ignore", "pipe", "ignore"] });
     try {
       await new Promise((resolve) => old.stdout.once("data", resolve));
       writeFileSync(join(dir, SERVER_FILE), JSON.stringify({ pid: old.pid, port: 1, path, alias: "local/old" }));
@@ -177,13 +173,13 @@ describe("installLocal", () => {
       let startsWhenGone = -1;
       old.once("exit", () => { startsWhenGone = starts(dir); });
       await installLocal(choice("d1-3b"), dir, recorder(true).io, env);
-      expect(old.signalCode).toBe("SIGKILL");
+      expect(old.exitCode).toBe(0);
       expect(startsWhenGone).toBe(0);
       expect(starts(dir)).toBe(1);
     } finally {
       old.kill("SIGKILL");
     }
-  }, 30000);
+  });
 
   // A model too big for this machine is refused before a single byte is downloaded.
   it("refuses a model that won't fit before any request", async () => {
@@ -219,7 +215,7 @@ describe("installLocal", () => {
   // hosted Jev that worked: the config changes only once the new model has answered.
   it("leaves the previous config and no server behind when the new model's server dies while starting", async () => {
     const { dir } = fixture();
-    useTypesafe(dir);
+    await useTypesafe(dir);
     const env = sandboxEnv(dir, { JEVELRY_HF_URL: hf.url, JEVELRY_MACHINE: JSON.stringify(M4_PRO_24), FAKE_LLAMA_FAIL: "1" });
     await expect(installLocal(choice("vllm-d3-flash"), dir, recorder(true).io, env)).rejects.toThrow(/the local model server stopped while starting/);
     expect(readConfig(dir)).toEqual({ backend: "typesafe" });
@@ -227,18 +223,19 @@ describe("installLocal", () => {
   });
 
   // A server that starts but cannot answer is not a working install: the setup that worked before stays,
-  // and the new model does not stay in memory.
+  // and the new model is out of memory by the time the install returns, even when it is slow to exit, so an
+  // ask on the old setup right after cannot load a second model beside it.
   it("leaves the previous config and no server behind when the new model answers its check with an error", async () => {
     const { dir } = fixture();
-    useTypesafe(dir);
-    const env = sandboxEnv(dir, { JEVELRY_HF_URL: hf.url, JEVELRY_MACHINE: JSON.stringify(M4_PRO_24), FAKE_LLAMA_LOAD_MS: "100", FAKE_LLAMA_ANSWER_STATUS: "500" });
+    await useTypesafe(dir);
+    const env = sandboxEnv(dir, { JEVELRY_HF_URL: hf.url, JEVELRY_MACHINE: JSON.stringify(M4_PRO_24), FAKE_LLAMA_LOAD_MS: "100", FAKE_LLAMA_ANSWER_STATUS: "500", FAKE_SIGTERM_DELAY_MS: "1000" });
     const error = await installLocal(choice("vllm-d3-flash"), dir, recorder(true).io, env).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(SetupError);
     expect((error as Error).message).toMatch(/^vLLM-SR d3-flash 9B did not answer the setup check: the local model server answered 500/);
     expect(readConfig(dir)).toEqual({ backend: "typesafe" });
     expect(existsSync(join(dir, SERVER_FILE))).toBe(false);
     const { pid } = JSON.parse(readFileSync(join(dir, "argv.ndjson"), "utf8")) as { pid: number };
-    expect(await gone(pid)).toBe(true);
+    expect(alive(pid)).toBe(false);
   });
 
   // A base URL exported in the shell points every ask elsewhere; the setup check must still ask the
@@ -264,23 +261,26 @@ describe("installLocal", () => {
 
 describe("useTypesafe", () => {
   // Switching to hosted Jev keeps the model on file, so switching back needs no download.
-  it("sets the backend to typesafe and keeps the local model", () => {
+  it("sets the backend to typesafe and keeps the local model", async () => {
     const dir = home();
     const local = { repo: "r", file: "f.gguf", quant: "Q8_0", name: "M", decisionType: "kev", path: "/p", port: 1, alias: "local/f" };
     writeConfig(dir, { backend: "local", local });
-    useTypesafe(dir);
+    await useTypesafe(dir);
     expect(readConfig(dir)).toEqual({ backend: "typesafe", local });
   });
 
-  // Hosted Jev chosen, the local model must leave the GPU's memory now, not after its idle timeout.
-  it("stops the local model's server", async () => {
+  // Hosted Jev chosen, the local model must leave the GPU's memory now, not after its idle timeout, and be
+  // gone by the time the switch returns, even when it is slow to exit: a local install right after must not
+  // load a second model beside it.
+  it("stops the local model's server and waits until it is gone", async () => {
     const dir = home();
     const path = join(dir, "m.gguf");
-    const server = spawn(process.execPath, ["-e", "setTimeout(() => {}, 30000)", "--", "-m", path, "--port", "1"], { stdio: "ignore" });
+    const server = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => setTimeout(() => process.exit(0), 1000)); setInterval(() => {}, 1000); console.log('ready')", "--", "-m", path, "--port", "1", "--alias", "local/m"], { stdio: ["ignore", "pipe", "ignore"] });
     try {
+      await new Promise((resolve) => server.stdout.once("data", resolve));
       writeFileSync(join(dir, SERVER_FILE), JSON.stringify({ pid: server.pid, port: 1, path, alias: "local/m" }));
-      useTypesafe(dir);
-      expect(await gone(server.pid!)).toBe(true);
+      await useTypesafe(dir);
+      expect(alive(server.pid!)).toBe(false);
     } finally {
       server.kill("SIGKILL");
     }

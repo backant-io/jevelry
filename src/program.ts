@@ -18,7 +18,7 @@ import { jevelryHome, logAsk, logStateFromEnv, readLog, recordOutcome } from "./
 import { type AskDocument, EXIT, type ErrorBody, type ErrorDocument, PROTOCOL, type RunReport } from "./protocol.js";
 import { type Call, dispatcherOf, execute, logRun, planCall } from "./run.js";
 import { renderReport, report } from "./report.js";
-import { stopServer } from "./server.js";
+import { stopServerAndWait } from "./server.js";
 import { type SetupIO, installLocal, useTypesafe } from "./setup.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -175,7 +175,7 @@ async function storeAKey(): Promise<boolean> {
 
 /** Hosted Jev only once there is a key: switching without one would turn every ask that the local model answers into an auth failure. */
 async function switchToTypesafe(): Promise<void> {
-  if (await storeAKey()) useTypesafe(home());
+  if (await storeAKey()) await useTypesafe(home());
   else say("nothing changed");
 }
 
@@ -553,8 +553,15 @@ export function buildProgram(): Command {
   program
     .command("stop")
     .description("stop the local model server jevelry started")
-    .action(() => {
-      say(stopServer(home()) !== null ? "stopped the local model server" : "no local model server was running");
+    .action(async () => {
+      // "stopped" only once the process is gone: a model still unloading holds the GPU's memory.
+      const { found, left } = await stopServerAndWait(home());
+      if (left.length > 0) {
+        say(`the local model server (pid ${left.join(", ")}) did not stop`);
+        process.exitCode = 1;
+        return;
+      }
+      say(found.length > 0 ? "stopped the local model server" : "no local model server was running");
     });
 
   program

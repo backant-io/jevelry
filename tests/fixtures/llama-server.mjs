@@ -33,7 +33,8 @@ if (process.env.FAKE_LLAMA_FAIL) {
 }
 // A safety net: a fake a test forgot to stop ends by itself instead of outliving the suite.
 setTimeout(() => process.exit(0), Number(process.env.FAKE_LLAMA_LIFETIME_MS ?? 30000));
-process.on("SIGTERM", () => process.exit(0));
+// FAKE_SIGTERM_DELAY_MS makes it a server slow to exit, like a real one freeing GPU memory or busy loading.
+process.on("SIGTERM", () => setTimeout(() => process.exit(0), Number(process.env.FAKE_SIGTERM_DELAY_MS ?? 0)));
 
 const loadMs = Number(process.env.FAKE_LLAMA_LOAD_MS ?? 300);
 const started = Date.now();

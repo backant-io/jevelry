@@ -42,17 +42,23 @@ export function sandboxEnv(home: string, extra: Record<string, string | undefine
 }
 
 /**
- * Kills every fake llama-server recorded in `argvFile`, so no fake outlives its suite whatever the code
- * under test did or failed to do. A pid is killed only while its command line still ends in the
- * recorded arguments: a pid freed by a fake that already ended may belong to someone else's program now.
+ * The fake llama-servers recorded in `argvFile` that still run. A pid counts only while its command
+ * line is still a llama-server ending in the recorded arguments after the model path (which ps may
+ * escape): a pid freed by a fake that already ended may belong to someone else's program now.
  */
+export function liveFakes(argvFile: string): Array<{ pid: number; args: string[] }> {
+  if (!existsSync(argvFile)) return [];
+  return readFileSync(argvFile, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line) as { pid: number; args: string[] }).filter(({ pid, args }) => {
+    const command = (spawnSync("ps", ["-ww", "-o", "command=", "-p", String(pid)], { encoding: "utf8" }).stdout ?? "").trimEnd();
+    return command.includes("llama-server") && command.endsWith(` ${args.slice(2).join(" ")}`);
+  });
+}
+
+/** Kills every fake llama-server recorded in `argvFile`, so no fake outlives its suite whatever the code under test did or failed to do. */
 export function killFakes(argvFile: string): void {
-  if (!existsSync(argvFile)) return;
-  for (const line of readFileSync(argvFile, "utf8").split("\n").filter(Boolean)) {
-    const { pid, args } = JSON.parse(line) as { pid: number; args: string[] };
-    const command = spawnSync("ps", ["-ww", "-o", "command=", "-p", String(pid)], { encoding: "utf8" }).stdout ?? "";
+  for (const { pid } of liveFakes(argvFile)) {
     try {
-      if (command.trimEnd().endsWith(` ${args.join(" ")}`)) process.kill(pid, "SIGKILL");
+      process.kill(pid, "SIGKILL");
     } catch {
       // Ended in between.
     }

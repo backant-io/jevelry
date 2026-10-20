@@ -33,7 +33,8 @@ export function detectMachine(env: NodeJS.ProcessEnv = process.env): Machine {
     os: process.platform,
     chip: cores[0]?.model ?? "unknown",
     cpus: cores.length,
-    ramBytes: totalmem(),
+    // A container's memory limit is the machine a model has; constrainedMemory() is 0 where there is none.
+    ramBytes: Math.min(totalmem(), process.constrainedMemory() || Infinity),
     darwinMajor: darwin ? Number(release().split(".")[0]) : null,
     gpu: darwin ? null : nvidiaGpu(),
   };

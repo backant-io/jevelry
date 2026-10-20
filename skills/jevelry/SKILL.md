@@ -72,7 +72,7 @@ Each jevel's body says what its state looks like and its `example.json` is a sta
 | `npx jevelry types [--out <file>]` | writes TypeScript types for every jevel it finds, for `jevel(name).decide()` |
 | `npx jevelry models` | the model names the account may send, or the local model's alias when one is set up |
 | `npx jevelry models --local [--json]` | the decision models on Hugging Face ranked for this machine: download, memory needed, fit, score, seconds per question, licence |
-| `npx jevelry stop` | stops the local model server jevelry started |
+| `npx jevelry stop` | stops the local model server jevelry started and waits until it has exited; run it when an ask says "a different local model is running" or "a local model server jevelry did not record is running" |
 
 Jevels are found in `--jevels <dir>`, then `JEVELRY_JEVELS` (colon separated), then `./jevels`, then `$JEVELRY_HOME/jevels` (default `~/.jevelry/jevels`), then the jevels that ship with jevelry. Keep the project's jevels in `./jevels/` so a person reviews them with the code.
 

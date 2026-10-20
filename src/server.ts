@@ -1,7 +1,8 @@
 import { spawn, spawnSync } from "node:child_process";
-import { accessSync, closeSync, constants, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { delimiter, join } from "node:path";
+import { accessSync, closeSync, constants, existsSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, delimiter, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { MIN_BUILD } from "./catalog.js";
 import type { LocalModel } from "./config.js";
 import { budgetBytes, fitOf, needBytes, realMachine } from "./estimate.js";
 
@@ -113,7 +114,7 @@ async function withLock<T>(home: string, fn: () => Promise<T>): Promise<T> {
     }
     // An empty lock is one whose holder is still writing its pid: it counts as held.
     // ponytail: a dead holder's pid reused by another program keeps the lock held; compare the lock's age if that ever bites.
-    if (holder > 0 && !alive(holder)) rmSync(lock, { force: true });
+    if (holder > 0 && !alive(holder)) takeOver(lock, holder);
     else if (Date.now() >= deadline) throw new Error("another jevelry is starting the local model server; try again");
     else await sleep(100);
   }
@@ -124,49 +125,119 @@ async function withLock<T>(home: string, fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * Clears a lock whose holder `dead` died. Many waiting processes see the dead holder at once, and one that
+ * deletes after another has already taken the lock would let two start a server. So takeovers go one at a
+ * time behind a guard file, and the lock is deleted only while it still names the dead holder: nothing
+ * else writes a lock whose holder is dead, and a live lock is never moved or deleted.
+ */
+export function takeOver(lock: string, dead: number): void {
+  const guard = `${lock}.takeover`;
+  try {
+    writeFileSync(guard, String(process.pid), { flag: "wx" });
+  } catch {
+    // Another takeover is under way. A guard left by a taker that died is cleared once it is 10 s old.
+    try {
+      if (Date.now() - statSync(guard).mtimeMs > 10000) rmSync(guard, { force: true });
+    } catch {
+      // Gone already.
+    }
+    return;
+  }
+  try {
+    if (Number(readFileSync(lock, "utf8")) === dead) rmSync(lock, { force: true });
+  } catch {
+    // Released in between: nothing to clear.
+  } finally {
+    rmSync(guard, { force: true });
+  }
+}
+
+export const WINDOWS = "local models run on macOS and Linux for now: on Windows jevelry cannot tell its own model server from another program";
+
+/** Characters ps escapes in every locale; a home containing one could hide a running server from the stray check. */
+const UNPRINTABLE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+
+/**
+ * The home's real path. A home reached through a symlink is the same home, and its servers are found
+ * by the one spelling the process table shows; a path ps cannot print as it is would hide them.
+ */
+export function realHome(home: string): string {
+  const real = realpathSync.native(home);
+  if (UNPRINTABLE.test(real)) throw new Error(`jevelry cannot run a local model from a home whose path has characters ps cannot print (${JSON.stringify(real)}); set JEVELRY_HOME to a plain path`);
+  return real;
+}
+
 const gb = (bytes: number): string => `${(bytes / 1e9).toFixed(1)} GB`;
+
+/** The signals a person or a terminal sends to stop jevelry, held back while a server is started but not yet recorded. */
+const HELD = ["SIGINT", "SIGTERM", "SIGHUP"] as const;
 
 /**
  * Spawned detached with its output in the log, so it outlives the command that started it and serves
  * the next ask. A server on record that is ours is never joined by a second one: the same model is
  * waited for, and another model is refused, because two models at once is how a GPU runs out of memory.
+ * A server of this home that no record names is refused too. `spawned` says whether this call started it.
  */
-async function launch(home: string, local: LocalModel, env: NodeJS.ProcessEnv): Promise<number> {
+async function launch(home: string, local: LocalModel, env: NodeJS.ProcessEnv): Promise<{ pid: number; spawned: boolean }> {
+  if (process.platform === "win32") throw new Error(WINDOWS);
   const bin = llamaServerPath(env);
   if (!bin) throw new Error("llama-server is not installed; run jevelry install --local");
   if (!existsSync(local.path)) throw new Error(`the model file is missing: ${local.path}; run jevelry install --local`);
-  // A synced $JEVELRY_HOME or a config from a bigger machine must not load what this one cannot hold.
-  const need = needBytes({ bytes: statSync(local.path).size, params: local.params ?? 0, decisionType: local.decisionType });
+  // A synced $JEVELRY_HOME or a config from a bigger machine must not load what this one cannot hold. What
+  // the config does not say is taken at its worst: a config written before params were kept may be a 27B,
+  // and a type this build does not know may keep logits like kev.
+  const need = needBytes({
+    bytes: statSync(local.path).size,
+    params: typeof local.params === "number" ? local.params : Infinity,
+    decisionType: typeof local.decisionType === "string" && Object.hasOwn(MIN_BUILD, local.decisionType) ? local.decisionType : "kev",
+  });
   const budget = budgetBytes(realMachine());
   if (fitOf(need, budget) === "won't fit") {
     throw new Error(`${local.alias} needs about ${gb(need)} and this machine has about ${gb(budget)} for models; run jevelry install --local to pick a smaller model`);
   }
   mkdirSync(home, { recursive: true });
-  return withLock(home, async () => {
-    const server = recorded(home);
-    if (isOurs(server.pid, server.path, server.port)) {
-      if (server.path === local.path && server.port === local.port) return server.pid;
-      throw new Error(`a different local model is running (${String(server.alias)}); run jevelry stop first, or restart this program if jevelry was switched to another model`);
-    }
-    // ponytail: the log is appended to on every start and never rotated; truncate it at start if it ever grows large.
-    const log = openSync(join(home, SERVER_LOG), "a");
-    try {
-      // The launch arguments alone decide what the server loads (llama-server also reads LLAMA_ARG_*),
-      // and the hosted key never sits in a long-lived process.
-      const serverEnv = Object.fromEntries(Object.entries(env).filter(([key]) => key !== "TYPESAFE_API_KEY" && !key.startsWith("LLAMA_")));
-      const child = spawn(bin, launchArgs(local), { detached: true, stdio: ["ignore", log, log], env: serverEnv });
-      await new Promise<void>((resolve, reject) => {
-        child.once("spawn", resolve);
-        child.once("error", reject);
-      });
-      child.unref();
-      // Recorded before the lock is released, so a launch in another process finds it and waits for it.
-      record(home, child.pid!, local);
-      return child.pid!;
-    } finally {
-      closeSync(log);
-    }
-  });
+  realHome(home);
+  let caught: NodeJS.Signals | undefined;
+  const hold = (signal: NodeJS.Signals): void => { caught ??= signal; };
+  try {
+    return await withLock(home, async () => {
+      const server = recorded(home);
+      if (isOurs(server.pid, server)) {
+        if (server.path === local.path && server.port === local.port) return { pid: server.pid, spawned: false };
+        throw new Error(`a different local model is running (${String(server.alias)}); run jevelry stop first, or restart this program if jevelry was switched to another model`);
+      }
+      // Nothing of ours on record, so any server of this home is one whose jevelry was killed between spawn and record.
+      const stray = strayServers(home)[0];
+      if (stray !== undefined) throw new Error(`a local model server jevelry did not record is running (pid ${stray}); run jevelry stop`);
+      // ponytail: the log is appended to on every start and never rotated; truncate it at start if it ever grows large.
+      const log = openSync(join(home, SERVER_LOG), "a");
+      // A signal between spawn and record would leave a server that no record names: it is held until the
+      // record is written, then raised again. Spawn and record are synchronous, so nothing runs between them.
+      for (const signal of HELD) process.on(signal, hold);
+      try {
+        // The launch arguments alone decide what the server loads (llama-server also reads LLAMA_ARG_*),
+        // and the hosted key never sits in a long-lived process.
+        const serverEnv = Object.fromEntries(Object.entries(env).filter(([key]) => key !== "TYPESAFE_API_KEY" && !key.startsWith("LLAMA_")));
+        // The model's real path goes on the command line, so the stray check finds this server however the home was spelled.
+        const child = spawn(bin, launchArgs({ ...local, path: realpathSync.native(local.path) }), { detached: true, stdio: ["ignore", log, log], env: serverEnv });
+        // No pid is a spawn that failed, and its error follows.
+        if (child.pid === undefined) throw await new Promise<Error>((resolve) => child.once("error", resolve));
+        // Recorded before the lock is released, so a launch in another process finds it and waits for it.
+        record(home, child.pid, local);
+        child.unref();
+        // A signal reaches its handler on a later turn of the event loop: two turns pass before the handlers go.
+        await new Promise((resolve) => setImmediate(() => setImmediate(resolve)));
+        return { pid: child.pid, spawned: true };
+      } finally {
+        for (const signal of HELD) process.off(signal, hold);
+        closeSync(log);
+      }
+    });
+  } finally {
+    // Raised once the lock is released: with no handler of its own, jevelry then ends the way the signal says.
+    if (caught) process.kill(process.pid, caught);
+  }
 }
 
 export async function startServer(home: string, local: LocalModel, env: NodeJS.ProcessEnv): Promise<void> {
@@ -190,33 +261,32 @@ function lastLines(file: string, count: number): string {
   }
 }
 
-async function servesAlias(port: number, alias: string): Promise<boolean> {
-  try {
-    const response = await fetch(`http://127.0.0.1:${port}/v1/models`, { signal: AbortSignal.timeout(2000) });
-    const body = (await response.json()) as { data: Array<{ id?: unknown; aliases?: unknown }> };
-    return body.data.some((m) => m.id === alias || (Array.isArray(m.aliases) && m.aliases.includes(alias)));
-  } catch {
-    return false;
-  }
-}
-
 async function waitReady(home: string, local: LocalModel, env: NodeJS.ProcessEnv, options: { timeoutMs?: number; onWait?: (state: "starting" | "loading") => void }): Promise<void> {
+  if (process.platform === "win32") throw new Error(WINDOWS);
   const log = join(home, SERVER_LOG);
   const timeoutMs = options.timeoutMs ?? 300000;
   const deadline = Date.now() + timeoutMs;
-  const another = `another server answers on port ${local.port}, not ${local.alias}; run jevelry install --local to pick a new port`;
   let pid: number | undefined;
+  let spawned = false;
+  // A refusal never leaves behind a server this call started: nothing else would stop it.
+  const refuse = (): never => {
+    if (spawned && pid !== undefined) {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        // Ended already.
+      }
+    }
+    throw new Error(`another server answers on port ${local.port}, not ${local.alias}; run jevelry install --local to pick a new port`);
+  };
   let told: "starting" | "loading" | undefined;
   let state = await health(local.port);
   for (;;) {
     // Checked before any request: another program on the port would be handed the state and its answer read as Jev's.
-    if (state !== "down" && process.platform !== "win32") {
-      const server = recorded(home);
-      if (!isOurs(server.pid, local.path, local.port)) throw new Error(another);
-    }
+    if (state !== "down" && !isOurs(recorded(home).pid, local)) refuse();
     if (state === "ok") break;
     if (state === "down") {
-      if (pid === undefined) pid = await launch(home, local, env);
+      if (pid === undefined) ({ pid, spawned } = await launch(home, local, env));
       // Down while ours is gone is a server that died; down while ours lives is one still starting.
       else if (!alive(pid)) throw new Error(`the local model server stopped while starting; the last lines of ${log}:\n${lastLines(log, 5)}`);
     }
@@ -229,8 +299,6 @@ async function waitReady(home: string, local: LocalModel, env: NodeJS.ProcessEnv
     await sleep(500);
     state = await health(local.port);
   }
-  // Windows cannot tell whose process it is, so what the server says it serves is the only check there.
-  if (process.platform === "win32" && !(await servesAlias(local.port, local.alias))) throw new Error(another);
 }
 
 /** One wait per port in this process, so a batch of concurrent asks starts one server, not one each. */
@@ -248,35 +316,113 @@ export function ensureServer(home: string, local: LocalModel, env: NodeJS.Proces
 }
 
 /**
- * Whether `pid` is a llama-server jevelry started for the model at `path` on `port`. A pid on record
- * may be stale, after a reboot for one, and belong to another program by now, and a port may be taken
- * by any program: only the command line tells. Pid 0 and below signal a whole process group or every
- * process. Windows has no cheap way to read a command line, so nothing there is ours.
+ * `ps` in a UTF-8 locale, whatever jevelry was started with: in the C locale of a cron job or a launchd
+ * agent it escapes every non-ASCII byte of a path, and a home like ~/Désktop would never match. A process
+ * table it could not read fails loudly: read as empty, it would hide a running model.
  */
-function isOurs(pid: unknown, path: unknown, port: unknown): pid is number {
-  if (process.platform === "win32" || typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) return false;
-  if (typeof path !== "string" || path === "" || !alive(pid)) return false;
+function ps(args: string[]): string {
+  const ran = spawnSync("/bin/ps", ["-ww", ...args], { encoding: "utf8", timeout: 3000, maxBuffer: 64 * 2 ** 20, env: { ...process.env, LC_ALL: "en_US.UTF-8", LANG: "en_US.UTF-8" } });
+  if (ran.error || ran.status !== 0) throw new Error(`could not read the process table: ${ran.error?.message ?? (ran.stderr.trim() || `ps exited ${ran.status}`)}`);
+  return ran.stdout;
+}
+
+function commandLine(pid: number): string {
   try {
-    const command = process.platform === "linux"
-      ? readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(/\0/g, " ")
-      : (spawnSync("/bin/ps", ["-ww", "-o", "command=", "-p", String(pid)], { encoding: "utf8", timeout: 3000 }).stdout ?? "");
-    return command.includes(path) && `${command.trim()} `.includes(`--port ${String(port)} `);
+    return process.platform === "linux" ? readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(/\0/g, " ") : ps(["-o", "command=", "-p", String(pid)]);
   } catch {
-    return false;
+    return "";
   }
 }
 
-/** The pid of the server jevelry started when it was running and got SIGTERM, else null. The file goes either way: it named nothing alive after this. */
+/**
+ * Whether `pid` is a llama-server jevelry started for `server`'s model, alias and port. A pid on record
+ * may be stale, after a reboot for one, and belong to another program by now, and a port may be taken
+ * by any program: only the command line tells. Only its ASCII parts are compared (the alias, the port
+ * and the model's file name), because ps escapes what it cannot print, in any locale. Pid 0 and below
+ * signal a whole process group or every process. Windows has no cheap way to read a command line, so
+ * nothing there is ours.
+ */
+function isOurs(pid: unknown, server: { path?: unknown; port?: unknown; alias?: unknown }): pid is number {
+  if (process.platform === "win32" || typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) return false;
+  const { path, port, alias } = server;
+  if (typeof path !== "string" || path === "" || typeof alias !== "string" || alias === "" || !alive(pid)) return false;
+  const command = ` ${commandLine(pid).trim()} `;
+  return command.includes(` --alias ${alias} `) && command.includes(` --port ${String(port)} `) && command.includes(`/${basename(path)} `);
+}
+
+/**
+ * The live llama-servers of this home, recorded or not: every process whose command line loads a model
+ * from this home's models folder under a `local/` alias. A jevelry killed between spawn and record
+ * leaves one that only this finds. Windows cannot read command lines, so it finds none there.
+ */
+export function strayServers(home: string): number[] {
+  if (process.platform === "win32") return [];
+  let real: string;
+  try {
+    real = realHome(home);
+  } catch (error) {
+    // A home that does not exist has no servers; one ps cannot print is refused wherever a server would start.
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+    throw error;
+  }
+  // jevelry starts its servers with the real path; the spelling the home was given is matched too.
+  const models = [...new Set([home, real])].map((dir) => ` -m ${join(dir, "models")}/`);
+  const commands: Array<[number, string]> = process.platform === "linux"
+    ? readdirSync("/proc").filter((name) => /^\d+$/.test(name)).map((name) => [Number(name), commandLine(Number(name))])
+    : ps(["-A", "-o", "pid=,command="]).split("\n").map((line) => /^\s*(\d+) (.*)$/.exec(line)).filter((m) => m !== null).map((m) => [Number(m[1]), m[2]!]);
+  return commands.filter(([pid, command]) => pid !== process.pid && command.includes(" --alias local/") && models.some((m) => command.includes(m))).map(([pid]) => pid);
+}
+
+/**
+ * SIGTERM to the server jevelry started when it is running and ours, and its pid, else null. The record
+ * is kept while that process lives, so a launch meanwhile finds it and loads nothing beside it; a record
+ * naming nothing alive of ours is dropped.
+ */
 export function stopServer(home: string): number | null {
   const server = recorded(home);
-  rmSync(join(home, SERVER_FILE), { force: true });
-  if (!isOurs(server.pid, server.path, server.port)) return null;
-  try {
-    process.kill(server.pid, "SIGTERM");
-    return server.pid;
-  } catch {
-    return null;
+  if (isOurs(server.pid, server)) {
+    try {
+      process.kill(server.pid, "SIGTERM");
+      return server.pid;
+    } catch {
+      // Ended in between: forgotten below.
+    }
   }
+  rmSync(join(home, SERVER_FILE), { force: true });
+  return null;
+}
+
+/** Whether every one of `pids` has exited within `ms`, checked every 200 ms. */
+async function exited(pids: number[], ms: number): Promise<boolean> {
+  for (const end = Date.now() + ms; pids.some(alive) && Date.now() < end;) await sleep(200);
+  return !pids.some(alive);
+}
+
+/**
+ * Stops the recorded server and every stray of this home, and waits until they are gone: SIGTERM, then
+ * SIGKILL after `killAfterMs`, then up to 5 s more. A model unloading still holds the GPU's memory, so
+ * only an exited process counts, and only then is the record dropped. `found` is every server it
+ * signalled and `left` the ones still running; nothing is left when everything is gone.
+ */
+export async function stopServerAndWait(home: string, { killAfterMs = 15000 }: { killAfterMs?: number } = {}): Promise<{ found: number[]; left: number[] }> {
+  const first = stopServer(home);
+  const strays = strayServers(home).filter((pid) => pid !== first);
+  const found = [...(first === null ? [] : [first]), ...strays];
+  const signal = (name: NodeJS.Signals) => (pid: number): void => {
+    try {
+      process.kill(pid, name);
+    } catch {
+      // Ended already.
+    }
+  };
+  strays.forEach(signal("SIGTERM"));
+  if (!(await exited(found, killAfterMs))) {
+    found.forEach(signal("SIGKILL"));
+    await exited(found, 5000);
+  }
+  // Only the record of what was stopped here: one written meanwhile names a server someone just started.
+  if (first !== null && !alive(first) && recorded(home).pid === first) rmSync(join(home, SERVER_FILE), { force: true });
+  return { found, left: found.filter(alive) };
 }
 
 /**

@@ -1,14 +1,14 @@
 import { spawn } from "node:child_process";
+import { mkdirSync } from "node:fs";
 import { createServer } from "node:net";
 import { createInterface } from "node:readline";
-import { setTimeout as sleep } from "node:timers/promises";
 import { ask } from "./ask.js";
 import { type Choice, MIN_BUILD, hfUrl } from "./catalog.js";
 import { type LocalModel, writeConfig } from "./config.js";
 import { localClient } from "./decide.js";
 import { downloadFile, modelPath, remoteFile } from "./download.js";
 import { budgetBytes, detectMachine, fitOf, needBytes, realMachine } from "./estimate.js";
-import { alive, ensureServer, findOnPath, llamaServerPath, serverBuild, stopServer } from "./server.js";
+import { WINDOWS, ensureServer, findOnPath, llamaServerPath, realHome, serverBuild, stopServer, stopServerAndWait } from "./server.js";
 
 /** How the installer talks to a person; the CLI and the TUI each implement it, so this file draws nothing. */
 export interface SetupIO {
@@ -44,7 +44,7 @@ export function runtimeReady(type: string, env: NodeJS.ProcessEnv): boolean {
 export async function installRuntime(type: string, io: SetupIO, env: NodeJS.ProcessEnv): Promise<string> {
   if (runtimeReady(type, env)) return llamaServerPath(env)!;
   const min = MIN_BUILD[type] ?? 0;
-  const help = `llama.cpp is needed to run local models; install it with ${process.platform === "win32" ? "winget install ggml.llamacpp" : "brew install llama.cpp"} or from https://github.com/ggml-org/llama.cpp/releases (build ${min} or newer)`;
+  const help = `llama.cpp is needed to run local models; install it with brew install llama.cpp or from https://github.com/ggml-org/llama.cpp/releases (build ${min} or newer)`;
   const brew = env.JEVELRY_BREW?.trim() || findOnPath("brew", env);
   if (!brew) throw new SetupError(help);
   const verb = llamaServerPath(env) ? "upgrade" : "install";
@@ -82,12 +82,6 @@ function freePort(): Promise<number> {
   });
 }
 
-/** Whether `pid` has exited within `ms`, checked every 200 ms. */
-async function exited(pid: number, ms: number): Promise<boolean> {
-  for (const end = Date.now() + ms; alive(pid) && Date.now() < end;) await sleep(200);
-  return !alive(pid);
-}
-
 /**
  * Sets up `choice` end to end: llama.cpp, the verified download, the config, the server and one smoke
  * ask through the same client every jevelry ask uses. Every failure is a SetupError with its reason.
@@ -95,6 +89,10 @@ async function exited(pid: number, ms: number): Promise<boolean> {
 export async function installLocal(choice: Choice, home: string, io: SetupIO, env: NodeJS.ProcessEnv): Promise<LocalModel> {
   const { model, quant } = choice;
   try {
+    // Refused before any download: neither could ever start the model it would fetch.
+    if (process.platform === "win32") throw new SetupError(WINDOWS);
+    mkdirSync(home, { recursive: true });
+    realHome(home);
     const budget = budgetBytes(detectMachine(env));
     // A model too big for the GPU's memory is what crashed this machine once: it is refused before any download.
     const tooBig = (need: number, have = budget): SetupError => new SetupError(`${model.name} needs about ${gb(need)} and this machine has about ${gb(have)} for models`);
@@ -108,6 +106,9 @@ export async function installLocal(choice: Choice, home: string, io: SetupIO, en
     const have = Math.min(budget, budgetBytes(realMachine()));
     if (fitOf(need, have) === "won't fit") throw tooBig(need, have);
     const path = modelPath(home, model.repo, quant.file);
+    // jevelry knows its server by the alias in the process table, which reads the same in every locale only in ASCII.
+    const alias = `local/${quant.file.replace(/\.gguf$/i, "")}`;
+    if (!/^local\/[A-Za-z0-9._-]+$/.test(alias)) throw new SetupError(`refusing a model file name that is not plain ASCII: ${quant.file}`);
     await downloadFile(remote, path, { hfUrl: hf, onProgress: (done, total) => io.progress("download", done, total) });
     const local: LocalModel = {
       repo: model.repo,
@@ -117,21 +118,15 @@ export async function installLocal(choice: Choice, home: string, io: SetupIO, en
       decisionType: model.decisionType,
       path,
       port: await freePort(),
-      alias: `local/${quant.file.replace(/\.gguf$/i, "")}`,
+      alias,
       params: model.params,
     };
     // Two models in memory at once is how a GPU runs out: the old process has exited, not just left its port, before the new one loads.
-    const old = stopServer(home);
-    if (old !== null && !(await exited(old, 15000))) {
-      try {
-        process.kill(old, "SIGKILL");
-      } catch {
-        // Ended in between.
-      }
-      if (!(await exited(old, 5000))) throw new SetupError(`the previous local model server (pid ${old}) did not stop; stop it and try again`);
-    }
+    const { left } = await stopServerAndWait(home);
+    if (left.length > 0) throw new SetupError(`the previous local model server (pid ${left.join(", ")}) did not stop; stop it and try again`);
     // Ctrl-C or a kill while the new model loads must not leave it holding the GPU's memory with no config naming it:
-    // a signal exits with 130 or 143, and every exit, the TUI's process.exit too, stops the new server first.
+    // a signal exits with 130 or 143, and every exit, the TUI's process.exit too, sends the new server SIGTERM first.
+    // An exit cannot wait, so its record stays until the server is gone, and an ask meanwhile loads nothing beside it.
     const stop = (): void => { stopServer(home); };
     const quit = (signal: NodeJS.Signals): void => process.exit(signal === "SIGINT" ? 130 : 143);
     process.on("SIGINT", quit).on("SIGTERM", quit).on("exit", stop);
@@ -143,8 +138,9 @@ export async function installLocal(choice: Choice, home: string, io: SetupIO, en
       if (!result.ok) throw new SetupError(`${model.name} did not answer the setup check: ${result.error.message}`);
       io.say(`${model.name} answered in ${Date.now() - started} ms on this machine`);
     } catch (error) {
-      // The config is written only after the check passes, so a failed install leaves the setup that worked before.
-      stopServer(home);
+      // The config is written only after the check passes, so a failed install leaves the setup that worked before,
+      // and the new model is out of memory before the error reaches anyone who might ask the old one.
+      await stopServerAndWait(home);
       throw error;
     } finally {
       process.off("SIGINT", quit).off("SIGTERM", quit).off("exit", stop);
@@ -156,8 +152,11 @@ export async function installLocal(choice: Choice, home: string, io: SetupIO, en
   }
 }
 
-/** Choosing hosted Jev keeps the local model on disk and in the file, so switching back needs no download, and stops its server, which gives the GPU's memory back. */
-export function useTypesafe(home: string): void {
+/**
+ * Choosing hosted Jev keeps the local model on disk and in the file, so switching back needs no download, and
+ * stops its server, which gives the GPU's memory back by the time this returns.
+ */
+export async function useTypesafe(home: string): Promise<void> {
   writeConfig(home, { backend: "typesafe" });
-  stopServer(home);
+  await stopServerAndWait(home);
 }

@@ -1,14 +1,14 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { type LocalModel, readConfig, writeConfig } from "../src/config.js";
-import { SERVER_FILE, stopServer } from "../src/server.js";
+import { SERVER_FILE, launchArgs, stopServer } from "../src/server.js";
 import { type FakeHf, startHf } from "./fixtures/hf.js";
-import { M2_16, M4_PRO_24, killFakes, sandboxEnv } from "./fixtures/sandbox.js";
+import { FAKE_LLAMA, M2_16, M4_PRO_24, killFakes, liveFakes, sandboxEnv } from "./fixtures/sandbox.js";
 import type { Machine } from "../src/estimate.js";
 
 const QUESTIONS = JSON.stringify({ urgent: { type: "noul", instructions: "Is it urgent?" } });
@@ -65,11 +65,13 @@ afterEach(() => {
 const envFor = (home: string, machine: Machine, extra: Record<string, string> = {}): NodeJS.ProcessEnv =>
   sandboxEnv(home, { JEVELRY_HF_URL: hf.url, JEVELRY_MACHINE: JSON.stringify(machine), FAKE_LLAMA_LOAD_MS: "100", ...extra });
 
-function fixture(machine: Machine = M4_PRO_24) {
-  const home = mkdtempSync(join(tmpdir(), "jevelry-local-cli-"));
+function fixture(machine: Machine = M4_PRO_24, prefix = "jevelry-local-cli-") {
+  const home = mkdtempSync(join(tmpdir(), prefix));
   homes.push(home);
   return { home, env: envFor(home, machine) };
 }
+
+const recordedPid = (home: string): number => (JSON.parse(readFileSync(join(home, SERVER_FILE), "utf8")) as { pid: number }).pid;
 
 /** A local model on file, as an install leaves it, without downloading or starting anything. */
 async function configuredLocal(home: string): Promise<LocalModel> {
@@ -192,6 +194,79 @@ describe("jevelry install --local <model> --yes, then ask and stop", () => {
     expect(existsSync(join(home, SERVER_FILE))).toBe(false);
     const again = await run(["stop"], localEnv);
     expect(again.stderr).toBe("jevelry: no local model server was running\n");
+  });
+});
+
+describe("jevelry stop and switches wait for the server to be gone", () => {
+  // "stopped" is a promise that the model left the GPU's memory. Said while it still unloads, the next
+  // install loads its model beside it, which is how a GPU runs out; install --typesafe makes the same promise.
+  it("says stopped only once a server slow to exit is gone, and install --typesafe waits for it too", async () => {
+    const { home, env } = fixture();
+    const slow = { ...env, FAKE_SIGTERM_DELAY_MS: "1000" };
+    expect((await run(["install", "--local", "vllm-d3-flash", "--yes"], slow)).status).toBe(0);
+    const first = recordedPid(home);
+    const stop = await run(["stop"], slow);
+    expect(stop.stderr).toBe("jevelry: stopped the local model server\n");
+    expect(stop.status).toBe(0);
+    expect(alive(first)).toBe(false);
+    expect(existsSync(join(home, SERVER_FILE))).toBe(false);
+    expect((await run(["ask", "--questions", QUESTIONS, "--state", '"Help!"'], slow)).status).toBe(0);
+    const second = recordedPid(home);
+    expect((await run(["install", "--typesafe"], { ...slow, TYPESAFE_API_KEY: "test-key" })).status).toBe(0);
+    expect(alive(second)).toBe(false);
+  });
+
+  // Ctrl-C during an install leaves only time for SIGTERM, and the new model may take seconds to unload.
+  // An ask on the old setup meanwhile must be refused, not load the old model beside the new one.
+  it("refuses an ask on the old model while the interrupted install's server is still exiting", async () => {
+    const { home, env } = fixture();
+    expect((await run(["install", "--local", "vllm-d3-flash", "--yes"], env)).status).toBe(0);
+    const child = spawn(process.execPath, ["bin/jevelry.js", "install", "--local", "kev-4b", "--yes"], { env: { ...env, FAKE_LLAMA_LOAD_MS: "20000", FAKE_SIGTERM_DELAY_MS: "3000" }, stdio: "ignore" });
+    const exited = new Promise<number | null>((resolve) => child.on("exit", resolve));
+    try {
+      // Interrupted once the new server runs and loads, not before it could even handle SIGTERM.
+      for (let i = 0; i < 200 && !liveFakes(join(home, "argv.ndjson")).some((f) => f.args[1]!.includes("Kev-4B")); i++) await sleep(50);
+      child.kill("SIGINT");
+      expect(await exited).toBe(130);
+      const ask = await run(["ask", "--questions", QUESTIONS, "--state", '"Help!"'], env);
+      expect(ask.status).toBe(6);
+      expect(JSON.parse(ask.stdout)).toMatchObject({ error: { message: expect.stringContaining("a different local model is running (local/Kev-4B-Q8_0)") } });
+      expect(liveFakes(join(home, "argv.ndjson"))).toHaveLength(1);
+    } finally {
+      child.kill("SIGKILL");
+    }
+  });
+
+  // Cron jobs and launchd agents run without a locale, and ps then escapes every non-ASCII byte of a path.
+  // jevelry must still know its own server, or it refuses it on every ask and never stops it.
+  it("installs, asks and stops in a home whose path is not ASCII, with no locale set", async () => {
+    const { home, env } = fixture(M4_PRO_24, "jevelry-local-cli-hömé-");
+    expect(env.LANG).toBeUndefined();
+    const install = await run(["install", "--local", "vllm-d3-flash", "--yes"], env);
+    expect(install.stderr).toContain("jevelry now asks vLLM-SR d3-flash 9B");
+    expect(install.status).toBe(0);
+    const pid = recordedPid(home);
+    expect((await run(["stop"], env)).stderr).toBe("jevelry: stopped the local model server\n");
+    expect(alive(pid)).toBe(false);
+  });
+
+  // A server no record names (its jevelry was killed between starting it and writing it down) still holds a
+  // model in memory: jevelry stop must find it by its command line, in a non-ASCII home without a locale too.
+  it("stops a server in this home's models folder that no record names", async () => {
+    const { home, env } = fixture(M4_PRO_24, "jevelry-local-cli-hömé-");
+    const path = join(home, "models", "ggml-org", "Kev-4B-GGUF", "Kev-4B-Q8_0.gguf");
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, "not a model");
+    const local: LocalModel = { repo: "ggml-org/Kev-4B-GGUF", file: "Kev-4B-Q8_0.gguf", quant: "Q8_0", name: "Kev 4B", decisionType: "kev", path, port: await freePort(), alias: "local/Kev-4B-Q8_0" };
+    const stray = spawn(FAKE_LLAMA, launchArgs(local), { env, stdio: "ignore" });
+    for (let i = 0; i < 100 && liveFakes(join(home, "argv.ndjson")).length === 0; i++) await sleep(20);
+    const started = Date.now();
+    const stop = await run(["stop"], env);
+    expect(stop.stderr).toBe("jevelry: stopped the local model server\n");
+    // Asked to exit first, like the recorded server, rather than killed after the 15 s grace.
+    expect(Date.now() - started).toBeLessThan(5000);
+    for (let i = 0; i < 40 && alive(stray.pid!); i++) await sleep(50);
+    expect(alive(stray.pid!)).toBe(false);
   });
 });
 

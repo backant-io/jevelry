@@ -209,7 +209,7 @@ jevelry install --local vllm-d3-flash
 
 A model that won't fit is refused, also with `--yes`, because a model too big for the GPU's memory can crash the machine. A tight fit and Homebrew are asked first, and `--yes` answers yes to both, which you need when there is no terminal. A failed install leaves the setup that worked before.
 
-jevelry starts `llama-server` on `127.0.0.1` on the first ask and leaves it running for the next ones, so the first ask also waits for the model to load. After five idle minutes the server unloads the model and gives the memory back, and the next ask loads it again. `jevelry stop` stops the server, and the next ask starts it again. The answer document is the same, with the model's alias, like `local/vllm-d3-flash-Q8_0`, as its `model`, and `jevelry models` prints that alias instead of asking TypeSafe.
+jevelry starts `llama-server` on `127.0.0.1` on the first ask and leaves it running for the next ones, so the first ask also waits for the model to load. After five idle minutes the server unloads the model and gives the memory back, and the next ask loads it again. `jevelry stop` stops the server and says so only once its process has exited and the memory is free, killing it after 15 seconds when it does not exit, and the next ask starts it again. jevelry never runs two models at once: an ask for another model while one runs is refused, so is a start while a server jevelry did not record runs from `$JEVELRY_HOME/models`, and switching models stops the old server and waits for it to exit before the new one loads. The answer document is the same, with the model's alias, like `local/vllm-d3-flash-Q8_0`, as its `model`, and `jevelry models` prints that alias instead of asking TypeSafe.
 
 In `jevelry tui`, press `s` on the start screen or choose `Set up Jev` in `ctrl+p`, then `A model on this machine`. The dialog reads the models from Hugging Face and lists them in the same order, each with its download, fit, score and seconds per question. Enter on a model shows its details, its licence and whether Homebrew will install llama.cpp, and enter again installs it while the dialog shows each step and how far the download is. Once it is done, the start screen drops its setup row. `TypeSafe, hosted` tells you to run `npx jevelry install --typesafe` in a terminal or to export `TYPESAFE_API_KEY`, since the TUI does not take a key itself.
 
@@ -229,7 +229,7 @@ In `jevelry tui`, press `s` on the start screen or choose `Set up Jev` in `ctrl+
 | `jevelry check <jevel>` | refuses a defective jevel with exit 2 and warns about questions Jev handles poorly |
 | `jevelry types` | writes a TypeScript declaration so `jevel(name).decide()` returns each jevel's own answer types |
 | `jevelry models` | the model names your account may send, from `GET /v1/models`; `--local` ranks the decision models this machine can run |
-| `jevelry stop` | stops the local model server jevelry started |
+| `jevelry stop` | stops the local model server jevelry started, and any it did not record, and waits until they have exited |
 | `jevelry install` | installs the skill into your coding agents, then sets up Jev: a TypeSafe key or a model on this machine |
 | `jevelry install-skill` | installs the skill into your coding agents, and asks for no key |
 | `jevelry help [command]` | the help of one command |
@@ -534,7 +534,7 @@ Once a question has 20 reviewed decisions, the Jevel screen proposes a lower act
 - **Speed.** `s/question` is a question of about 500 prompt tokens, worked out from the published llama.cpp prompt-processing numbers of a 7B model on this chip and scaled by the model's size: discussion [#4167](https://github.com/ggml-org/llama.cpp/discussions/4167) for Apple Silicon and [#15013](https://github.com/ggml-org/llama.cpp/discussions/15013) for NVIDIA. Expect it to be off by up to about 30%. It is `-` for a chip those tables leave out, a machine with no supported GPU and a model that won't fit.
 - **Download.** The table estimates the size from the parameter count. The install reads the exact size and the sha256 from Hugging Face and checks the fit again before it downloads.
 
-On macOS jevelry reads the chip name and the memory from Node and starts no program to probe the GPU. On Linux and Windows it asks `nvidia-smi` for an NVIDIA GPU. `JEVELRY_MACHINE` replaces the detection, for example to see the list for a machine you are about to buy:
+On macOS jevelry reads the chip name and the memory from Node and starts no program to probe the GPU. On Linux it asks `nvidia-smi` for an NVIDIA GPU. Local models run on macOS and Linux; on Windows jevelry cannot yet tell its own model server from another program, so it refuses to start one there. `JEVELRY_MACHINE` replaces the detection, for example to see the list for a machine you are about to buy:
 
 ```sh
 JEVELRY_MACHINE='{"os":"darwin","chip":"Apple M4 Max","cpus":16,"ramBytes":68719476736,"darwinMajor":25,"gpu":null}' jevelry models --local
@@ -592,7 +592,7 @@ A command started by `jevelry run` gets these, and `TYPESAFE_API_KEY` is removed
 | `jevels/` | your own jevels for every project on this machine |
 | `config.json` | which way jevelry asks, `typesafe` or `local`, and the local model's file, port and alias; nothing secret |
 | `models/` | the downloaded models, one folder per Hugging Face repo |
-| `server.json` | the process, port and model of the `llama-server` jevelry started, so `jevelry stop` stops that one and nothing else |
+| `server.json` | the process, port and model of the `llama-server` jevelry started, so `jevelry stop` stops that one and nothing else; it stays until that process has exited |
 | `llama-server.log` | what `llama-server` printed, appended on every start |
 
 jevelry starts the local server as `llama-server -m <model> --host 127.0.0.1 --port <port> --alias local/<file> --no-webui --no-mmproj -c 8192 -b 4096 -ub 4096 -np 1 --sleep-idle-seconds 300`. The port is picked at install and stays the same. A chosen local model wins over a key, and a `TYPESAFE_BASE_URL` in the environment wins over the local model.
@@ -615,9 +615,11 @@ jevelry starts the local server as `llama-server -m <model> --host 127.0.0.1 --p
 
 When `jevelry run` runs a command, it exits with that command's exit code.
 
-With a local model, exit 6 says what to do: run `jevelry install --local` when `llama-server` or the model file is missing, read the last lines of `llama-server.log` it quotes when the server stopped while starting, or pick a new port with `jevelry install --local` when another program answers on the model's port. An error from the server itself names the local model server, not TypeSafe, and points at `llama-server.log` in `$JEVELRY_HOME`.
+With a local model, exit 6 says what to do: run `jevelry install --local` when `llama-server` or the model file is missing, read the last lines of `llama-server.log` it quotes when the server stopped while starting, or pick a new port with `jevelry install --local` when another program answers on the model's port. Two refusals keep a second model out of memory, and `jevelry stop` clears both: "a different local model is running" when a server for another model is up, for example a program still holding the config from before a switch or an install that was interrupted while its server exits, and "a local model server jevelry did not record is running (pid N)" when a jevelry was killed between starting a server and writing it down. An error from the server itself names the local model server, not TypeSafe, and points at `llama-server.log` in `$JEVELRY_HOME`.
 
-`jevelry install --local` exits 2 when it does not know the model you named, or when you named none and there is no terminal to choose on. It exits 1 when the setup cannot finish: the model won't fit, llama.cpp is missing or too old and Homebrew was not allowed, Hugging Face cannot be reached, the disk is too full, or the download does not match its sha256.
+`jevelry install --local` exits 2 when it does not know the model you named, or when you named none and there is no terminal to choose on. It exits 1 when the setup cannot finish: the model won't fit, llama.cpp is missing or too old and Homebrew was not allowed, Hugging Face cannot be reached, the disk is too full, the download does not match its sha256, or the previous model's server did not stop.
+
+`jevelry stop` exits 1 with "the local model server (pid N) did not stop" when a server is still running 5 seconds after it was killed; stop that process yourself.
 
 ## Architecture
 
