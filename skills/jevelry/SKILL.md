@@ -67,6 +67,7 @@ Each jevel's body says what its state looks like and its `example.json` is a sta
 | `npx jevelry tui [--dashboard] [--jevel <name>]` | a full-screen terminal view of the log: a start screen, `d` for the dashboard of today's decisions, a review queue where a person presses `c` (correct) or `w` (wrong), and Try to ask a jevel live |
 | `npx jevelry types [--out <file>]` | writes TypeScript types for every jevel it finds, for `jevel(name).decide()` |
 | `npx jevelry models` | the model names the account may send |
+| `npx jevelry stop` | stops the local model server jevelry started |
 
 Jevels are found in `--jevels <dir>`, then `JEVELRY_JEVELS` (colon separated), then `./jevels`, then `$JEVELRY_HOME/jevels` (default `~/.jevelry/jevels`), then the jevels that ship with jevelry. Keep the project's jevels in `./jevels/` so a person reviews them with the code.
 

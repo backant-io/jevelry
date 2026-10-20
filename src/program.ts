@@ -3,18 +3,23 @@ import { constants, homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Questions, TypeSafeClient } from "@typesafe-ai/sdk";
-import { Command, InvalidArgumentError } from "commander";
+import { Command, InvalidArgumentError, Option } from "commander";
 import { createInterface } from "node:readline/promises";
 import { ask, errorBody, stateHash } from "./ask.js";
 import { askAndLog, askBatch } from "./batch.js";
+import { type Choice, findModel, hfUrl, licenceLabel, listModels, rank, renderTable } from "./catalog.js";
+import { configured, localModel } from "./config.js";
 import { installSkill, knownAgents, promptForKey, unknownAgents, whereToPutTheKey } from "./install.js";
 import { JevelError, checkState, discoveryDirs, expandQuestions, isEntry, listJevels, loadJevel } from "./jevel.js";
 import { defaultClient, fallenAnswers, renderTypes } from "./decide.js";
+import { type Machine, budgetBytes, detectMachine } from "./estimate.js";
 import { resolveKey, storeKey } from "./key.js";
 import { jevelryHome, logAsk, logStateFromEnv, readLog, recordOutcome } from "./log.js";
 import { type AskDocument, EXIT, type ErrorBody, type ErrorDocument, PROTOCOL, type RunReport } from "./protocol.js";
 import { type Call, dispatcherOf, execute, logRun, planCall } from "./run.js";
 import { renderReport, report } from "./report.js";
+import { stopServer } from "./server.js";
+import { type SetupIO, installLocal, useTypesafe } from "./setup.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(here, "..", "package.json"), "utf8")) as { version: string };
@@ -83,19 +88,143 @@ function failCommand(error: unknown): never {
   process.exit(body.exit);
 }
 
-/** A mark runs only when a person says y on a terminal; anywhere else it waits for --yes. */
-async function confirmOnTty(call: Call, path: string): Promise<boolean> {
-  if (!process.stdin.isTTY) return false;
+/** One line a person typed on the terminal, asked on stderr; undefined when there is no terminal to ask on. */
+async function questionOnTty(question: string): Promise<string | undefined> {
+  if (!process.stdin.isTTY) return undefined;
   const rl = createInterface({ input: process.stdin, output: process.stderr });
   try {
-    const reply = await rl.question(`Jev picked ${call.option} at ${call.certainty.toFixed(2)}. Run: ${call.command} (from ${path})? [y/N] `);
-    return /^y(es)?$/i.test(reply.trim());
+    return await rl.question(question);
   } catch {
-    // Ctrl-C or Ctrl-D at the prompt: a no, so the document still prints and the exit is 9.
+    // Ctrl-C or Ctrl-D at the prompt: no answer, which every caller reads as a no.
     process.stderr.write("\n");
-    return false;
+    return undefined;
   } finally {
     rl.close();
+  }
+}
+
+/** A mark runs only when a person says y on a terminal; anywhere else it waits for --yes, and Ctrl-D still prints the document with exit 9. */
+async function confirmOnTty(call: Call, path: string): Promise<boolean> {
+  const reply = await questionOnTty(`Jev picked ${call.option} at ${call.certainty.toFixed(2)}. Run: ${call.command} (from ${path})? [y/N] `);
+  return reply !== undefined && /^y(es)?$/i.test(reply.trim());
+}
+
+const gb = (bytes: number): string => `${(bytes / 1e9).toFixed(1)} GB`;
+
+/**
+ * The installer's voice on the command line. On a terminal the ongoing step rewrites one line; in a
+ * pipe or a CI log every step is one line and a download one line per 10%, so the log stays short.
+ * A question nobody can answer is said with the way to answer it, since `--yes` is the only yes there.
+ */
+function cliSetupIO(yes: boolean): SetupIO {
+  const tty = process.stderr.isTTY === true;
+  let open = false;
+  let last = "";
+  // A rewritten line has no newline yet: anything said after it starts on a line of its own.
+  const end = (): void => {
+    if (open) process.stderr.write("\n");
+    open = false;
+  };
+  return {
+    say: (line) => {
+      end();
+      say(line);
+    },
+    progress: (step, done, total) => {
+      const known = done !== undefined && total !== undefined && total > 0;
+      const text = known ? `${step} ${Math.floor((done / total) * 100)}% (${(done / 1e9).toFixed(1)} of ${gb(total)})` : step;
+      if (tty) {
+        process.stderr.write(`\r\x1b[2Kjevelry: ${text}`);
+        open = true;
+        return;
+      }
+      const key = known ? `${step} ${Math.floor((done / total) * 10)}` : step;
+      if (key === last) return;
+      last = key;
+      say(text);
+    },
+    confirm: async (question) => {
+      end();
+      if (yes) return true;
+      if (!process.stdin.isTTY) {
+        say(`${question} nobody can answer without a terminal; run again with --yes to answer yes`);
+        return false;
+      }
+      const reply = await questionOnTty(`${question} [Y/n] `);
+      return reply !== undefined && /^(y(es)?)?$/i.test(reply.trim());
+    },
+  };
+}
+
+/** The existing key flow: a key that is already reachable is left alone, else one is asked for on the terminal. */
+async function storeAKey(): Promise<void> {
+  // The installer's job is a first key, not a second copy of one in a place the host did not choose.
+  if (resolveKey(process.env, home()) !== undefined) {
+    say("a TypeSafe key is already available");
+    return;
+  }
+  const value = await promptForKey(home());
+  if (value === undefined) {
+    say(whereToPutTheKey(home()));
+    return;
+  }
+  const where = storeKey(value, process.env, home());
+  say(where === "keychain" ? "key stored in the keychain" : `key stored in ${join(home(), "env")}`);
+}
+
+/**
+ * The local half of `install`: the ranked list, the person's pick, then the installer. A pick that
+ * names nothing is the host's mistake (exit 2, like any bad input); a setup that cannot finish is exit 1.
+ */
+async function installLocalModel(wanted: string | undefined, yes: boolean): Promise<void> {
+  const io = cliSetupIO(yes);
+  let machine: Machine;
+  let choices: Choice[];
+  try {
+    machine = detectMachine(process.env);
+    choices = rank(await listModels({ hfUrl: hfUrl(process.env) }), machine);
+  } catch (error) {
+    say(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+    return;
+  }
+  if (choices.length === 0) {
+    say("Hugging Face lists no decision model this jevelry can run");
+    process.exitCode = 1;
+    return;
+  }
+  if (wanted === undefined) {
+    process.stderr.write(renderTable(choices, machine));
+    if (!process.stdin.isTTY) {
+      say("choose a model: jevelry install --local <id>");
+      process.exitCode = 2;
+      return;
+    }
+    const reply = await questionOnTty(`Model (number or id, Enter for 1 ${choices[0]?.model.id}): `);
+    if (reply === undefined) {
+      say("nothing changed");
+      return;
+    }
+    wanted = reply.trim() || "1";
+  }
+  const choice = findModel(choices, wanted, machine);
+  if (!choice) {
+    say(`unknown model ${wanted}; jevelry models --local lists them`);
+    process.exitCode = 2;
+    return;
+  }
+  // A tight fit leaves the rest of the machine little memory, so it is installed only after a yes.
+  if (choice.fit === "tight" && !(await io.confirm(`${choice.model.name} ${choice.quant.quant} is a tight fit: it needs about ${gb(choice.need)} of the ${gb(budgetBytes(machine))} this machine has for models; install it anyway?`))) {
+    say("nothing changed");
+    process.exitCode = 1;
+    return;
+  }
+  try {
+    const local = await installLocal(choice, home(), io, process.env);
+    io.say(`jevelry now asks ${local.name} on this machine (${local.alias})`);
+  } catch (error) {
+    io.say(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
   }
 }
 
@@ -367,9 +496,41 @@ export function buildProgram(): Command {
 
   program
     .command("models")
-    .description("the model names the account may send, from GET /v1/models")
-    .action(async () => {
+    .description("the model names the account may send, from GET /v1/models; --local ranks the models this machine can run")
+    .option("--local", "the decision models on Hugging Face, ranked, with what each needs and how fast it would answer here")
+    .option("--json", "with --local, machine-readable rows")
+    .action(async (opts: { local?: boolean; json?: boolean }) => {
       try {
+        if (opts.local) {
+          const machine = detectMachine(process.env);
+          const choices = rank(await listModels({ hfUrl: hfUrl(process.env) }), machine);
+          if (!opts.json) {
+            process.stdout.write(renderTable(choices, machine));
+            return;
+          }
+          out(choices.map((c) => ({
+            id: c.model.id,
+            repo: c.model.repo,
+            name: c.model.name,
+            quant: c.quant.quant,
+            file: c.quant.file,
+            download_bytes: c.quant.bytes,
+            need_bytes: Math.round(c.need),
+            fit: c.fit,
+            score: c.model.score,
+            seconds_per_question: c.seconds,
+            licence: licenceLabel(c.model.licence),
+            decision_type: c.model.decisionType,
+          })));
+          return;
+        }
+        // The same rule as defaultClient: a base URL in the environment wins over the local model.
+        const local = localModel(home());
+        if (local && (process.env.TYPESAFE_BASE_URL ?? "").trim() === "") {
+          // The local server answers as its alias whatever is asked, so there is nothing to ask it.
+          process.stdout.write(`${local.alias}\tlocal\t${local.name} on this machine\n`);
+          return;
+        }
         const models = await defaultClient(home()).models.list();
         for (const m of models) process.stdout.write(`${m.name}\t${m.release_date}\t${m.description}\n`);
       } catch (error) {
@@ -378,27 +539,54 @@ export function buildProgram(): Command {
     });
 
   program
+    .command("stop")
+    .description("stop the local model server jevelry started")
+    .action(() => {
+      say(stopServer(home()) ? "stopped the local model server" : "no local model server was running");
+    });
+
+  program
     .command("install")
-    .description("install the jevelry skill into the coding agents on this machine, then store a TypeSafe key")
+    .description("install the jevelry skill into the coding agents on this machine, then set up Jev: a TypeSafe key or a model on this machine")
     .option("--no-key", "install the skill only, asking for no key")
     .option("--project", "install into this project instead of this machine")
     .option("--agent <names...>", "only these agents, by name, instead of every one found")
-    .action(async (opts: { key: boolean; project?: boolean; agent?: string[] }) => {
+    .addOption(new Option("--local [model]", "run a model on this machine: that one (an id or row from jevelry models --local), or choose from the list").conflicts("typesafe"))
+    .option("--typesafe", "ask hosted Jev with a TypeSafe key")
+    .option("--yes", "answer yes to the Homebrew and tight-fit questions (needed without a terminal)")
+    .action(async (opts: { key: boolean; project?: boolean; agent?: string[]; local?: string | true; typesafe?: boolean; yes?: boolean }) => {
       installed(opts.project === true, opts.agent);
       if (!opts.key) return;
-      // A key that is already reachable is left alone: the installer's job is a first key, not a
-      // second copy of one in a place the host did not choose.
-      if (resolveKey(process.env, home()) !== undefined) {
-        say("a TypeSafe key is already available");
+      if (opts.typesafe) {
+        useTypesafe(home());
+        await storeAKey();
         return;
       }
-      const value = await promptForKey(home());
-      if (value === undefined) {
+      if (opts.local !== undefined) {
+        await installLocalModel(opts.local === true ? undefined : opts.local, opts.yes === true);
+        return;
+      }
+      // A jevelry that already asks somewhere is left alone; switching is a deliberate flag.
+      const now = configured(process.env, home());
+      if (now !== null) {
+        say(`jevelry asks ${now === "local" ? `${localModel(home())!.name} on this machine` : "hosted Jev with your TypeSafe key"}; jevelry install --local or --typesafe changes it`);
+        return;
+      }
+      // A pipe or a CI job: nothing can be chosen, so both ways are named instead of waiting for a line.
+      if (!process.stdin.isTTY) {
         say(whereToPutTheKey(home()));
+        say("or run a model on this machine: jevelry models --local, then jevelry install --local <id>");
         return;
       }
-      const where = storeKey(value, process.env, home());
-      say(where === "keychain" ? "key stored in the keychain" : `key stored in ${join(home(), "env")}`);
+      const reply = await questionOnTty("How should jevelry ask Jev?\n  1  TypeSafe, hosted: needs an API key\n  2  A model on this machine: free and private, downloads 1 to 30 GB\nChoose 1 or 2: ");
+      if (reply?.trim() === "1") {
+        useTypesafe(home());
+        await storeAKey();
+      } else if (reply?.trim() === "2") {
+        await installLocalModel(undefined, opts.yes === true);
+      } else {
+        say("nothing changed");
+      }
     });
 
   program

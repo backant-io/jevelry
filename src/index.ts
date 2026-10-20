@@ -19,6 +19,7 @@ export {
 } from "./jevel.js";
 export { agentDirs, installSkill, type AgentDir, type InstallInput, type InstallResult } from "./install.js";
 export { resolveKey, storeKey, KEY_ACCOUNT, KEY_SERVICE, KEY_VARIABLE } from "./key.js";
+export { configured, readConfig, type Config, type LocalModel } from "./config.js";
 export { appendLine, findAsk, jevelryHome, logAsk, outcomeOf, readLog, recordOutcome, LOG_FILE, type AskLine, type LogLine, type OnSkipped, type OutcomeLine, type RunLine } from "./log.js";
 export { dispatcherOf, planCall, type Call, type RunArgs } from "./run.js";
 export * from "./protocol.js";

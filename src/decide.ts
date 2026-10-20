@@ -1,11 +1,18 @@
 import { homedir } from "node:os";
 import { type EntryType, TypeSafeClient } from "@typesafe-ai/sdk";
 import { ask, errorBody, stateHash } from "./ask.js";
+import { type LocalModel, localModel } from "./config.js";
 import { type Jevel, JevelError, type JevelQuestion, checkState, discoveryDirs, expandQuestions, isEntry, loadJevel } from "./jevel.js";
 import { resolveKey } from "./key.js";
 import { jevelryHome, logAsk, logStateFromEnv } from "./log.js";
 import type { Answer, ChoiceAnswer, ErrorBody, FallBackAnswer, NoulAnswer, ScoreAnswer, Usage } from "./protocol.js";
 import { type Call, type RunArgs, dispatcherOf, execute, logRun, planCall } from "./run.js";
+import { localFetch } from "./server.js";
+
+// An extra argument is usually an object: `String` would render it `[object Object]` and lose the
+// line's content, so it is JSON, and `String` only for what JSON cannot hold (a cycle, undefined).
+const render = (a: unknown): string => { try { return JSON.stringify(a) ?? String(a); } catch { return String(a); } };
+const toStderr = (m: string, ...a: unknown[]): void => { process.stderr.write(`jevelry: sdk: ${[m, ...a.map(render)].join(" ")}\n`); };
 
 /**
  * The SDK resolves its own `logLevel` from `TYPESAFE_LOG_LEVEL` and logs through `console` by
@@ -13,20 +20,38 @@ import { type Call, type RunArgs, dispatcherOf, execute, logRun, planCall } from
  * document a host parses (and at `debug` the request body, which is the state). Every level goes
  * to stderr instead, so the one-document protocol holds whatever the environment asks for.
  */
+const SDK_LOGGER = { debug: toStderr, info: toStderr, warn: toStderr, error: toStderr };
+
+/**
+ * The client for the model on this machine: it starts the local server on its first request and
+ * waits for the model to load, so it also is what the installer's setup check asks through.
+ */
+export function localClient(home: string, local: LocalModel, env: NodeJS.ProcessEnv): TypeSafeClient {
+  return new TypeSafeClient({
+    // A first ask also waits for the model to load.
+    timeout: Number(env.JEVELRY_TIMEOUT_MS ?? 300000),
+    logger: SDK_LOGGER,
+    apiKey: "local",
+    baseURL: `http://127.0.0.1:${local.port}`,
+    defaultModel: local.alias,
+    // A local 5xx is a real answer, not a blip a retry would get past.
+    retry: { maxRetries: 0 },
+    fetch: localFetch(home, local, env),
+  });
+}
+
 export function defaultClient(home: string): TypeSafeClient {
+  const local = localModel(home);
+  // An explicit base URL in the environment still wins, as the environment wins everywhere else in jevelry.
+  if (local && (process.env.TYPESAFE_BASE_URL ?? "").trim() === "") return localClient(home, local, process.env);
   // The key goes to the client directly: writing it into `process.env` would hand it to every child
   // process the host program starts. A key the host exported wins, as `resolveKey` reads it first.
   const key = resolveKey(process.env, home);
   const timeout = Number(process.env.JEVELRY_TIMEOUT_MS ?? 30000);
   const model = process.env.JEVELRY_MODEL;
-  // An extra argument is usually an object: `String` would render it `[object Object]` and lose the
-  // line's content, so it is JSON, and `String` only for what JSON cannot hold (a cycle, undefined).
-  const render = (a: unknown): string => { try { return JSON.stringify(a) ?? String(a); } catch { return String(a); } };
-  const toStderr = (m: string, ...a: unknown[]): void => { process.stderr.write(`jevelry: sdk: ${[m, ...a.map(render)].join(" ")}\n`); };
-  const logger = { debug: toStderr, info: toStderr, warn: toStderr, error: toStderr };
   return new TypeSafeClient({
     timeout,
-    logger,
+    logger: SDK_LOGGER,
     ...(key !== undefined ? { apiKey: key } : {}),
     ...(model && model.trim() !== "" ? { defaultModel: model } : {}),
   });
