@@ -10,6 +10,11 @@ export interface QuestionReport {
   agreement_act: number | null;
   agreement_mark: number | null;
   mean_certainty: number;
+  /**
+   * Over the reviewed answers: their mean certainty less how often a person agreed. 0.2 is a model sure 87% of the
+   * time and right 67%. Null without outcomes.
+   */
+  overconfidence: number | null;
 }
 
 const NO_JEVEL = "(questions)";
@@ -25,6 +30,9 @@ interface Tally {
   outcomes: number;
   agreeBy: { act: number; mark: number };
   outcomesBy: { act: number; mark: number };
+  /** Of the reviewed answers: their certainty added up, and how many a person agreed with. */
+  reviewedCertainty: number;
+  agreed: number;
 }
 
 type Filter = { jevel?: string; since?: string };
@@ -43,7 +51,7 @@ export function report(lines: LogLine[], filter: Filter = {}): QuestionReport[] 
     const key = `${jevel}\n${question}`;
     let t = tallies.get(key);
     if (!t) {
-      t = { asks: 0, decisions: { act: 0, mark: 0, fall_back: 0 }, certaintySum: 0, outcomes: 0, agreeBy: { act: 0, mark: 0 }, outcomesBy: { act: 0, mark: 0 } };
+      t = { asks: 0, decisions: { act: 0, mark: 0, fall_back: 0 }, certaintySum: 0, outcomes: 0, agreeBy: { act: 0, mark: 0 }, outcomesBy: { act: 0, mark: 0 }, reviewedCertainty: 0, agreed: 0 };
       tallies.set(key, t);
     }
     return t;
@@ -64,6 +72,8 @@ export function report(lines: LogLine[], filter: Filter = {}): QuestionReport[] 
     if (!ask || !answer) continue;
     const t = tallyFor(ask.jevel?.name ?? NO_JEVEL, baseName(line.question));
     t.outcomes += 1;
+    t.reviewedCertainty += answer.certainty;
+    if (line.outcome === "agree") t.agreed += 1;
     const band = recordedDecision(answer);
     if (band === "act" || band === "mark") {
       t.outcomesBy[band] += 1;
@@ -82,12 +92,15 @@ export function report(lines: LogLine[], filter: Filter = {}): QuestionReport[] 
       agreement_act: t.outcomesBy.act === 0 ? null : t.agreeBy.act / t.outcomesBy.act,
       agreement_mark: t.outcomesBy.mark === 0 ? null : t.agreeBy.mark / t.outcomesBy.mark,
       mean_certainty: t.asks === 0 ? 0 : t.certaintySum / t.asks,
+      overconfidence: t.outcomes === 0 ? null : (t.reviewedCertainty - t.agreed) / t.outcomes,
     });
   }
   return rows.sort((a, b) => a.jevel.localeCompare(b.jevel) || a.question.localeCompare(b.question));
 }
 
-const COLUMNS = ["jevel", "question", "asks", "act", "mark", "fall_back", "outcomes", "agree(act)", "agree(mark)", "certainty"];
+const COLUMNS = ["jevel", "question", "asks", "act", "mark", "fall_back", "outcomes", "agree(act)", "agree(mark)", "certainty", "overconfident"];
+/** In points, signed: "+20 pts" is a certainty twenty points ahead of how often the answers were right. */
+const points = (n: number | null): string => (n === null ? "-" : `${n > 0 ? "+" : ""}${Math.round(n * 100)} pts`);
 const pct = (n: number | null): string => (n === null ? "-" : `${Math.round(n * 100)}%`);
 
 export function renderReport(rows: QuestionReport[]): string {
@@ -103,6 +116,7 @@ export function renderReport(rows: QuestionReport[]): string {
     pct(r.agreement_act),
     pct(r.agreement_mark),
     r.mean_certainty.toFixed(2),
+    points(r.overconfidence),
   ]);
   return tableOf(COLUMNS, table);
 }
