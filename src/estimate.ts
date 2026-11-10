@@ -103,13 +103,16 @@ export function budgetBytes(m: Machine): number {
 }
 
 /**
- * The file plus the KV cache, recurrent state and compute at `-c 8192 -ub 4096`, from measured
- * llama-server peaks. kev runs in embedding mode and keeps full-vocabulary logits for the whole
- * ubatch, measured at 3.8 GiB more at `-ub 4096`.
+ * The file plus the KV cache, recurrent state and compute at `-c 8192`, from measured llama-server
+ * peaks. kev runs in embedding mode and keeps full-vocabulary logits for every token of a ubatch:
+ * 248320 entries of 4 bytes, so 0.5 GiB at the 512 tokens jevelry starts it with. `unknown` is what a
+ * launch passes for a type this build does not know: started with 4096 tokens a ubatch, it may keep
+ * logits for all of them, which is 3.8 GiB.
  */
 export function needBytes(model: { bytes: number; params: number; decisionType: string }): number {
   // ponytail: two flat overheads by size class, measured on a handful of models; measure per family if a new one runs over.
-  return model.bytes + (model.params > 15e9 ? 2.5 : 1.5) * GIB + (model.decisionType === "kev" ? 3.8 * GIB : 0);
+  const logits = model.decisionType === "kev" ? 0.5 : model.decisionType === "unknown" ? 3.8 : 0;
+  return model.bytes + (model.params > 15e9 ? 2.5 : 1.5) * GIB + logits * GIB;
 }
 
 /** llama.cpp keeps 1 GiB free, and a model at 90% of what is left still leaves the rest of the machine room. */

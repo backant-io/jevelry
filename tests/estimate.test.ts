@@ -22,11 +22,13 @@ describe("budgetBytes, needBytes and fitOf", () => {
     expect(budgetBytes(LINUX_CPU)).toBe(48 * GIB);
   });
 
-  // kev keeps full-vocabulary logits for the whole ubatch: a kev that looks like it fits by file
-  // size alone can still run the machine out of memory.
-  it("adds 3.8 GiB for a kev model and more overhead above 15B parameters", () => {
+  // kev keeps full-vocabulary logits for every token of a ubatch. jevelry starts it with 512 tokens a ubatch, which is
+  // 0.5 GiB; a type this build does not know is started with 4096 and may do the same, which is 3.8 GiB. Counted
+  // at 3.8 GiB for kev too, the picker turned away models that run well.
+  it("adds 0.5 GiB for a kev model, 3.8 GiB for a type it does not know, and more overhead above 15B parameters", () => {
     const small = { bytes: 4e9, params: 4e9 };
-    expect(needBytes({ ...small, decisionType: "kev" }) - needBytes({ ...small, decisionType: "vllm-d3" })).toBeCloseTo(3.8 * GIB);
+    expect(needBytes({ ...small, decisionType: "kev" }) - needBytes({ ...small, decisionType: "vllm-d3" })).toBeCloseTo(0.5 * GIB);
+    expect(needBytes({ ...small, decisionType: "unknown" }) - needBytes({ ...small, decisionType: "vllm-d3" })).toBeCloseTo(3.8 * GIB);
     expect(needBytes({ bytes: 20e9, params: 27e9, decisionType: "vllm-d3" })).toBe(20e9 + 2.5 * GIB);
     expect(needBytes({ ...small, decisionType: "vllm-d3" })).toBe(4e9 + 1.5 * GIB);
   });

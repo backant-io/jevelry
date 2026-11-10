@@ -100,7 +100,7 @@ function footprint() {
     model: record.alias,
     rss_bytes: Number.parseInt(line, 10) * 1024,
     file_bytes: fileBytes,
-    estimate_bytes: needBytes({ bytes: fileBytes, params: typeof local.params === "number" ? local.params : Infinity, decisionType: typeof local.decisionType === "string" ? local.decisionType : "kev" }),
+    estimate_bytes: needBytes({ bytes: fileBytes, params: typeof local.params === "number" ? local.params : Infinity, decisionType: typeof local.decisionType === "string" ? local.decisionType : "unknown" }),
   };
 }
 

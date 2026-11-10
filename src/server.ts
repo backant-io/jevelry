@@ -54,11 +54,18 @@ export function serverBuild(path: string): number | null {
  * `-ub` hold a whole prompt because laya, clef, vllm-d3 and lfm2-d1-omni evaluate it in one ubatch;
  * `-c` is always given because the default is 262144; `--no-mmproj` because the file is given with
  * `-m`; and the model unloads after 300 idle seconds, so an idle jevelry gives the GPU memory back.
+ *
+ * kev alone gets 512 tokens a ubatch. It keeps full-vocabulary logits for every token of a ubatch,
+ * about 1 MB a token, and keeps them after the answer. Measured on Kev 0.8B (llama.cpp 0.9.0, M4 Pro):
+ * one 2239-token prompt left the server at 2784 MB with 4096 and at 810 MB with 512, the median ask
+ * was a tenth faster, and all 91 shipped examples and cases were answered the same, byte for byte.
  */
 export function launchArgs(local: LocalModel): string[] {
+  // ponytail: only kev is measured; the other families that do not need one ubatch (lev, nimble, d1, openjev) keep 4096 until they are.
+  const ubatch = local.decisionType === "kev" ? "512" : "4096";
   return [
     "-m", local.path, "--host", "127.0.0.1", "--port", String(local.port), "--alias", local.alias,
-    "--no-webui", "--no-mmproj", "-c", "8192", "-b", "4096", "-ub", "4096", "-np", "1", "--sleep-idle-seconds", "300",
+    "--no-webui", "--no-mmproj", "-c", "8192", "-b", "4096", "-ub", ubatch, "-np", "1", "--sleep-idle-seconds", "300",
   ];
 }
 
@@ -186,11 +193,11 @@ async function launch(home: string, local: LocalModel, env: NodeJS.ProcessEnv): 
   if (!existsSync(local.path)) throw new Error(`the model file is missing: ${local.path}; run jevelry install --local`);
   // A synced $JEVELRY_HOME or a config from a bigger machine must not load what this one cannot hold. What
   // the config does not say is taken at its worst: a config written before params were kept may be a 27B,
-  // and a type this build does not know may keep logits like kev.
+  // and a type this build does not know is started with a prompt-sized ubatch and may keep logits for all of it, as kev would.
   const need = needBytes({
     bytes: statSync(local.path).size,
     params: typeof local.params === "number" ? local.params : Infinity,
-    decisionType: typeof local.decisionType === "string" && Object.hasOwn(MIN_BUILD, local.decisionType) ? local.decisionType : "kev",
+    decisionType: typeof local.decisionType === "string" && Object.hasOwn(MIN_BUILD, local.decisionType) ? local.decisionType : "unknown",
   });
   const budget = budgetBytes(realMachine());
   if (fitOf(need, budget) === "won't fit") {
