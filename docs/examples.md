@@ -185,13 +185,14 @@ With a model on this machine (`npx jevelry install --local d1-2b`) no request le
 
 How good the decision is was measured on labels jevelry's authors did not write: the 150 reference phrases of bifrost's complexity router, 50 each simple, medium and complex ([`exemplars.go`](https://github.com/maximhq/bifrost/blob/dev/plugins/routing/complexity/exemplars.go), Apache-2.0). Half of them were used to tune the wording of the three levels. The other half was asked once, afterwards, each as a first message with no tools:
 
-| Of the 75 held-back phrases, on Liquid d1 2B | | 95% interval |
+| Of the 75 held-back phrases | Liquid d1 2B | vLLM-SR d3-flash 9B, Q4_K_M |
 | --- | --- | --- |
-| sent to the small model | 15 | |
-| of those, simple by bifrost's label | 14 | 70-99% |
-| of those, medium / complex | 1 / 0 | |
-| of the 25 simple phrases, sent to the small model | 14 | 37-73% |
-| level equal to bifrost's label, over all 75 | 50 | 55-76% |
+| level equal to bifrost's label | 50 (55-76%) | 62 (73-90%) |
+| sent to the small model | 15 | 4 |
+| of those, simple / medium / complex | 14 / 1 / 0 | 4 / 0 / 0 |
+| of the 25 simple phrases, sent to the small model | 14 (37-73%) | 4 (6-35%) |
+
+The brackets are 95% intervals. The thresholds in the jevel were set on Liquid d1 2B. The 9B model reads the levels better and is less sure of itself: its answers at the first level have a median certainty of 0.63, where the 2B model's have 0.85, so at `act: 0.8` it moves little. With the threshold at 0.5 it would have sent 15 of the 25 simple phrases to the small model and nothing else, but that figure is read off the same phrases it is reported on. Set the threshold on the model you run, with `jevelry report` once you have outcomes, as for any jevel.
 
 It has not been asked of hosted Jev. `npx jevelry eval request-route` asks its six cases of whichever model you have set up, and the logic above is held by `tests/route-recipe.test.ts`.
 
