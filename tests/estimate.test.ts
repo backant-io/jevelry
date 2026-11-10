@@ -41,10 +41,12 @@ describe("budgetBytes, needBytes and fitOf", () => {
   });
 
   // "runs well" leaves the rest of the machine room; "tight" works but squeezes; past the budget it never loads.
-  it("calls a need runs well up to 90% of the budget less 1 GiB, tight up to the budget, else won't fit", () => {
+  // 60%, not more: the rest of what the GPU may use is for the other programs on the machine. At 90% a model that
+  // "ran well" by this rule took the memory that other work on the same Mac needed.
+  it("calls a need runs well up to 60% of the budget less 1 GiB, tight up to the budget, else won't fit", () => {
     const budget = 16 * GIB;
-    expect(fitOf(0.9 * 15 * GIB, budget)).toBe("runs well");
-    expect(fitOf(0.9 * 15 * GIB + 1, budget)).toBe("tight");
+    expect(fitOf(0.6 * 15 * GIB, budget)).toBe("runs well");
+    expect(fitOf(0.6 * 15 * GIB + 1, budget)).toBe("tight");
     expect(fitOf(budget, budget)).toBe("tight");
     expect(fitOf(budget + 1, budget)).toBe("won't fit");
   });
