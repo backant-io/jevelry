@@ -1,4 +1,5 @@
 export { ask, canonicalJson, errorBody, stateHash, UnreadableAnswer, type AskInput, type AskResult } from "./ask.js";
+export { needBytes } from "./estimate.js";
 export { checkBudgets, estimateTokens, BYTES_PER_TOKEN, MODEL_STATE_PLUS_QUESTION_TOKENS, MODEL_TOTAL_TOKENS, type BudgetBreach } from "./budget.js";
 export {
   ALIASES,

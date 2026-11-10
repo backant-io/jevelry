@@ -35,6 +35,7 @@
     "test": "vitest run",
     "test:live": "npm run build && vitest run --config vitest.live.config.ts",
     "lint": "tsc --noEmit",
+    "scoreboard": "npm run build && node scripts/scoreboard.mjs",
     "prepublishOnly": "npm run lint && npm run build"
   },
   "files": [
