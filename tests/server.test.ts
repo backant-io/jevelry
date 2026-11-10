@@ -97,6 +97,17 @@ describe("launchArgs", () => {
       "-c", "8192", "-b", "4096", "-ub", "4096", "-np", "1", "--sleep-idle-seconds", "300",
     ]);
   });
+  // kev keeps full-vocabulary logits for every token of a ubatch, about 1 MB a token. Measured on Kev 0.8B: one 2239-token
+  // prompt left its server at 2.8 GB with 4096 tokens a ubatch and at 0.8 GB with 512, and all 91 shipped prompts were
+  // answered the same at both, byte for byte. The families that evaluate a prompt in one ubatch fail on a smaller one.
+  it("gives kev a small ubatch and every other family a prompt-sized one", () => {
+    const ubatch = (decisionType: string): string | undefined => {
+      const args = launchArgs({ repo: "r", file: "x.gguf", quant: "Q8_0", name: "X", decisionType, path: "/m/x.gguf", port: 41000, alias: "local/x" });
+      return args[args.indexOf("-ub") + 1];
+    };
+    expect(ubatch("kev")).toBe("512");
+    for (const family of ["vllm-d3", "clef", "laya", "lfm2-d1-omni", "openjev", "mystery-decider"]) expect(ubatch(family), family).toBe("4096");
+  });
 });
 
 describe("ensureServer and stopServer", () => {
@@ -222,7 +233,7 @@ describe("ensureServer and stopServer", () => {
     // Sparse files: 2 GiB under the budget fits a small model's 1.5 GiB overhead and not a 27B's 2.5 GiB.
     truncateSync(local.path, Math.floor(budget - 2 * GIB));
     await expect(ensureServer(home, local, env)).rejects.toThrow(/^local\/vllm-d3-flash-Q8_0 needs about [\d.]+ GB and this machine has about/);
-    // 4 GiB under it fits a 1B model of any type but kev, whose logits take 3.8 GiB more.
+    // 4 GiB under it fits a 1B model of any known type, but an unknown one is started with a prompt-sized ubatch and may keep 3.8 GiB of logits like kev did.
     truncateSync(local.path, Math.floor(budget - 4 * GIB));
     for (const decisionType of ["mystery-decider", undefined]) {
       await expect(ensureServer(home, { ...local, params: 1e9, decisionType: decisionType as string }, env)).rejects.toThrow(/needs about [\d.]+ GB and this machine has about/);
