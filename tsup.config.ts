@@ -1,13 +1,24 @@
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { builtinModules } from "node:module";
 import { join } from "node:path";
-import { defineConfig } from "tsup";
+import { type Options, defineConfig } from "tsup";
 
 /** The one package left to npm: `ask` tells the SDK's error classes apart with instanceof, so a host's client and jevelry must share one copy. */
 const INSTALLED = ["@typesafe-ai/sdk"];
-/** Reached only with DEV=true: ink's bridge to React's devtools, and two native add-ons its websocket tries and does without. Nobody ships them. */
-const NEVER = ["react-devtools-core", "bufferutil", "utf-8-validate"];
-const LEFT_OUT = new RegExp(`^(?!(${[...INSTALLED, ...NEVER].map((name) => name.replace(/[/.-]/g, "\\$&")).join("|")})$)`);
+const LEFT_OUT = new RegExp(`^(?!(${INSTALLED.map((name) => name.replace(/[/.-]/g, "\\$&")).join("|")})$)`);
+
+/**
+ * ink imports a bridge to React's devtools only when DEV=true, and the bridge brings a websocket library with it:
+ * 129 KB that no command of jevelry reaches. The import resolves to an empty module, so DEV=true changes nothing
+ * in the build; what is left of it is a chunk of about a hundred bytes.
+ */
+const noDevtools: NonNullable<Options["esbuildPlugins"]>[number] = {
+  name: "no-ink-devtools",
+  setup(build) {
+    build.onResolve({ filter: /^\.\/devtools\.js$/ }, (args) => (/[\\/]ink[\\/]/.test(args.importer) ? { path: args.path, namespace: "nothing" } : undefined));
+    build.onLoad({ filter: /.*/, namespace: "nothing" }, () => ({ contents: "export {};" }));
+  },
+};
 
 interface Metafile {
   inputs: Record<string, unknown>;
@@ -30,7 +41,7 @@ function checkAndCredit(): void {
   const file = join("dist", "metafile-esm.json");
   const meta = JSON.parse(readFileSync(file, "utf8")) as Metafile;
   rmSync(file);
-  const allowed = new Set([...INSTALLED, ...NEVER, ...builtinModules, ...builtinModules.map((name) => `node:${name}`)]);
+  const allowed = new Set([...INSTALLED, ...builtinModules, ...builtinModules.map((name) => `node:${name}`)]);
   for (const [output, { imports }] of Object.entries(meta.outputs)) {
     for (const { path, external } of imports) {
       if (external && !allowed.has(path)) throw new Error(`${output} imports ${path}, which npm does not install with jevelry: bundle it or add it to INSTALLED`);
@@ -62,7 +73,8 @@ export default defineConfig({
   dts: true,
   // Everything but the SDK is in the build, so an install is jevelry and the SDK, not 43 packages and 27 MB.
   noExternal: [LEFT_OUT],
-  external: [...INSTALLED, ...NEVER],
+  external: INSTALLED,
+  esbuildPlugins: [noDevtools],
   metafile: true,
   // commander and yaml are CommonJS, and bundled CommonJS reaches Node's own modules through `require`.
   banner: { js: '#!/usr/bin/env node\nimport { createRequire as __jevelryRequire } from "node:module"; const require = __jevelryRequire(import.meta.url);' },

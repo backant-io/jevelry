@@ -27,6 +27,20 @@ describe("the published build", () => {
     expect(files.some((entry) => entry.startsWith("docs/assets"))).toBe(false);
     expect(files).toContain("docs/protocol");
   });
+  // ink loads a bridge to React's devtools only when DEV=true, and with it a websocket library: 129 KB that no
+  // command of jevelry ever reaches.
+  it("carries no devtools bridge", () => {
+    const files = readdirSync("dist");
+    // What is left of the import is an empty chunk.
+    for (const file of files.filter((name) => name.startsWith("devtools"))) expect(readFileSync(join("dist", file)).length, file).toBeLessThan(1024);
+    // ink still names the devtools package where it asks whether it is installed; what must be gone is the bridge and its websocket library.
+    for (const file of files.filter((name) => name.endsWith(".js"))) {
+      const code = readFileSync(join("dist", file), "utf8");
+      expect(code, file).not.toMatch(/^\/\/ node_modules\/(ws|ink\/build\/devtools)/m);
+      expect(code, file).not.toMatch(/from\s*"react-devtools-core"/);
+    }
+    expect(readFileSync(join("dist", "THIRD-PARTY-LICENSES.txt"), "utf8")).not.toMatch(/^ws@/m);
+  });
   // A copy of someone's code travels with their licence: MIT and ISC both ask for the notice in every copy.
   it("ships the licence of every package it carries", () => {
     const notices = readFileSync(join("dist", "THIRD-PARTY-LICENSES.txt"), "utf8");
