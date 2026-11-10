@@ -286,6 +286,20 @@ describe("outcome and report", () => {
     expect(row?.outcomes).toBeGreaterThanOrEqual(1);
     expect(row?.agreement_act).toBe(1);
   });
+  // The answers a person reviewed are the cases worth adding: `cases` prints them for the person to put into cases.json.
+  it("prints a reviewed ask as a case when its state was logged", async () => {
+    const mine = { ...state, events: [{ kind: "note", actor: "ops", subject: "a case of its own", summary: "nothing to do" }] };
+    const asked = JSON.parse((await run(["ask", "wake-gate", "--log-state", "--state", JSON.stringify(mine)])).stdout) as { log_id: string };
+    expect((await run(["outcome", asked.log_id, "worth_a_turn", "yes"])).status).toBe(0);
+    const r = await run(["cases", "wake-gate"]);
+    expect(r.status, r.stderr).toBe(0);
+    const cases = JSON.parse(r.stdout) as Array<{ name: string; state: unknown; expect: Record<string, unknown> }>;
+    const found = cases.find((c) => JSON.stringify(c.state) === JSON.stringify(mine));
+    // Jev answered no and the person said yes: the case expects what the person said.
+    expect(found?.expect).toEqual({ worth_a_turn: true });
+    expect(found?.name).toMatch(/^from the log, \d{4}-\d{2}-\d{2} [0-9a-f]{8}$/);
+    expect(r.stderr).toMatch(/cases from the log/);
+  });
   it("reports how long asks took per jevel and model with --speed", async () => {
     await run(["ask", "wake-gate", "--state", JSON.stringify(state)]);
     const rows = JSON.parse((await run(["report", "--speed", "--json"])).stdout) as Array<{ jevel: string; model: string; asks: number; p50_ms: number; p95_ms: number }>;

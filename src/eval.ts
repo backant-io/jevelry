@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { type AskResult, isRecord } from "./ask.js";
 import { JevelError } from "./jevel.js";
+import type { LogLine, OutcomeLine } from "./log.js";
 import type { Answer, Decision, ErrorBody } from "./protocol.js";
 import { baseName, percentile, tableOf } from "./report.js";
 
@@ -210,4 +211,57 @@ export function renderAgreement(a: Agreement): string {
     ...(a.missing > 0 ? [`${a.missing} checks are not in the reference and were left out`] : []),
     ...a.differences.map((d) => `differs: "${d.case}": ${d.question} is ${String(d.got)} here, ${String(d.reference)} there`),
   ].join("\n")}\n`;
+}
+
+/** What was true, from a person's word on an answer: the answer itself when they agreed, their correction when they gave one. */
+function truthOf(answer: Answer, verdict: OutcomeLine): Expected | undefined {
+  if (verdict.outcome === "agree") return gotOf(answer);
+  if (answer.type === "noul") return verdict.value === null ? !answer.yes : verdict.value === "yes";
+  // A choice or a score somebody only called wrong: what was right is not known, so it expects nothing.
+  if (verdict.value === null) return undefined;
+  if (answer.type === "choice") return verdict.value;
+  return Number.isFinite(Number(verdict.value)) ? Number(verdict.value) : undefined;
+}
+
+/**
+ * The cases the log holds for a jevel: every ask that was logged with its state and has an answer a person
+ * confirmed or corrected. Each is a state that actually came up, with what was actually true. The last word on
+ * a question counts, a state already among the `known` hashes is left out, and so is a second ask of the same state.
+ * `withoutState` counts the reviewed asks that kept only a hash of their state and so cannot become a case.
+ */
+export function casesFromLog(lines: LogLine[], jevel: string, questions: string[], known: Set<string>): { cases: Case[]; withoutState: number } {
+  const verdicts = new Map<string, Map<string, OutcomeLine>>();
+  for (const line of lines) {
+    if (line.kind !== "outcome") continue;
+    let said = verdicts.get(line.id);
+    if (!said) {
+      said = new Map();
+      verdicts.set(line.id, said);
+    }
+    said.set(line.question, line);
+  }
+  const seen = new Set(known);
+  const cases: Case[] = [];
+  let withoutState = 0;
+  for (const line of lines) {
+    if (line.kind !== "ask" || line.jevel?.name !== jevel || line.error) continue;
+    const said = verdicts.get(line.id);
+    if (!said) continue;
+    if (line.state === undefined) {
+      withoutState += 1;
+      continue;
+    }
+    if (seen.has(line.state_hash)) continue;
+    const expect: Record<string, Expected> = {};
+    for (const [question, verdict] of said) {
+      const answer = Object.hasOwn(line.answers, question) ? (line.answers[question] as Answer) : undefined;
+      if (!answer || !questions.includes(baseName(question))) continue;
+      const truth = truthOf(answer, verdict);
+      if (truth !== undefined) expect[question] = truth;
+    }
+    if (Object.keys(expect).length === 0) continue;
+    seen.add(line.state_hash);
+    cases.push({ name: `from the log, ${line.at.slice(0, 10)} ${line.id.slice(0, 8)}`, state: line.state, expect });
+  }
+  return { cases, withoutState };
 }

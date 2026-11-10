@@ -65,6 +65,7 @@ Each jevel's body says what its state looks like and its `example.json` is a sta
 | `npx jevelry show <jevel>` | the resolved frontmatter and the body |
 | `npx jevelry check <jevel>` | refuses a jevel the API would refuse and warns about questions Jev handles poorly |
 | `npx jevelry eval <jevel> [--model <id>] [--against <file>] [--json]` | asks every case in the jevel's `cases.json` and counts the expected answers with a 95% interval; exits 8 when one is not; one ask per case, nothing logged |
+| `npx jevelry cases <jevel>` | prints, as cases, the asks a person confirmed or corrected in the log, for you to add to `cases.json`; an ask needs its state logged (`--log-state`) to become one |
 | `npx jevelry ask <jevel> --state @file` | asks every question in the jevel about the state, prints one JSON document |
 | `npx jevelry ask --questions '<json>' --state '<json>'` | a one-off ask with the API's question shape |
 | `npx jevelry run <jevel> --state @file [--yes] [--dry-run]` | asks the jevel and runs the command of the option Jev picked: `act` runs it, `mark` asks first, `fall_back` runs the jevel's `fall_back` |
