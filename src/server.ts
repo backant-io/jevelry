@@ -68,28 +68,37 @@ export function serverBuild(path: string): number | null {
  * and every answer stayed the same, byte for byte, but on a quiet machine it was no faster (15.5 s against 15.2 s).
  * A family that evaluates a prompt in one ubatch keeps nothing of the state that a second question could use.
  *
- * kev gets four slots that share one context. With one slot the server reads the whole state again for every
+ * kev and lev get four slots that share one context. With one slot the server reads the whole state again for every
  * question; with a slot for each question it reads the state once and each question after it. Measured on Kev 0.8B
  * (llama.cpp 0.9.0, M4 Pro): over the 91 shipped examples and cases the server processed 80,970 tokens instead of
  * 100,923, by its own counter, and took about a fifth less time; three questions on a 2,000-token state took 2.3 s
  * instead of 5.1 s, and on a 7,300-token state 7.8 s instead of 22.7 s. The server grew from 840 MB to 900 MB.
+ * Kev 4B: the same 80,970 against 100,923, and the 17 shipped examples in 25% less time, the two settings taken
+ * in turn four times each. lev 4B: 132,106 tokens instead of 172,695, the examples in 24% less time taken the same
+ * way, three questions on a long state in 11 s instead of 31 s, and a server of 1,100 MB instead of 840 MB.
  * `-kvu` is what lets the slots share the 8192 tokens: without it each slot gets 2048 and a longer question is
  * refused. With it the ceiling is where it was, 8192 tokens for the state and one question.
+ *
+ * lfm2-d1 keeps one slot. On Liquid d1 3B four slots made the server process 89,584 tokens instead of 113,344 and
+ * no faster: the shipped prompts took 121 s against 109 s, and long states were 4 to 12% faster.
  *
  * What it costs: with one slot a prompt got the same bytes whatever came before it. With four, the fourth decimal of
  * a certainty depends on what the server was asked before, because that decides which slot leads. Asked in the same
  * order, the 91 prompts got the same bytes on every run; asked backwards, or 16 at a time, 81 to 200 of the 267
  * answers were the same bytes and the largest move was 0.0011. No value and no decision changed in any run, and
- * against one slot the largest move was 0.0007. Sending asks one at a time from jevelry was tried and changed
- * neither that nor the time, so jevelry does not queue them.
+ * against one slot the largest move was 0.0007 (Kev 4B: 0.0006; lev 4B: 0.0014, with every value and decision the
+ * same). Sending asks one at a time from jevelry was tried and changed neither that nor the time, so jevelry does
+ * not queue them.
  */
 export function launchArgs(local: LocalModel): string[] {
-  // ponytail: only kev is measured; the other families that do not need one ubatch (lev, nimble, d1, openjev) keep 4096 and one slot until they are.
+  // ponytail: the small ubatch is measured on kev alone; nimble and openjev are measured for neither flag, because their only models are a 9B and a 27B.
   // ponytail: four slots because no shipped jevel asks more than four questions; a jevel that asks more has its state read once for every four.
-  const perFamily = local.decisionType === "kev" ? ["-ub", "512", "-np", "4", "-kvu"] : ["-ub", "4096", "-np", "1"];
+  const kev = local.decisionType === "kev";
+  const shared = kev || local.decisionType === "lev";
   return [
     "-m", local.path, "--host", "127.0.0.1", "--port", String(local.port), "--alias", local.alias,
-    "--no-webui", "--no-mmproj", "-c", "8192", "-b", "4096", ...perFamily, "--sleep-idle-seconds", "300", "-lv", "2",
+    "--no-webui", "--no-mmproj", "-c", "8192", "-b", "4096", "-ub", kev ? "512" : "4096", "-np", shared ? "4" : "1", ...(shared ? ["-kvu"] : []),
+    "--sleep-idle-seconds", "300", "-lv", "2",
   ];
 }
 

@@ -128,7 +128,10 @@ describe("launchArgs", () => {
       return [args[args.indexOf("-np") + 1] ?? "", ...args.filter((a) => a === "-kvu")];
     };
     expect(slots("kev")).toEqual(["4", "-kvu"]);
-    for (const family of ["vllm-d3", "clef", "laya", "lfm2-d1-omni", "openjev", "mystery-decider"]) expect(slots(family), family).toEqual(["1"]);
+    // lev gains the same way: on lev 4B the short prompts took 24% less time in a paired test and long states a third
+    // of the time. lfm2-d1 does not: its server processed 21% fewer tokens and was no faster, so it keeps one slot.
+    expect(slots("lev")).toEqual(["4", "-kvu"]);
+    for (const family of ["vllm-d3", "clef", "laya", "lfm2-d1", "lfm2-d1-omni", "openjev", "mystery-decider"]) expect(slots(family), family).toEqual(["1"]);
   });
 });
 
