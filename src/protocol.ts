@@ -91,6 +91,9 @@ export const EXIT: Record<ErrorCode, number> = {
   not_confirmed: 9,
 };
 
+/** `jevelry eval`: every case was asked, and at least one answer was not the expected one. */
+export const EXIT_CASES_FAILED = 8;
+
 /** What `jevelry run` did with the dispatcher's decision. `exit` and `ms` are null when nothing ran. */
 export interface RunReport {
   option: string | null;
