@@ -64,19 +64,19 @@
   "author": "Pavel Hegler <business@hegler.tech>",
   "license": "MIT",
   "dependencies": {
-    "@typesafe-ai/sdk": "0.6.0",
-    "commander": "^12.1.0",
-    "ink": "7.1.1",
-    "react": "19.2.8",
-    "yaml": "^2.6.0"
+    "@typesafe-ai/sdk": "0.6.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/react": "19.2.18",
     "ajv": "^8.17.0",
+    "commander": "^12.1.0",
+    "ink": "7.1.1",
     "ink-testing-library": "4.0.0",
+    "react": "19.2.8",
     "tsup": "^8.3.0",
     "typescript": "^5.6.0",
-    "vitest": "^2.1.0"
+    "vitest": "^2.1.0",
+    "yaml": "^2.6.0"
   }
 }
