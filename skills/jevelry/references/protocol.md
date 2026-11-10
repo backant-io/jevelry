@@ -77,7 +77,7 @@ server gave a delay. `field` is there only when jevelry itself knows the field a
 | `rate_limited` | 3 | rate limited after the SDK's retries |
 | `overloaded` | 3 | TypeSafe answered 529 after the SDK's retries |
 | `auth` | 4 | the key is missing or refused; no request was made when it was missing |
-| `over_budget` | 5 | the estimate is over a limit; no request was made |
+| `over_budget` | 5 | the estimate is over a limit and no request was made; or a local model's server refused a state too long for it (8,192 tokens for the state with one question, 4,096 on a model that reads its prompt in one batch). Either way: shorten the state |
 | `transport` | 6 | the network, a timeout, a local model server that cannot start or answer, or anything no other code covers |
 | `unreadable_answer` | 7 | TypeSafe answered a shape this build cannot read |
 | none, and no error document | 8 | `jevelry eval` only: every case was asked, and at least one answer was not the expected one; the output names it |
