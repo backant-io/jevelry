@@ -194,10 +194,11 @@ On an Apple M4 Pro with 24 GB that prints:
 
 Each row is one model at the quant that suits this machine. `download` is the size of the file, `needs` the memory it takes while it answers, `fit` whether this machine has that memory (`runs well`, `tight` or `won't fit`), `score` its result on the index, `s/question` the seconds a question of about 500 tokens takes here, and `licence` what you may use it for. Models that run well come first, then tight ones, then the ones that won't fit, each group by best score, so row 1 is the one to pick. [Local models](#local-models) says where each number comes from. `--json` prints the same rows for a program.
 
-The index is not the whole answer for the jevels that ship here. These seven models were each asked the 74 cases of the 17 jevels that shipped that day, 186 expected answers in all, on an M4 Pro with llama.cpp 0.9.0 on 10 November 2026. The brackets are 95% intervals.
+The index is not the whole answer for the jevels that ship here. These eight models were each asked the 74 cases of the 17 jevels that shipped that day, 186 expected answers in all, on an M4 Pro with llama.cpp 0.9.0 on 10 November 2026. The brackets are 95% intervals.
 
 | Model | Download | Right, of 186 | Sure enough to act | Right when it acts |
 |---|---|---|---|---|
+| vLLM-SR d3-flash 9B, Q4_K_M | 6.6 GB | 93% [88-96] | 86% | 96% [92-98] |
 | Liquid d1-Omni 2B | 1.8 GB | 85% [80-90] | 72% | 93% [88-96] |
 | Liquid d1 2B | 1.8 GB | 83% [77-88] | 72% | 93% [88-96] |
 | vLLM-SR d3-nano 2B | 2.6 GB | 83% [77-88] | 70% | 95% [89-97] |
@@ -206,7 +207,7 @@ The index is not the whole answer for the jevels that ship here. These seven mod
 | Kev 4B | 4.5 GB | 48% [41-56] | 25% | 93% [82-98] |
 | Kev 0.8B | 0.8 GB | 35% [29-43] | 23% | 62% [47-75] |
 
-The index has the first six within five points of each other, 31.1 to 35.5, with Kev 4B second among them. On these cases Kev 4B is far behind the other five and seldom sure enough to act, though right when it is. All of them take 8,192 tokens for the state with one question, except Liquid d1-Omni 2B, which takes 4,096. The other models in the list were not measured. For a jevel of your own, `jevelry eval <jevel>` gives the same figures for the model you have set up.
+vLLM-SR d3-flash 9B is far ahead on the index, at 54.3, and is ahead here too. The index has the next six within five points of each other, 31.1 to 35.5, with Kev 4B second among them. On these cases Kev 4B is far behind the other five and seldom sure enough to act, though right when it is. All of them take 8,192 tokens for the state with one question, except Liquid d1-Omni 2B, which takes 4,096. The other models in the list were not measured. For a jevel of your own, `jevelry eval <jevel>` gives the same figures for the model you have set up.
 
 Then install one by its id or its row number:
 
@@ -614,7 +615,7 @@ Once a question has 20 reviewed decisions, the Jevel screen proposes a lower act
   | Interfaze lev 4B | 4.56 GiB | 3.21 GiB | 153 | 152 | 257 | 241 |
   | Kev 4B | 4.73 GiB | 3.33 GiB | 90 | 90 | 257 | 250 |
 
-  The lighter file takes 30 to 39% less memory and is right as often, but it is not the same model answer for answer: about 4% of the values and 6 to 10% of the decisions differ. Their speed was not compared: the two files ran under different load.
+  The lighter file takes 30 to 39% less memory and is right as often, but it is not the same model answer for answer: about 4% of the values and 6 to 10% of the decisions differ. They are equally fast: taken in turn four times each on Liquid d1 3B, the Q4_K_M file read 550 tokens a second and the Q8_0 file 563.
 - **Memory.** `needs` is the file plus the context and working memory at 8192 tokens: 1.5 GiB, 2.5 GiB for a model above 15B parameters, and 0.5 GiB more for a Kev model, which keeps its answers for every token of a batch and is started with a small one. A Mac's GPU may use two thirds of its memory up to 32 GB and three quarters above that (Metal's limit on macOS 15 and earlier; macOS 26 allows a little more), an NVIDIA GPU its own memory, and a machine with neither three quarters of its memory. llama.cpp keeps 1 GiB of that free. A model `runs well` when it needs at most 60% of the rest, so that the other programs on the machine keep theirs; it is `tight` up to the whole amount and `won't fit` above it. On a 24 GB Mac that is 9 GiB: a 4B model runs well at Q8_0, a 9B model at Q4_K_M. The verdict is against that limit, not against what is free at the moment: under the table, `jevelry models --local` names the models that need more memory than is free right now. `jevelry install --local` says the same before it downloads one.
 - **Speed.** `s/question` is a question of about 500 prompt tokens, worked out from the published llama.cpp prompt-processing numbers of a 7B model on this chip and scaled by the model's size: discussion [#4167](https://github.com/ggml-org/llama.cpp/discussions/4167) for Apple Silicon and [#15013](https://github.com/ggml-org/llama.cpp/discussions/15013) for NVIDIA. Expect it to be off by up to about 30%. It is `-` for a chip those tables leave out, a machine with no supported GPU and a model that won't fit. Once a local model has answered on this machine, `jevelry models --local` also says under the table what it actually did: its prompt tokens a second over the warm asks in the log. On a Mac in Low Power Mode, which is the usual setting on battery, `jevelry models --local` says so under the table: there a local model answers at about two thirds of its High Power speed. What else the machine is doing, and its power mode, move the real number as much as the model does: on an M4 Pro the 2B vLLM-SR d3-nano read about 1,600 prompt tokens a second in High Power mode on a quiet machine, and about 800 while other programs kept the machine busy.
 - **Download.** The table estimates the size from the parameter count. The install reads the exact size and the sha256 from Hugging Face and checks the fit again before it downloads.
