@@ -1,0 +1,479 @@
+{
+  "date": "2026-11-10",
+  "commit": "a97ee6c",
+  "dirty": false,
+  "machine": {
+    "chip": "Apple M4 Pro",
+    "cpus": 12,
+    "ram_gb": 24,
+    "platform": "darwin",
+    "node": "v25.9.0",
+    "power_mode": 1,
+    "load_1m": 7.92
+  },
+  "start": {
+    "bare_node_ms": {
+      "min": 57.3,
+      "p25": 58.9,
+      "median": 59.8
+    },
+    "jevelry_version_ms": {
+      "min": 91.5,
+      "p25": 92.6,
+      "median": 94.2
+    },
+    "jevelry_check_ms": {
+      "min": 101,
+      "p25": 102.8,
+      "median": 103.7
+    }
+  },
+  "install": {
+    "packages": 2,
+    "megabytes": 2.9,
+    "seconds": 0.57,
+    "tarball_bytes": 547303
+  },
+  "speed": [
+    {
+      "jevel": "alert-cause",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 5,
+      "p50_ms": 1682,
+      "p95_ms": 1738,
+      "tokens_per_s": 1145.9807073954985,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "change-risk",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 5,
+      "p50_ms": 1085,
+      "p95_ms": 1135,
+      "tokens_per_s": 1147.3025225556987,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "checklist-compliance",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 5,
+      "p50_ms": 1304,
+      "p95_ms": 1404,
+      "tokens_per_s": 1114.114114114114,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "duplicate-issue",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 4,
+      "p50_ms": 1063,
+      "p95_ms": 1090,
+      "tokens_per_s": 1118.986753427841,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "escalation-route",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 5,
+      "p50_ms": 1516,
+      "p95_ms": 1704,
+      "tokens_per_s": 1021.0788164440953,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "failing-test",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 7,
+      "p50_ms": 1059,
+      "p95_ms": 1170,
+      "tokens_per_s": 1101.3251238120733,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "issue-readiness",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 5,
+      "p50_ms": 1238,
+      "p95_ms": 1580,
+      "tokens_per_s": 1043.5865504358655,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "log-triage",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 5,
+      "p50_ms": 1807,
+      "p95_ms": 2048,
+      "tokens_per_s": 1065.3630077787382,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "meeting-notes",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 5,
+      "p50_ms": 1366,
+      "p95_ms": 1446,
+      "tokens_per_s": 1096.5722801788374,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "message-triage",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 5,
+      "p50_ms": 1278,
+      "p95_ms": 1388,
+      "tokens_per_s": 991.1353032659409,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "notification-triage",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 6,
+      "p50_ms": 1419,
+      "p95_ms": 1575,
+      "tokens_per_s": 1016.5636300011664,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "pr-description-check",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 6,
+      "p50_ms": 1430,
+      "p95_ms": 1562,
+      "tokens_per_s": 1008.5489570272426,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "reply-check",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 5,
+      "p50_ms": 858,
+      "p95_ms": 898,
+      "tokens_per_s": 1011.4888628370458,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "review-comment-kind",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 6,
+      "p50_ms": 1363,
+      "p95_ms": 1492,
+      "tokens_per_s": 992.2053003957309,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "review-quality",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 6,
+      "p50_ms": 1310,
+      "p95_ms": 1883,
+      "tokens_per_s": 810.9103078982597,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "task-difficulty",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 6,
+      "p50_ms": 974,
+      "p95_ms": 1089,
+      "tokens_per_s": 955.3299492385787,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "ticket-triage",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 5,
+      "p50_ms": 1145,
+      "p95_ms": 1313,
+      "tokens_per_s": 985.7095380525092,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    }
+  ],
+  "repeats": {
+    "answered_by_model": 91,
+    "answered_from_log": 0
+  },
+  "footprint": {
+    "model": "local/vllm-d3-nano-Q8_0",
+    "rss_bytes": 2226192384,
+    "file_bytes": 2552358496,
+    "estimate_bytes": 4162971232
+  },
+  "quality": [
+    {
+      "jevel": "alert-cause",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 4,
+      "checks": 11,
+      "right": 10,
+      "interval": [
+        0.6226353745137962,
+        0.9837682477371741
+      ],
+      "act": 8,
+      "clear": 10,
+      "wrong_at_act": 1,
+      "p50_ms": 1499
+    },
+    {
+      "jevel": "change-risk",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 4,
+      "checks": 10,
+      "right": 9,
+      "interval": [
+        0.5958436145024278,
+        0.9821242504842789
+      ],
+      "act": 7,
+      "clear": 9,
+      "wrong_at_act": 0,
+      "p50_ms": 1098
+    },
+    {
+      "jevel": "checklist-compliance",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 4,
+      "checks": 10,
+      "right": 7,
+      "interval": [
+        0.3967732199795652,
+        0.892210712513788
+      ],
+      "act": 8,
+      "clear": 9,
+      "wrong_at_act": 2,
+      "p50_ms": 1348
+    },
+    {
+      "jevel": "duplicate-issue",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 3,
+      "checks": 8,
+      "right": 7,
+      "interval": [
+        0.5291051942301385,
+        0.9775830911367039
+      ],
+      "act": 6,
+      "clear": 7,
+      "wrong_at_act": 1,
+      "p50_ms": 1121
+    },
+    {
+      "jevel": "escalation-route",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 4,
+      "checks": 10,
+      "right": 8,
+      "interval": [
+        0.49015684672072346,
+        0.9433190520193067
+      ],
+      "act": 7,
+      "clear": 9,
+      "wrong_at_act": 0,
+      "p50_ms": 1439
+    },
+    {
+      "jevel": "failing-test",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 6,
+      "checks": 10,
+      "right": 9,
+      "interval": [
+        0.5958436145024278,
+        0.9821242504842789
+      ],
+      "act": 3,
+      "clear": 9,
+      "wrong_at_act": 0,
+      "p50_ms": 1094
+    },
+    {
+      "jevel": "issue-readiness",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 4,
+      "checks": 7,
+      "right": 3,
+      "interval": [
+        0.1582169222626268,
+        0.7495457695909742
+      ],
+      "act": 2,
+      "clear": 6,
+      "wrong_at_act": 0,
+      "p50_ms": 1167
+    },
+    {
+      "jevel": "log-triage",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 4,
+      "checks": 10,
+      "right": 8,
+      "interval": [
+        0.49015684672072346,
+        0.9433190520193067
+      ],
+      "act": 7,
+      "clear": 9,
+      "wrong_at_act": 0,
+      "p50_ms": 1839
+    },
+    {
+      "jevel": "meeting-notes",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 4,
+      "checks": 13,
+      "right": 11,
+      "interval": [
+        0.5776482949136899,
+        0.9567427368172621
+      ],
+      "act": 8,
+      "clear": 12,
+      "wrong_at_act": 0,
+      "p50_ms": 1583
+    },
+    {
+      "jevel": "message-triage",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 4,
+      "checks": 11,
+      "right": 11,
+      "interval": [
+        0.7411599827511859,
+        1
+      ],
+      "act": 9,
+      "clear": 10,
+      "wrong_at_act": 0,
+      "p50_ms": 1301
+    },
+    {
+      "jevel": "notification-triage",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 5,
+      "checks": 13,
+      "right": 8,
+      "interval": [
+        0.3552248097226855,
+        0.8229055341876319
+      ],
+      "act": 7,
+      "clear": 12,
+      "wrong_at_act": 0,
+      "p50_ms": 1622
+    },
+    {
+      "jevel": "pr-description-check",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 5,
+      "checks": 18,
+      "right": 16,
+      "interval": [
+        0.6719975513339578,
+        0.9689811315464172
+      ],
+      "act": 15,
+      "clear": 17,
+      "wrong_at_act": 1,
+      "p50_ms": 2184
+    },
+    {
+      "jevel": "reply-check",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 4,
+      "checks": 7,
+      "right": 5,
+      "interval": [
+        0.35892909014821267,
+        0.9177828342909845
+      ],
+      "act": 5,
+      "clear": 6,
+      "wrong_at_act": 1,
+      "p50_ms": 1257
+    },
+    {
+      "jevel": "review-comment-kind",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 5,
+      "checks": 12,
+      "right": 11,
+      "interval": [
+        0.6461140782014047,
+        0.9851352905492264
+      ],
+      "act": 9,
+      "clear": 11,
+      "wrong_at_act": 0,
+      "p50_ms": 2045
+    },
+    {
+      "jevel": "review-quality",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 5,
+      "checks": 13,
+      "right": 11,
+      "interval": [
+        0.5776482949136899,
+        0.9567427368172621
+      ],
+      "act": 10,
+      "clear": 12,
+      "wrong_at_act": 0,
+      "p50_ms": 1312
+    },
+    {
+      "jevel": "task-difficulty",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 5,
+      "checks": 13,
+      "right": 11,
+      "interval": [
+        0.5776482949136899,
+        0.9567427368172621
+      ],
+      "act": 11,
+      "clear": 12,
+      "wrong_at_act": 1,
+      "p50_ms": 1103
+    },
+    {
+      "jevel": "ticket-triage",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 4,
+      "checks": 10,
+      "right": 10,
+      "interval": [
+        0.7224598312333834,
+        1
+      ],
+      "act": 8,
+      "clear": 9,
+      "wrong_at_act": 0,
+      "p50_ms": 1260
+    }
+  ],
+  "not_measured": [
+    "cold asks: the log holds no ask that waited for a local model to start or load"
+  ]
+}
