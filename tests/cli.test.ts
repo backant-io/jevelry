@@ -244,6 +244,27 @@ describe("eval", () => {
     expect(r.stdout).toContain('wrong: "a weekly digest and no candidates": worth_a_turn expected true, got false at act');
     expect(r.stdout).toContain("2 cases, 4 checks, 3 right");
   });
+  it("says with --against how often the answers match a saved run, and names what differs", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "jevelry-against-"));
+    const saved = JSON.parse((await run(["eval", "wake-gate", "--json"])).stdout) as { model: string; cases: Array<{ checks: Array<{ got: unknown }> }> };
+    writeFileSync(join(dir, "same.json"), JSON.stringify(saved));
+    const same = await run(["eval", "wake-gate", "--against", join(dir, "same.json")]);
+    expect(same.status, same.stderr).toBe(0);
+    expect(same.stdout).toContain("agreement with jev-1.13.0: 4 of 4 answers the same (51-100%)");
+    saved.model = "local/big.gguf";
+    saved.cases[1]!.checks[0]!.got = true;
+    writeFileSync(join(dir, "other.json"), JSON.stringify(saved));
+    const other = await run(["eval", "wake-gate", "--against", join(dir, "other.json")]);
+    // Disagreeing with another model is information, not a failed case: the exit stays the cases' own.
+    expect(other.status).toBe(0);
+    expect(other.stdout).toContain("agreement with local/big.gguf: 3 of 4 answers the same");
+    expect(other.stdout).toContain('differs: "a weekly digest and no candidates": worth_a_turn is false here, true there');
+    const doc = JSON.parse((await run(["eval", "wake-gate", "--json", "--against", join(dir, "other.json")])).stdout) as { agreement: { same: number; checks: number } };
+    expect(doc.agreement).toMatchObject({ same: 3, checks: 4 });
+    const bad = await run(["eval", "wake-gate", "--against", join(dir, "missing.json")]);
+    expect(bad.status).toBe(2);
+    expect(bad.stdout).toBe("");
+  });
   it("exits 2 with one sentence for a jevel that has no cases.json", async () => {
     const r = await run(["eval", "run-gate"]);
     expect(r.status).toBe(2);
