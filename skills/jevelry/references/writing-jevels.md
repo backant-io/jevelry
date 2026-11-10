@@ -207,6 +207,15 @@ It exits 8 when an answer is not the expected one, so a script can wait on it, a
 
 A clear case that Jev gets wrong, or gets right at `fall_back`, means the criteria or the state are wrong, and you rewrite them. Rewriting the question usually beats lowering the threshold. You move an expectation only when the expectation itself was the mistake, and you say so in the commit.
 
+## Asking the gate first
+
+Every question is read against the whole state, so a question costs its tokens whether or not its answer still matters. If one question decides whether the others are needed, put it first in the jevel and let your code ask it alone:
+
+    npx jevelry ask checklist-compliance --only followed --state @report.json
+    npx jevelry ask checklist-compliance --only deviation_kind deviation_explained --state @report.json
+
+The second ask runs only when the first answer leaves it open: here, when `followed` is not a yes at `act`. In a batch line the same is `"only": ["followed"]`. On the three shipped jevels with a gating question, 44%, 28% and 15% of the tokens went to questions the gate's answer had already settled. A gate that usually closes saves the most, and one that usually stays open costs a second round trip for nothing, so use it where the gate closes often.
+
 ## Tuning
 
 When you know later what was actually true, tell jevelry and read the report:

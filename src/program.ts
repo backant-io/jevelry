@@ -306,13 +306,14 @@ export function buildProgram(): Command {
     .option("--no-log", "do not append this ask to the log")
     .option("--log-state", "write the state itself into the log line, not only its hash (or JEVELRY_LOG_STATE=1)")
     .option("--cache", "answer an exact repeat of a local model's ask from the log instead of asking again (or JEVELRY_CACHE=1)")
+    .option("--only <names...>", "ask only these questions of the jevel: a gate first, the rest when its answer leaves them open")
     .option("--batch", "NDJSON asks on stdin ({id, jevel or questions, state, model?}), one NDJSON answer per line on stdout as each completes")
     .option("--concurrency <n>", "with --batch, how many asks are in flight at once", (v: string) => {
       const n = Number(v);
       if (!Number.isInteger(n) || n < 1) throw new InvalidArgumentError("a whole number of at least 1");
       return n;
     }, 16)
-    .action(async (jevelName: string | undefined, opts: { state?: string; questions?: string; model?: string; jevels: string[]; log: boolean; logState?: boolean; cache?: boolean; batch?: boolean; concurrency: number }, command: Command) => {
+    .action(async (jevelName: string | undefined, opts: { state?: string; questions?: string; model?: string; jevels: string[]; log: boolean; logState?: boolean; cache?: boolean; only?: string[]; batch?: boolean; concurrency: number }, command: Command) => {
       const logOptions = { home: home(), log: opts.log, logState: opts.logState === true || logStateFromEnv(process.env), cache: opts.cache === true || cacheFromEnv(process.env), warn: (m: string) => say(`warning: ${m}`) };
       if (opts.batch) {
         if (jevelName || opts.questions || opts.state) failAsk(errorBody(new JevelError("batch", "with --batch every stdin line names its own jevel or questions and state")));
@@ -360,7 +361,7 @@ export function buildProgram(): Command {
       } catch (error) {
         failAsk(errorBody(error));
       }
-      const askInput = { client: typesafe, state: state as never, ...(jevel ? { jevel } : { questions: questions ?? {} }), ...(opts.model ? { model: opts.model } : {}) };
+      const askInput = { client: typesafe, state: state as never, ...(jevel ? { jevel } : { questions: questions ?? {} }), ...(opts.model ? { model: opts.model } : {}), ...(opts.only ? { only: opts.only } : {}) };
       const result = await askAndLog(askInput, logOptions);
       if (!result.ok) failAsk(result.error);
       out(result.document);

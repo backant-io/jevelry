@@ -26,7 +26,7 @@ export async function askAndLog(input: AskInput, o: LogOptions): Promise<AskResu
 export interface BatchOptions extends LogOptions {
   client: TypeSafeClient;
   dirs: string[];
-  /** The `--model` of the batch; a line's own `model` wins. */
+  /** The `--model` of the batch; a line's own `model` wins. A line may also carry `only`, a list of the jevel's questions to ask. */
   model?: string;
   concurrency: number;
   write: (line: Record<string, unknown>) => void;
@@ -46,10 +46,11 @@ async function askLine(text: string, n: number, o: BatchOptions): Promise<Record
       throw new JevelError("line", `line ${n} is not JSON`);
     }
     if (!isRecord(parsed)) throw new JevelError("line", `line ${n} is not a JSON object`);
-    const { id, jevel: name, questions, state, model } = parsed;
+    const { id, jevel: name, questions, state, model, only } = parsed;
     if (typeof id !== "string" && typeof id !== "number") throw new JevelError("id", `line ${n} has no id, a string or a number`);
     tag = { id };
     if (model !== undefined && typeof model !== "string") throw new JevelError("model", "model must be a string");
+    if (only !== undefined && !(Array.isArray(only) && only.every((n) => typeof n === "string"))) throw new JevelError("only", "only must be a list of question names");
     let source: { jevel: Jevel } | { questions: Questions };
     if (typeof name === "string") {
       const loaded = loadJevel(name, o.dirs);
@@ -61,7 +62,7 @@ async function askLine(text: string, n: number, o: BatchOptions): Promise<Record
       throw new JevelError("jevel", "give a jevel name or questions");
     }
     const chosen = model ?? o.model;
-    const result = await askAndLog({ client: o.client, state: state as EntryType, ...source, ...(chosen ? { model: chosen } : {}) }, o);
+    const result = await askAndLog({ client: o.client, state: state as EntryType, ...source, ...(chosen ? { model: chosen } : {}), ...(only !== undefined ? { only: only as string[] } : {}) }, o);
     return result.ok ? { ...tag, ...result.document } : { ...tag, protocol: PROTOCOL, error: result.error };
   } catch (error) {
     return { ...tag, protocol: PROTOCOL, error: errorBody(error) };
