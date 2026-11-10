@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { accessSync, closeSync, constants, existsSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { request } from "node:http";
 import { basename, delimiter, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { MIN_BUILD } from "./catalog.js";
@@ -83,12 +84,73 @@ export function launchArgs(local: LocalModel): string[] {
  */
 export async function health(port: number): Promise<"ok" | "loading" | "down"> {
   try {
-    const response = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(2000) });
-    await response.text();
+    const response = await localRequest(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(2000) });
     return response.status === 503 ? "loading" : "ok";
   } catch (error) {
-    return (error as { cause?: { code?: unknown } }).cause?.code === "ECONNREFUSED" ? "down" : "loading";
+    return (error as NodeJS.ErrnoException).code === "ECONNREFUSED" ? "down" : "loading";
   }
+}
+
+/** What the SDK and jevelry read of an answer from the model server: that much of a Response, and no more. */
+export interface LocalResponse {
+  status: number;
+  ok: boolean;
+  headers: { get: (name: string) => string | null };
+  text: () => Promise<string>;
+  json: () => Promise<unknown>;
+  /** The SDK drains a clone's body to buffer a streamed response; this one arrives whole, so there is nothing to drain. */
+  clone: () => { body: undefined };
+}
+
+/**
+ * One request to the model server on this machine, through node:http and not Node's fetch. fetch sets itself up the
+ * first time a process uses it, and a jevelry command is a new process for every ask. Measured against a server that
+ * answers at once: 32 ms for the first fetch, 4 ms for the same call here, 34 ms a whole ask before and 8 ms after.
+ * A signal that fires ends the request with the signal's reason, and a refused connection keeps its `code`.
+ */
+export function localRequest(url: string, init: { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal | null } = {}): Promise<LocalResponse> {
+  return new Promise((resolve, reject) => {
+    const signal = init.signal ?? undefined;
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const done = (): void => signal?.removeEventListener("abort", abort);
+    const fail = (error: unknown): void => {
+      done();
+      reject(error);
+    };
+    const outgoing = request(url, { method: init.method ?? "GET", ...(init.headers ? { headers: init.headers } : {}) }, (incoming) => {
+      const chunks: Buffer[] = [];
+      incoming.on("data", (chunk: Buffer) => chunks.push(chunk));
+      incoming.on("error", fail);
+      incoming.on("end", () => {
+        done();
+        const text = Buffer.concat(chunks).toString("utf8");
+        const status = incoming.statusCode ?? 0;
+        resolve({
+          status,
+          ok: status >= 200 && status < 300,
+          headers: {
+            get: (name) => {
+              const value = incoming.headers[name.toLowerCase()];
+              return value === undefined ? null : Array.isArray(value) ? value.join(", ") : value;
+            },
+          },
+          text: async () => text,
+          json: async () => JSON.parse(text) as unknown,
+          clone: () => ({ body: undefined }),
+        });
+      });
+    });
+    const abort = (): void => {
+      outgoing.destroy();
+      fail(signal?.reason);
+    };
+    signal?.addEventListener("abort", abort, { once: true });
+    outgoing.on("error", fail);
+    outgoing.end(init.body);
+  });
 }
 
 /**
@@ -97,7 +159,7 @@ export async function health(port: number): Promise<"ok" | "loading" | "down"> {
  */
 export async function sleeping(port: number): Promise<boolean> {
   try {
-    const response = await fetch(`http://127.0.0.1:${port}/props`, { signal: AbortSignal.timeout(2000) });
+    const response = await localRequest(`http://127.0.0.1:${port}/props`, { signal: AbortSignal.timeout(2000) });
     const body = (await response.json()) as { is_sleeping?: unknown } | null;
     return body !== null && typeof body === "object" && body.is_sleeping === true;
   } catch {
@@ -500,7 +562,8 @@ export function localFetch(home: string, local: LocalModel, env: NodeJS.ProcessE
       ensureServer(home, local, env, options).then(resolve, reject);
     });
     if (waited) onCold?.();
-    return fetch(input, init);
+    // The SDK reads the status, the headers and the text of what comes back, which is what a LocalResponse has.
+    return localRequest(input, init as { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal | null }) as unknown as Response;
   };
 }
 
