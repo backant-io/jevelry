@@ -687,7 +687,7 @@ jevelry starts the local server as `llama-server -m <model> --host 127.0.0.1 --p
 | 2 | the jevel or the state is wrong, and the document names the field |
 | 3 | rate limited or overloaded, with `retry_after_ms` when TypeSafe gave one |
 | 4 | the key is missing or refused, and no request was made |
-| 5 | over the token budget, and no request was made; or the state with one question is longer than a local model takes (8192 tokens), and its server refused it |
+| 5 | over the token budget, and no request was made; or the state with one question is longer than the local model takes (8,192 tokens, or 4,096 for a model that reads its prompt in one batch), and its server refused it |
 | 6 | the network, TypeSafe's servers, or a local model server that cannot start or answer, with the reason |
 | 7 | TypeSafe answered a shape this build cannot read |
 | 8 | `jevelry eval` only: every case was asked, and at least one answer was not the expected one |

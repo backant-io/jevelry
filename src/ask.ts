@@ -295,11 +295,16 @@ export function errorBody(error: unknown, who = "TypeSafe"): ErrorBody {
   if (error instanceof AuthenticationError || error instanceof PermissionDeniedError) {
     return body("auth", `${who} refused the key: ${error.message}; check TYPESAFE_API_KEY`);
   }
-  if (error instanceof BadRequestError || error instanceof UnprocessableEntityError) {
-    // llama-server's words for a prompt over its context end in "try increasing it", which nobody asking through jevelry
-    // can do. It is the caller's state that is too long, as with a hosted ceiling: the same code and the same advice.
-    const over = who === MANAGED ? /request \((\d+) tokens\) exceeds the available context size \((\d+) tokens\)/.exec(error.message) : null;
+  // llama-server has two ways of saying a prompt is too long, and both end in advice nobody asking through jevelry can
+  // take: a 400 "exceeds the available context size ..., try increasing it", and for a model that reads its prompt in
+  // one batch a 500 "too large to process. increase the physical batch size". It is the caller's state that is too
+  // long, as with a hosted ceiling: the same code and the same advice.
+  if (who === MANAGED && error instanceof APIError) {
+    const over = /request \((\d+) tokens\) exceeds the available context size \((\d+) tokens\)/.exec(error.message)
+      ?? /input \((\d+) tokens\) is too large to process\. increase the physical batch size \(current batch size: (\d+)\)/.exec(error.message);
     if (over) return body("over_budget", `the state with one question came to ${over[1]} tokens and the local model takes ${over[2]} at most; filter the state before asking`);
+  }
+  if (error instanceof BadRequestError || error instanceof UnprocessableEntityError) {
     return body("bad_input", `${who} refused the request: ${error.message}`);
   }
   if (error instanceof APIError) return transport(`${who} answered ${error.status}: ${error.message}`);
