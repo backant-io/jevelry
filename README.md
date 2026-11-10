@@ -265,6 +265,7 @@ Every ask then sends the server's own model whatever the jevel pins, and no `x-j
 | `--jevels <dir>` | a jevels folder searched first; repeatable |
 | `--no-log` | keeps this ask out of the log |
 | `--log-state` | writes the state itself into the log line, next to its hash |
+| `--cache` | answers an exact repeat of a local model's ask from the log instead of asking again |
 | `--batch` | reads many asks from stdin, one JSON object per line, and answers them concurrently in one process |
 | `--concurrency <n>` | with `--batch`, how many asks are in flight at once; 16 by default |
 
@@ -570,6 +571,8 @@ Every answered ask is logged with how long the model took, and `report --speed` 
 
 The median is what an ask usually costs, and the 95th percentile is where a local model that had to load first shows up. `tokens/s` is input tokens per second of waiting, the whole round trip. Asks logged before jevelry kept durations are left out. The numbers above show the layout and are not a measurement.
 
+A local model answers the same prompt the same way every time, and no faster the second time. With `--cache`, `jevel(name, { cache: true })` or `JEVELRY_CACHE=1`, an ask whose state and questions are exactly those of an earlier ask by the same local model is answered from the log: the same answer, read by today's thresholds, in a few milliseconds and without the model loaded. Its log line names the ask it came from in `cached_from`, its `usage` is zero, and `report --speed` leaves it out. Hosted Jev is always asked.
+
 ### Tuning thresholds
 
 Once a question has 20 reviewed decisions, the Jevel screen proposes a lower act threshold when the decisions above it were right at least 90% of the time and at least as often as at the current threshold, less two points. `T` writes it into the jevel file. A jevel that came with jevelry is first copied into `./jevels`, and from then on your project uses that copy.
@@ -612,6 +615,7 @@ OpenJev 27B is not on the index; its card reports 84.0% against hosted Jev's 85.
 | `JEVELRY_JEVELS` | more jevel folders, colon separated | none |
 | `JEVELRY_TIMEOUT_MS` | the request timeout, per attempt | `30000`, and `300000` with a local model, whose first ask waits for it to load |
 | `JEVELRY_LOG_STATE` | `1` writes the state itself into each ask line, for `ask`, `run` and `decide` | off, only the hash |
+| `JEVELRY_CACHE` | `1` answers an exact repeat of a local model's ask from the log, for `ask` and `decide` | off, every ask reaches the model |
 | `JEVELRY_KEY_STORE` | `file` keeps the key in `$JEVELRY_HOME/env` on macOS too | the keychain on macOS |
 | `JEVELRY_MACHINE` | JSON of a machine (`os`, `chip`, `cpus`, `ramBytes`, `darwinMajor`, `gpu`) that replaces detection, to see the local models for another machine | this machine |
 | `JEVELRY_HF_URL` | the Hugging Face root for the model list and downloads | `https://huggingface.co` |
@@ -731,7 +735,7 @@ npm run test:live -- tests/live/jevels.test.ts
 
 `npm run scoreboard` writes the numbers each change is judged on into `scoreboard/<date>-<commit>.json`: the CLI's start-up next to bare Node, the size and time of an install, how long logged asks took per jevel and model, a running model server's memory next to jevelry's estimate for it, and, with `--eval`, every jevel's cases. It never starts a model, it asks one only with `--eval`, and it lists what it could not measure.
 
-549 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. The local-model tests among them use a fake `llama-server`, a fake jevd, a fake Homebrew and a fake Hugging Face, so no test downloads a model or starts a real server, and they check that a 27B model is never offered as runnable on a 24 GB Mac. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
+557 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. The local-model tests among them use a fake `llama-server`, a fake jevd, a fake Homebrew and a fake Hugging Face, so no test downloads a model or starts a real server, and they check that a 27B model is never offered as runnable on a 24 GB Mac. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## License
 

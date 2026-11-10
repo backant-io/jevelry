@@ -26,6 +26,10 @@ export interface AskLine {
   usage: Usage | null;
   /** How long the model took to answer, in ms. Absent on a line with `error` and on lines written before durations were kept. */
   ms?: number;
+  /** `sha256:` of the state and the questions as they were asked: two asks with the same one put the same request to the model. */
+  request_hash?: string;
+  /** Set when the answer was read from the log: the id of the ask the model itself answered. */
+  cached_from?: string;
   cwd: string;
   /** Set when a library `decide` got no answer from Jev. The CLI logs only answers. */
   error?: ErrorBody;
@@ -62,7 +66,7 @@ export async function appendLine(home: string, line: LogLine): Promise<void> {
  */
 export async function logAsk(
   home: string,
-  fields: Pick<AskLine, "jevel" | "model" | "state_hash" | "state" | "answers" | "usage" | "ms" | "error">,
+  fields: Pick<AskLine, "jevel" | "model" | "state_hash" | "state" | "answers" | "usage" | "ms" | "request_hash" | "cached_from" | "error">,
   warn: (message: string) => void,
 ): Promise<string | null> {
   const id = randomUUID();
@@ -75,6 +79,9 @@ export async function logAsk(
     return null;
   }
 }
+
+/** Answering an exact repeat from the log is asked for, with `--cache`, `cache: true` or this. */
+export const cacheFromEnv = (env: NodeJS.ProcessEnv): boolean => env.JEVELRY_CACHE === "1";
 
 /** States often hold customer text, so the log keeps only their hash unless this is set. */
 export const logStateFromEnv = (env: NodeJS.ProcessEnv): boolean => env.JEVELRY_LOG_STATE === "1";
@@ -108,6 +115,20 @@ export async function readLog(home: string, onSkipped: OnSkipped = skippedToStde
     lines.push(parsed as LogLine);
   });
   return lines;
+}
+
+/**
+ * The latest answer the model itself gave to this exact request. A copy of an answer is never the source
+ * of the next one, and an ask Jev never answered has nothing to give.
+ */
+export async function findRepeat(home: string, requestHash: string, model: string): Promise<AskLine | undefined> {
+  // ponytail: reads the whole log for every ask that may be a repeat; keep an index of request hashes when a log grows past what that read costs.
+  const lines = await readLog(home, () => {});
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const line = lines[i];
+    if (line?.kind === "ask" && line.request_hash === requestHash && line.model === model && !line.error && line.cached_from === undefined) return line;
+  }
+  return undefined;
 }
 
 export function findAsk(lines: LogLine[], id: string): AskLine | undefined {

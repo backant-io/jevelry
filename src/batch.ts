@@ -1,22 +1,24 @@
 import type { EntryType, Questions, TypeSafeClient } from "@typesafe-ai/sdk";
-import { type AskInput, type AskResult, ask, errorBody, isRecord } from "./ask.js";
+import { type AskInput, type AskResult, ask, errorBody, isRecord, logFields } from "./ask.js";
 import { type Jevel, JevelError, loadJevel } from "./jevel.js";
-import { logAsk } from "./log.js";
+import { findRepeat, logAsk } from "./log.js";
 import { PROTOCOL } from "./protocol.js";
 
 export interface LogOptions {
   home: string;
   log: boolean;
   logState: boolean;
+  /** Answer an exact repeat of a local model's ask from the log. */
+  cache?: boolean;
   warn: (message: string) => void;
 }
 
 /** One ask and its log line, the same for `ask` and for every line of `ask --batch`. */
 export async function askAndLog(input: AskInput, o: LogOptions): Promise<AskResult> {
-  const result = await ask(input);
+  const result = await ask(o.cache ? { ...input, repeat: (hash, model) => findRepeat(o.home, hash, model) } : input);
   if (result.ok && o.log) {
     const { jevel, model, state_hash, answers, usage } = result.document;
-    result.document.log_id = await logAsk(o.home, { jevel, model, state_hash, ...(o.logState ? { state: input.state } : {}), answers, usage, ms: result.ms }, o.warn);
+    result.document.log_id = await logAsk(o.home, { jevel, model, state_hash, ...(o.logState ? { state: input.state } : {}), answers, usage, ...logFields(result) }, o.warn);
   }
   return result;
 }

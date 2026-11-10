@@ -68,6 +68,7 @@ const askCase = async (state: unknown): Promise<AskResult> => {
   return {
     ok: true,
     ms: 100 * n,
+    request_hash: "sha256:r",
     document: { protocol: PROTOCOL, log_id: null, jevel: { name: "failing-test", version: 2 }, model: "local/a.gguf", state_hash: "sha256:x", answers: answersBy[n] ?? {}, usage: { input_tokens: 1, output_tokens: 1 } },
   };
 };

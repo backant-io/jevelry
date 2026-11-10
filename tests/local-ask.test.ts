@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { type LocalModel, writeConfig } from "../src/config.js";
-import { SERVER_FILE, stopServer } from "../src/server.js";
+import { SERVER_FILE, stopServer, stopServerAndWait } from "../src/server.js";
 import { killFakes, liveFakes, sandboxEnv } from "./fixtures/sandbox.js";
 import { type TestServer, startServer as startTypesafe } from "./fixtures/server.js";
 
@@ -82,6 +82,30 @@ describe("jevelry ask in local mode", () => {
     const second = await run(["ask", "--questions", QUESTIONS, "--state", '"Help!"'], env);
     expect(second.status).toBe(0);
     expect(starts()).toBe(1);
+  });
+
+  // The local model answers an exact repeat the same every time, so with --cache the second ask is read from the log.
+  // The proof that no model answered it: the server is stopped and no llama-server can be started.
+  it("answers an exact repeat from the log with --cache, with no model server running", async () => {
+    const { home, local, env } = await fixture();
+    const ask = ["ask", "--cache", "--questions", QUESTIONS, "--state", '"Help!"'];
+    const first = await run(ask, env);
+    expect(first.status, first.stderr).toBe(0);
+    await stopServerAndWait(home);
+    const gone = { ...env, JEVELRY_LLAMA_SERVER: join(home, "no-such-llama-server") };
+    const second = await run(ask, gone);
+    expect(second.status, second.stderr).toBe(0);
+    const [a, b] = [first, second].map((r) => JSON.parse(r.stdout) as { log_id: string; model: string; answers: unknown; usage: unknown });
+    expect(b?.model).toBe(local.alias);
+    expect(b?.answers).toEqual(a?.answers);
+    expect(b?.usage).toEqual({ input_tokens: 0, output_tokens: 0 });
+    const lines = readFileSync(join(home, "log.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l) as { id: string; cached_from?: string; request_hash?: string });
+    expect(lines.map((l) => l.cached_from)).toEqual([undefined, a?.log_id]);
+    expect(lines[1]?.request_hash).toBe(lines[0]?.request_hash);
+    // Another state is another request: without a server it cannot be answered, and without --cache neither can the repeat.
+    expect((await run(["ask", "--cache", "--questions", QUESTIONS, "--state", '"Something else"'], gone)).status).toBe(6);
+    expect((await run(["ask", "--questions", QUESTIONS, "--state", '"Help!"'], gone)).status).toBe(6);
+    expect((await run(["ask", "--questions", QUESTIONS, "--state", '"Help!"'], { ...gone, JEVELRY_CACHE: "1" })).status).toBe(0);
   });
 
   // A batch fires its asks at once on a cold start; each starting its own server would load the model many times.
