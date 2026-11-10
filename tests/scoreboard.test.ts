@@ -52,6 +52,9 @@ describe("npm run scoreboard", () => {
     expect(board.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(board.commit).toMatch(/^[0-9a-f]{7,}$/);
     expect(board.start.bare_node_ms.median).toBeGreaterThan(0);
+    // Every time in a record depends on what else the machine was doing: a record taken at a load average of 149
+    // showed bare Node starting in 786 ms, thirteen times its usual 60. The record says how busy the machine was.
+    expect(board.machine.load_1m).toBeGreaterThanOrEqual(0);
     expect(board.start.jevelry_version_ms.median).toBeGreaterThan(0);
     expect(board.speed).toEqual([{ jevel: "ticket-triage", model: "local/a.gguf", asks: 3, p50_ms: 200, p95_ms: 300, tokens_per_s: 2500, cold_asks: 0, cold_p50_ms: null }]);
     expect([board.install, board.footprint, board.quality]).toEqual([null, null, null]);
