@@ -1,10 +1,10 @@
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { TypeSafeClient } from "@typesafe-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { ask } from "../src/ask.js";
-import { type AskLine, appendLine, findRepeat } from "../src/log.js";
+import { type AskLine, REQUESTS_FILE, appendLine, findRepeat, logAsk } from "../src/log.js";
 import { speed } from "../src/report.js";
 import { jsonResponse, scriptedFetch } from "./fixtures/responses.js";
 
@@ -89,6 +89,47 @@ describe("findRepeat", () => {
     expect((await findRepeat(home, "sha256:r", "local/b.gguf"))?.id).toBe("other-model");
     expect(await findRepeat(home, "sha256:nothing", LOCAL)).toBeUndefined();
     expect(await findRepeat(mkdtempSync(join(tmpdir(), "jevelry-cache-")), "sha256:r", LOCAL)).toBeUndefined();
+  });
+});
+
+// Reading and parsing a whole log to learn that an ask is no repeat cost 270 ms on a log of 100,000 asks, on every
+// ask. The index holds 32 bytes per answered request, and can only ever cost a model call, never a wrong answer.
+describe("the index of answered requests", () => {
+  const H = (n: number): string => `sha256:${String(n).repeat(64).slice(0, 64)}`;
+  const fields = (n: number, extra: Partial<AskLine> = {}) => ({ jevel: null, model: LOCAL, state_hash: "sha256:s", request_hash: H(n), answers: logged().answers, usage: { input_tokens: 40, output_tokens: 1 }, ms: 1500, ...extra });
+  const warn = (): void => {};
+  it("gains 32 bytes for every ask the model answered, and none for a copy or an ask Jev never answered", async () => {
+    const home = mkdtempSync(join(tmpdir(), "jevelry-index-"));
+    await logAsk(home, fields(1), warn);
+    await logAsk(home, fields(2), warn);
+    await logAsk(home, fields(1, { cached_from: "x" }), warn);
+    await logAsk(home, fields(3, { model: null, usage: null, error: { exit: 6, code: "transport", message: "down" } }), warn);
+    const index = readFileSync(join(home, REQUESTS_FILE));
+    expect(index.length).toBe(64);
+    expect(index.subarray(0, 32).toString("hex")).toBe(H(1).slice(7));
+    expect((await findRepeat(home, H(2), LOCAL))?.request_hash).toBe(H(2));
+    expect(await findRepeat(home, H(3), LOCAL)).toBeUndefined();
+  });
+  it("is built from the log when a log has none, so asks logged before it was kept are still found", async () => {
+    const home = mkdtempSync(join(tmpdir(), "jevelry-index-"));
+    await appendLine(home, logged({ id: "old", request_hash: H(4) }));
+    expect(existsSync(join(home, REQUESTS_FILE))).toBe(false);
+    expect((await findRepeat(home, H(4), LOCAL))?.id).toBe("old");
+    expect(readFileSync(join(home, REQUESTS_FILE)).length).toBe(32);
+  });
+  // The index only ever says "look" or "do not look". Wrong either way, the worst that happens is one more ask of the model.
+  it("costs a model call and never a wrong answer when it and the log disagree", async () => {
+    const home = mkdtempSync(join(tmpdir(), "jevelry-index-"));
+    await logAsk(home, fields(5), warn);
+    // The index names a request the log no longer holds.
+    rmSync(join(home, "log.jsonl"));
+    expect(await findRepeat(home, H(5), LOCAL)).toBeUndefined();
+    // The log holds a request the index never got.
+    await appendLine(home, logged({ id: "unindexed", request_hash: H(6) }));
+    expect(await findRepeat(home, H(6), LOCAL)).toBeUndefined();
+    // A state that happens to carry a hash in its text is not an answer to that request.
+    await logAsk(home, fields(7, { state: { note: H(8) } }), warn);
+    expect(await findRepeat(home, H(8), LOCAL)).toBeUndefined();
   });
 });
 

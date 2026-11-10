@@ -1,10 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { JevelError } from "./jevel.js";
 import type { Answer, ErrorBody, FallBackAnswer, RunReport, Usage } from "./protocol.js";
 
 export const LOG_FILE = "log.jsonl";
+/**
+ * The requests the log holds a model's answer to, 32 bytes of hash each. An ask that is no repeat learns it from here
+ * without reading the log. It only ever says "look" or "do not look": wrong either way, the cost is one ask of the model.
+ */
+export const REQUESTS_FILE = "requests.idx";
+const hashBytes = (requestHash: string): Buffer => Buffer.from(requestHash.slice(requestHash.indexOf(":") + 1), "hex");
 
 export function jevelryHome(env: NodeJS.ProcessEnv, homedir: string): string {
   const configured = env.JEVELRY_HOME;
@@ -75,6 +81,8 @@ export async function logAsk(
   const { error, state, ...rest } = fields;
   try {
     await appendLine(home, { kind: "ask", id, at: new Date().toISOString(), ...rest, cwd: process.cwd(), ...(state !== undefined ? { state } : {}), ...(error ? { error } : {}) });
+    // Only an answer the model itself gave can be repeated. An index that cannot be written costs a later repeat its shortcut, never this ask.
+    if (rest.request_hash !== undefined && !error && rest.cached_from === undefined) await appendFile(join(home, REQUESTS_FILE), hashBytes(rest.request_hash)).catch(() => {});
     return id;
   } catch (e) {
     warn(`the ask was answered but could not be logged: ${e instanceof Error ? e.message : String(e)}`);
@@ -119,18 +127,57 @@ export async function readLog(home: string, onSkipped: OnSkipped = skippedToStde
   return lines;
 }
 
+/** The index as it is on disk, or built from the log when a log has none: asks logged before it was kept are found too. */
+async function requestIndex(home: string): Promise<Buffer> {
+  try {
+    return await readFile(join(home, REQUESTS_FILE));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  let text = "";
+  try {
+    text = await readFile(join(home, LOG_FILE), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    return Buffer.alloc(0);
+  }
+  const index = Buffer.concat([...text.matchAll(/"request_hash":"sha256:([0-9a-f]{64})"/g)].map((match) => Buffer.from(match[1] as string, "hex")));
+  await writeFile(join(home, REQUESTS_FILE), index).catch(() => {});
+  return index;
+}
+
 /**
  * The latest answer the model itself gave to this exact request. A copy of an answer is never the source
- * of the next one, and an ask Jev never answered has nothing to give.
+ * of the next one, and an ask Jev never answered has nothing to give. A lookup that fails for any reason
+ * answers "no repeat": the model is asked, and nothing is lost but the shortcut.
  */
 export async function findRepeat(home: string, requestHash: string, model: string): Promise<AskLine | undefined> {
-  // ponytail: reads the whole log for every ask that may be a repeat; keep an index of request hashes when a log grows past what that read costs.
-  const lines = await readLog(home, () => {});
-  for (let i = lines.length - 1; i >= 0; i -= 1) {
-    const line = lines[i];
-    if (line?.kind === "ask" && line.request_hash === requestHash && line.model === model && !line.error && line.cached_from === undefined) return line;
+  try {
+    const index = await requestIndex(home);
+    const wanted = hashBytes(requestHash);
+    let known = false;
+    for (let at = index.indexOf(wanted); at !== -1 && !known; at = index.indexOf(wanted, at + 1)) known = at % 32 === 0;
+    if (!known) return undefined;
+    // Only the lines that carry this hash are parsed, newest first: reading a log is cheap next to parsing every line of it.
+    // ponytail: a repeat still reads the whole log once, about 80 ms at 100,000 asks; keep byte offsets in the index if that ever costs more than it saves.
+    const text = await readFile(join(home, LOG_FILE), "utf8");
+    for (let from = text.length; ;) {
+      const at = text.lastIndexOf(requestHash, from);
+      if (at === -1) return undefined;
+      const start = text.lastIndexOf("\n", at) + 1;
+      const end = text.indexOf("\n", at);
+      try {
+        const line = JSON.parse(text.slice(start, end === -1 ? text.length : end)) as LogLine;
+        if (line.kind === "ask" && line.request_hash === requestHash && line.model === model && !line.error && line.cached_from === undefined) return line;
+      } catch {
+        // Not a line of JSON: not an answer.
+      }
+      if (start === 0) return undefined;
+      from = start - 1;
+    }
+  } catch {
+    return undefined;
   }
-  return undefined;
 }
 
 export function findAsk(lines: LogLine[], id: string): AskLine | undefined {

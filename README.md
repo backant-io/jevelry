@@ -648,6 +648,7 @@ A command started by `jevelry run` gets these, and `TYPESAFE_API_KEY` is removed
 | Path | What it holds |
 |---|---|
 | `log.jsonl` | every ask, outcome and run, one JSON line each |
+| `requests.idx` | 32 bytes for every request the log holds a model's answer to, so `--cache` knows an ask is no repeat without reading the log; rebuilt from the log when it is missing |
 | `env` | the key, when the keychain is unavailable |
 | `tui.json` | the TUI theme, `dark` or `light`, set from `ctrl+p` |
 | `jevels/` | your own jevels for every project on this machine |
@@ -740,7 +741,7 @@ npm run test:live -- tests/live/jevels.test.ts
 
 `npm run scoreboard` writes the numbers each change is judged on into `scoreboard/<date>-<commit>.json`: the CLI's start-up next to bare Node, the size and time of an install, how long logged asks took per jevel and model, a running model server's memory next to jevelry's estimate for it, and, with `--eval`, every jevel's cases. It never starts a model, it asks one only with `--eval`, and it lists what it could not measure. With `--eval --gate` it exits 8 when a jevel's cases score worse, or one more answer is wrong at `act`, than in the newest earlier result of the same model: a release can wait on that without anyone choosing a bar.
 
-578 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. The local-model tests among them use a fake `llama-server`, a fake jevd, a fake Homebrew and a fake Hugging Face, so no test downloads a model or starts a real server, and they check that a 27B model is never offered as runnable on a 24 GB Mac. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
+581 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. The local-model tests among them use a fake `llama-server`, a fake jevd, a fake Homebrew and a fake Hugging Face, so no test downloads a model or starts a real server, and they check that a 27B model is never offered as runnable on a 24 GB Mac. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## License
 
