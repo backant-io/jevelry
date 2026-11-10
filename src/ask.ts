@@ -223,7 +223,9 @@ export async function ask(input: AskInput): Promise<AskResult> {
     // The request alone is timed, retries and a local model's load included: that is what the caller waited for.
     const started = Date.now();
     // Only jevelry's own local model is known to answer a prompt the same every time (17 of 17 prompts over five
-    // repeats, byte for byte, and no faster the second time). Hosted Jev and a server jevelry did not start are not measured.
+    // repeats, byte for byte, and no faster the second time). A Kev model's certainty moves in its fourth decimal with what
+    // its server was asked before (see launchArgs); its values and decisions did not. Hosted Jev and a server jevelry did
+    // not start are not measured.
     const local = SERVER_CLIENTS.has(input.client) ? undefined : input.client.defaultModel;
     const logged = input.repeat && local?.startsWith("local/") ? await input.repeat(requestHash, local) : undefined;
     if (logged && local && names.every((name) => Object.hasOwn(logged.answers, name) && logged.answers[name]?.type === (questions[name] as { type?: unknown }).type)) {
