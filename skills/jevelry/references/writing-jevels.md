@@ -55,7 +55,7 @@ And this is `same_as` from `duplicate-issue`, which holds two records against ea
 
 The criteria are where the boundary cases live, and Jev reads them next to each other. That is why every entry in one question carries the same fields, and `check` warns you when one option has a field the others lack, because Jev would read that field as something only that option can have.
 
-For a `choice`, every option is `{ what, not_for, examples }`. `what` says what the option covers, `not_for` names the neighbouring option it gets mixed up with and why that one wins, and `examples` are two or three short phrases the way your state would say them. Two of the four options of `team` in `ticket-triage`:
+For a `choice`, every option is `{ what, not_for, examples }`. `what` says what the option covers, `not_for` names the neighbouring option it gets mixed up with and why that one wins, and `examples` are two or three short phrases the way your state would say them. The examples are not padding you can cut to save tokens: with them removed, a 2B local model changed an answer or lost an expected one in 14 of the 17 shipped jevels, for 16% fewer tokens. If you shorten a jevel, run `jevelry eval <name> --json` before, and `jevelry eval <name> --against` that result after. Two of the four options of `team` in `ticket-triage`:
 
     billing:
       what: "A charge, an invoice, a refund, a price or a subscription change"
