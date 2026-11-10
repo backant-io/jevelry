@@ -85,6 +85,20 @@ export async function health(port: number): Promise<"ok" | "loading" | "down"> {
   }
 }
 
+/**
+ * Whether the server has unloaded its model after its idle time. /health answers 200 either way; only /props
+ * says, and asking it does not wake the model. A build that does not say is taken as awake.
+ */
+export async function sleeping(port: number): Promise<boolean> {
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/props`, { signal: AbortSignal.timeout(2000) });
+    const body = (await response.json()) as { is_sleeping?: unknown } | null;
+    return body !== null && typeof body === "object" && body.is_sleeping === true;
+  } catch {
+    return false;
+  }
+}
+
 function record(home: string, pid: number, local: LocalModel): void {
   writeFileSync(join(home, SERVER_FILE), `${JSON.stringify({ pid, port: local.port, path: local.path, alias: local.alias })}\n`);
 }
@@ -333,7 +347,8 @@ async function waitReady(home: string, local: LocalModel, env: NodeJS.ProcessEnv
     await sleep(500);
     state = await health(local.port);
   }
-  return told !== undefined;
+  // Ready at once is still a wait when the model was unloaded: the next request loads it again.
+  return told !== undefined || (await sleeping(local.port));
 }
 
 /** One wait per port in this process, so a batch of concurrent asks starts one server, not one each. */

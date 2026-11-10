@@ -37,6 +37,7 @@ setTimeout(() => process.exit(0), Number(process.env.FAKE_LLAMA_LIFETIME_MS ?? 3
 process.on("SIGTERM", () => setTimeout(() => process.exit(0), Number(process.env.FAKE_SIGTERM_DELAY_MS ?? 0)));
 
 const loadMs = Number(process.env.FAKE_LLAMA_LOAD_MS ?? 300);
+let served = 0;
 const started = Date.now();
 
 const server = createServer((req, res) => {
@@ -58,8 +59,12 @@ const server = createServer((req, res) => {
         data: [{ id: alias, aliases: [alias], architecture: { input_modalities: ["text"], output_modalities: ["decisions"] } }],
       });
     }
+    // A real server unloads its model after the idle time and says so here, while /health keeps answering 200.
+    // FAKE_LLAMA_SLEEP_AFTER=n: asleep from its nth answer until the next request for one.
+    if (req.method === "GET" && req.url === "/props") return json(200, { is_sleeping: served === Number(process.env.FAKE_LLAMA_SLEEP_AFTER ?? -1) });
     if (req.method !== "POST" || req.url !== "/v1/systemone") return json(404, { error: { code: 404, message: "File Not Found", type: "not_found_error" } });
     if (process.env.FAKE_LLAMA_ANSWER_STATUS) return json(Number(process.env.FAKE_LLAMA_ANSWER_STATUS), { error: { message: "fake failure" } });
+    served += 1;
     const body = JSON.parse(raw);
     const answers = {};
     for (const [name, q] of Object.entries(body.questions)) {
