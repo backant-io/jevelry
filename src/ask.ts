@@ -219,7 +219,7 @@ export async function ask(input: AskInput): Promise<AskResult> {
       }));
       return { ok: true, document: documentOf(local, answers, { input_tokens: 0, output_tokens: 0 }), ms: Date.now() - started, request_hash: requestHash, cached_from: logged.id };
     }
-    // ponytail: asks in flight together on one client share the mark; a model woken from its idle sleep is not marked at all, the server does not say.
+    // ponytail: asks in flight together on one client share the mark.
     const waited = COLD.get(input.client);
     if (waited) waited.cold = false;
     const result = readEnvelope(await input.client.systemOne(model === undefined ? { state: input.state, questions } : { state: input.state, questions, model }));

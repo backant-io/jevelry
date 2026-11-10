@@ -135,6 +135,17 @@ describe("jevelry ask in local mode", () => {
     expect(lines.map((l) => l.cold)).toEqual([true, undefined]);
   });
 
+  // After 300 idle seconds the server unloads its model and keeps listening: the ask that wakes it waits for a load
+  // like the first one did. Measured on a 2B model: 2.3 s for that ask against 1.2 s warm.
+  it("marks the ask that woke a model from its idle sleep as cold too", async () => {
+    const { home, env } = await fixture({ FAKE_LLAMA_SLEEP_AFTER: "1" });
+    const ask = ["ask", "--questions", QUESTIONS, "--state", '"Help!"'];
+    for (let i = 0; i < 3; i++) expect((await run(ask, env)).status).toBe(0);
+    const lines = readFileSync(join(home, "log.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l) as { cold?: boolean });
+    // The first started the server, the second found it asleep, the third found it awake.
+    expect(lines.map((l) => l.cold)).toEqual([true, true, undefined]);
+  });
+
   // A batch fires its asks at once on a cold start; each starting its own server would load the model many times.
   it("starts one server for a batch of concurrent asks", async () => {
     const { local, env, starts } = await fixture();
