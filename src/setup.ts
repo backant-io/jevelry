@@ -1,10 +1,11 @@
 import { spawn } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
+import { join, sep } from "node:path";
 import { createServer } from "node:net";
 import { createInterface } from "node:readline";
 import { ask } from "./ask.js";
 import { type Choice, MIN_BUILD, hfUrl } from "./catalog.js";
-import { type JevServer, type LocalModel, writeConfig } from "./config.js";
+import { type JevServer, type LocalModel, readConfig, writeConfig } from "./config.js";
 import { localClient, serverClient } from "./decide.js";
 import { downloadFile, modelPath, remoteFile } from "./download.js";
 import { budgetBytes, detectMachine, fitOf, needBytes, realMachine } from "./estimate.js";
@@ -152,7 +153,19 @@ export async function installLocal(choice: Choice, home: string, io: SetupIO, en
     } finally {
       process.off("SIGINT", quit).off("SIGTERM", quit).off("exit", stop);
     }
+    const before = readConfig(home).local;
     writeConfig(home, { backend: "local", local });
+    // A model is several GB, and nothing asks the old one after a switch: left alone, every switch costs its size on
+    // disk for good. Asked, never assumed, and only for a file under this home's models folder.
+    if (before && before.path !== local.path && before.path.startsWith(`${join(home, "models")}${sep}`) && existsSync(before.path)) {
+      const size = gb(statSync(before.path).size);
+      if (await io.confirm(`${before.name} is still on disk and jevelry no longer asks it: remove its ${size}?`)) {
+        rmSync(before.path, { force: true });
+        io.say(`removed ${before.name}, ${size}`);
+      } else {
+        io.say(`${before.name} stays on disk at ${before.path}`);
+      }
+    }
     return local;
   } catch (error) {
     throw error instanceof SetupError ? error : new SetupError(error instanceof Error ? error.message : String(error));
