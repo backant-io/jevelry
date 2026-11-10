@@ -162,3 +162,52 @@ export function renderEval(e: Evaluation): string {
   );
   return `${[tableOf(COLUMNS, table), summary, ...wrong].join("\n")}\n`;
 }
+
+export interface Agreement {
+  /** The model of the reference run. */
+  model: string | null;
+  /** The checks both runs made, and how many got the same answer. */
+  checks: number;
+  same: number;
+  interval: [number, number];
+  differences: Array<{ case: string; question: string; got: Check["got"]; reference: Check["got"] }>;
+  /** Checks of this run the reference never made: left out, and counted here. */
+  missing: number;
+}
+
+/**
+ * How often this run answered like a saved one, check by check: what a smaller or quantized model is
+ * judged by when it stands in for another. The answer is compared, not the decision: two models can be
+ * differently sure of the same answer.
+ */
+export function agreement(here: Evaluation, reference: Evaluation): Agreement {
+  if (!isRecord(reference) || !Array.isArray(reference.cases)) throw new JevelError("against", "the reference is not a result of jevelry eval --json");
+  const there = new Map<string, Check["got"]>();
+  for (const c of reference.cases) for (const check of c.checks ?? []) there.set(`${c.name}\n${check.question}`, check.got);
+  const differences: Agreement["differences"] = [];
+  let checks = 0;
+  let missing = 0;
+  for (const c of here.cases) {
+    for (const check of c.checks) {
+      const key = `${c.name}\n${check.question}`;
+      if (!there.has(key)) {
+        missing += 1;
+        continue;
+      }
+      checks += 1;
+      const other = there.get(key) as Check["got"];
+      if (other !== check.got) differences.push({ case: c.name, question: check.question, got: check.got, reference: other });
+    }
+  }
+  const same = checks - differences.length;
+  return { model: reference.model ?? null, checks, same, interval: wilson(same, checks), differences, missing };
+}
+
+export function renderAgreement(a: Agreement): string {
+  const pct = (n: number): string => String(Math.round(n * 100));
+  return `${[
+    `agreement with ${String(a.model)}: ${a.same} of ${a.checks} answers the same (${pct(a.interval[0])}-${pct(a.interval[1])}%)`,
+    ...(a.missing > 0 ? [`${a.missing} checks are not in the reference and were left out`] : []),
+    ...a.differences.map((d) => `differs: "${d.case}": ${d.question} is ${String(d.got)} here, ${String(d.reference)} there`),
+  ].join("\n")}\n`;
+}

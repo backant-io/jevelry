@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { AskResult } from "../src/ask.js";
-import { type Case, evaluate, judge, readCases, renderEval, wilson } from "../src/eval.js";
+import { type Case, type Evaluation, agreement, evaluate, judge, readCases, renderAgreement, renderEval, wilson } from "../src/eval.js";
 import { JevelError } from "../src/jevel.js";
 import { type Answer, type Decision, PROTOCOL } from "../src/protocol.js";
 
@@ -125,5 +125,41 @@ describe("readCases", () => {
     expect(() => readCases(file('[{"name":"x","state":{}}]'))).toThrow(/expect/);
     expect(() => readCases(file('[{"name":"x","state":{},"expect":{"q":{"nested":1}}}]'))).toThrow(/q/);
     expect(() => readCases(file("[]"))).toThrow(/no cases/);
+  });
+});
+
+// A smaller or quantized model is judged by how often it answers like the one it stands in for, case by case.
+describe("agreement", () => {
+  const run = async (): Promise<Evaluation> => {
+    const result = await evaluate(cases, askCase);
+    if (!result.ok) throw new Error("unreachable");
+    return result.evaluation;
+  };
+  it("counts the checks both runs made and how many got the same answer, whatever the decisions were", async () => {
+    const here = await run();
+    const there = structuredClone(here);
+    there.model = "jev-1.13.0";
+    // Same answer at another decision still agrees; another answer does not.
+    there.cases[0]!.checks[0]!.decision = "mark";
+    there.cases[1]!.checks[0]!.got = "defect";
+    const a = agreement(here, there);
+    expect(a).toMatchObject({ model: "jev-1.13.0", checks: 6, same: 5, missing: 0 });
+    expect(a.interval).toEqual(wilson(5, 6));
+    expect(a.differences).toEqual([{ case: "clear defect, answered flaky and sure", question: "cause", got: "flaky", reference: "defect" }]);
+    const text = renderAgreement(a);
+    expect(text).toContain("agreement with jev-1.13.0: 5 of 6 answers the same (44-97%)");
+    expect(text).toContain('differs: "clear defect, answered flaky and sure": cause is flaky here, defect there');
+  });
+  it("leaves out what the reference never asked, and says how much that was", async () => {
+    const here = await run();
+    const there = structuredClone(here);
+    there.cases.pop();
+    there.cases[0]!.checks.pop();
+    expect(agreement(here, there)).toMatchObject({ checks: 4, same: 4, missing: 2 });
+    expect(renderAgreement(agreement(here, there))).toContain("2 checks are not in the reference");
+  });
+  it("refuses a reference that is no result of eval --json", async () => {
+    const here = await run();
+    expect(() => agreement(here, { rows: [] } as never)).toThrow(/eval --json/);
   });
 });

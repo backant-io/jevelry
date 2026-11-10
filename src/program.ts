@@ -13,7 +13,7 @@ import { installSkill, knownAgents, promptForKey, unknownAgents, whereToPutTheKe
 import { JevelError, checkState, discoveryDirs, expandQuestions, isEntry, listJevels, loadJevel } from "./jevel.js";
 import { defaultClient, fallenAnswers, renderTypes } from "./decide.js";
 import { type Machine, budgetBytes, detectMachine } from "./estimate.js";
-import { type EvalResult, evaluate, readCases, renderEval } from "./eval.js";
+import { type EvalResult, type Evaluation, agreement, evaluate, readCases, renderAgreement, renderEval } from "./eval.js";
 import { resolveKey, storeKey } from "./key.js";
 import { cacheFromEnv, findRepeat, jevelryHome, logAsk, logStateFromEnv, readLog, recordOutcome } from "./log.js";
 import { type AskDocument, EXIT, EXIT_CASES_FAILED, type ErrorBody, type ErrorDocument, PROTOCOL, type RunReport } from "./protocol.js";
@@ -74,6 +74,17 @@ function readSource(source: string, field: string): unknown {
   } catch {
     throw new JevelError(field, `${field} is not JSON (a plain text state is written as a JSON string, for example '"text"')`);
   }
+}
+
+/** A result of `jevelry eval --json` from a file; refused with the reason when it is not one. */
+function readReference(file: string): Evaluation {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(file, "utf8"));
+  } catch (error) {
+    throw new JevelError("against", `${file} cannot be read as a result of jevelry eval --json: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return parsed as Evaluation;
 }
 
 /** The one exit for a failed `ask`: the error document on stdout, the sentence on stderr, the code. */
@@ -540,10 +551,14 @@ export function buildProgram(): Command {
     .description("ask every case in the jevel's cases.json and count the expected answers (exit 8 when one is not)")
     .option("--model <id>", "model id, overriding the jevel's pin and JEVELRY_MODEL")
     .option("--jevels <dir>", "a jevels directory searched first (repeatable)", (d: string, all: string[]) => [...all, d], [] as string[])
+    .option("--against <file>", "a result saved with --json, of another model: how often this one answers the same")
     .option("--json", "the whole result, every case and check in it")
-    .action(async (name: string, opts: { model?: string; jevels: string[]; json?: boolean }) => {
+    .action(async (name: string, opts: { model?: string; jevels: string[]; against?: string; json?: boolean }) => {
       let result: EvalResult;
+      let reference: Evaluation | undefined;
       try {
+        // Read before any ask: a reference that cannot be read must not cost the cases.
+        if (opts.against !== undefined) reference = readReference(opts.against);
         const { jevel, warnings } = loadJevel(name, dirs(opts.jevels));
         for (const warning of warnings) say(`warning: ${warning}`);
         const cases = readCases(join(dirname(jevel.path), "cases.json"));
@@ -557,8 +572,14 @@ export function buildProgram(): Command {
         say(`case "${result.case}": ${result.error.message}`);
         process.exit(result.error.exit);
       }
-      if (opts.json) out(result.evaluation);
-      else process.stdout.write(renderEval(result.evaluation));
+      let agreed: ReturnType<typeof agreement> | undefined;
+      try {
+        if (reference) agreed = agreement(result.evaluation, reference);
+      } catch (error) {
+        failCommand(error);
+      }
+      if (opts.json) out(agreed ? { ...result.evaluation, agreement: agreed } : result.evaluation);
+      else process.stdout.write(renderEval(result.evaluation) + (agreed ? renderAgreement(agreed) : ""));
       if (result.evaluation.right < result.evaluation.checks) process.exit(EXIT_CASES_FAILED);
     });
 
