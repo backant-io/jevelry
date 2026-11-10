@@ -59,13 +59,19 @@ export function serverBuild(path: string): number | null {
  * about 1 MB a token, and keeps them after the answer. Measured on Kev 0.8B (llama.cpp 0.9.0, M4 Pro):
  * one 2239-token prompt left the server at 2784 MB with 4096 and at 810 MB with 512, the median ask
  * was a tenth faster, and all 91 shipped examples and cases were answered the same, byte for byte.
+ *
+ * `-lv 2` keeps the server's warnings and errors and drops the three lines it writes for every question it
+ * answers: about 1 KB an ask into a log nothing trims. Measured: 145 bytes at a start, none for an ask.
+ *
+ * Three slots instead of one were tried on vllm-d3 (llama.cpp 0.9.0): a jevel's questions then run side by side
+ * and every answer stayed the same, byte for byte, but on a quiet machine it was no faster (15.5 s against 15.2 s).
  */
 export function launchArgs(local: LocalModel): string[] {
   // ponytail: only kev is measured; the other families that do not need one ubatch (lev, nimble, d1, openjev) keep 4096 until they are.
   const ubatch = local.decisionType === "kev" ? "512" : "4096";
   return [
     "-m", local.path, "--host", "127.0.0.1", "--port", String(local.port), "--alias", local.alias,
-    "--no-webui", "--no-mmproj", "-c", "8192", "-b", "4096", "-ub", ubatch, "-np", "1", "--sleep-idle-seconds", "300",
+    "--no-webui", "--no-mmproj", "-c", "8192", "-b", "4096", "-ub", ubatch, "-np", "1", "--sleep-idle-seconds", "300", "-lv", "2",
   ];
 }
 
@@ -243,7 +249,7 @@ async function launch(home: string, local: LocalModel, env: NodeJS.ProcessEnv): 
       // Nothing of ours on record, so any server of this home is one whose jevelry was killed between spawn and record.
       const stray = strayServers(home)[0];
       if (stray !== undefined) throw new Error(`a local model server jevelry did not record is running (pid ${stray}); run jevelry stop`);
-      // ponytail: the log is appended to on every start and never rotated; truncate it at start if it ever grows large.
+      // ponytail: the log is appended to on every start and never rotated; at `-lv 2` that is about 145 bytes a start. Truncate it at start if it ever grows large.
       const log = openSync(join(home, SERVER_LOG), "a");
       // A signal between spawn and record would leave a server that no record names: it is held until the
       // record is written, then raised again. Spawn and record are synchronous, so nothing runs between them.

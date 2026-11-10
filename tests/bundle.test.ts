@@ -20,6 +20,13 @@ describe("the published build", () => {
       for (const name of BUNDLED) expect(new RegExp(`^import [^\\n]*from "${name}";$`, "m").test(code), `${file} imports ${name}`).toBe(false);
     }
   });
+  // The README's pictures are 814 KB, a quarter of what an install used to put on disk, and no command reads them:
+  // npm's page and GitHub load them from the repository.
+  it("leaves the README's pictures out of the package", () => {
+    const { files } = JSON.parse(readFileSync("package.json", "utf8")) as { files: string[] };
+    expect(files.some((entry) => entry.startsWith("docs/assets"))).toBe(false);
+    expect(files).toContain("docs/protocol");
+  });
   // A copy of someone's code travels with their licence: MIT and ISC both ask for the notice in every copy.
   it("ships the licence of every package it carries", () => {
     const notices = readFileSync(join("dist", "THIRD-PARTY-LICENSES.txt"), "utf8");
