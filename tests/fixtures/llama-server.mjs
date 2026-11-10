@@ -63,7 +63,7 @@ const server = createServer((req, res) => {
     // FAKE_LLAMA_SLEEP_AFTER=n: asleep from its nth answer until the next request for one.
     if (req.method === "GET" && req.url === "/props") return json(200, { is_sleeping: served === Number(process.env.FAKE_LLAMA_SLEEP_AFTER ?? -1) });
     if (req.method !== "POST" || req.url !== "/v1/systemone") return json(404, { error: { code: 404, message: "File Not Found", type: "not_found_error" } });
-    if (process.env.FAKE_LLAMA_ANSWER_STATUS) return json(Number(process.env.FAKE_LLAMA_ANSWER_STATUS), { error: { message: "fake failure" } });
+    if (process.env.FAKE_LLAMA_ANSWER_STATUS) return json(Number(process.env.FAKE_LLAMA_ANSWER_STATUS), { error: { message: process.env.FAKE_LLAMA_ANSWER_MESSAGE ?? "fake failure" } });
     served += 1;
     const body = JSON.parse(raw);
     const answers = {};

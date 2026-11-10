@@ -204,6 +204,21 @@ describe("jevelry ask in local mode", () => {
     expect(JSON.parse(r.stdout)).toMatchObject({ error: { code: "transport", message: expect.stringMatching(/^the local model server answered 500: .*; see llama-server\.log in \$JEVELRY_HOME$/) } });
   });
 
+  // A state too long for the local model is the caller's to shorten, like one over a hosted ceiling: the same exit code
+  // and the same advice. The server's own words end in "try increasing it", which nobody asking through jevelry can do.
+  // The words are llama-server's (0.9.0), read from a 9,025-token question to Kev 0.8B, with one slot and with four.
+  it("exits 5 and says to filter the state when the local model refuses a request as too long", async () => {
+    const { env } = await fixture({ FAKE_LLAMA_ANSWER_STATUS: "400", FAKE_LLAMA_ANSWER_MESSAGE: "request (9025 tokens) exceeds the available context size (8192 tokens), try increasing it" });
+    const r = await run(["ask", "--questions", QUESTIONS, "--state", '"Help!"'], env);
+    expect(r.status).toBe(5);
+    expect(JSON.parse(r.stdout)).toMatchObject({ error: { code: "over_budget", message: "the state with one question came to 9025 tokens and the local model takes 8192 at most; filter the state before asking" } });
+    // Any other refusal keeps its own words and stays a bad request.
+    const other = await fixture({ FAKE_LLAMA_ANSWER_STATUS: "400" });
+    const o = await run(["ask", "--questions", QUESTIONS, "--state", '"Help!"'], other.env);
+    expect(o.status).toBe(2);
+    expect(JSON.parse(o.stdout)).toMatchObject({ error: { code: "bad_input", message: expect.stringContaining("the local model server refused the request: 400") } });
+  });
+
   // A local server that cannot start is a transport failure like a network one: exit 6, with the reason to act on.
   it("exits 6 with the reason when the local server cannot start", async () => {
     const { env, local } = await fixture();
