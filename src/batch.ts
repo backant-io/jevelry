@@ -16,7 +16,7 @@ export async function askAndLog(input: AskInput, o: LogOptions): Promise<AskResu
   const result = await ask(input);
   if (result.ok && o.log) {
     const { jevel, model, state_hash, answers, usage } = result.document;
-    result.document.log_id = await logAsk(o.home, { jevel, model, state_hash, ...(o.logState ? { state: input.state } : {}), answers, usage }, o.warn);
+    result.document.log_id = await logAsk(o.home, { jevel, model, state_hash, ...(o.logState ? { state: input.state } : {}), answers, usage, ms: result.ms }, o.warn);
   }
   return result;
 }

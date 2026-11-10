@@ -100,6 +100,9 @@ describe("ask", () => {
     const log = readFileSync(join(home, ".jevelry", "log.jsonl"), "utf8").trim().split("\n");
     expect(log).toHaveLength(1);
     expect(JSON.parse(log[0] ?? "")).toMatchObject({ kind: "ask", id: doc.log_id, jevel: { name: "wake-gate", version: 1 } });
+    // The duration is the log's alone: the stdout document is a contract whose schema takes no other key.
+    expect((JSON.parse(log[0] ?? "") as { ms: unknown }).ms).toBeTypeOf("number");
+    expect(doc).not.toHaveProperty("ms");
   });
   // States often hold customer text: the log keeps only the hash until the host asks for the state itself.
   it("logs the state only with --log-state or JEVELRY_LOG_STATE=1", async () => {
@@ -220,6 +223,19 @@ describe("outcome and report", () => {
     const row = rows.find((r) => r.question === "worth_a_turn");
     expect(row?.outcomes).toBeGreaterThanOrEqual(1);
     expect(row?.agreement_act).toBe(1);
+  });
+  it("reports how long asks took per jevel and model with --speed", async () => {
+    await run(["ask", "wake-gate", "--state", JSON.stringify(state)]);
+    const rows = JSON.parse((await run(["report", "--speed", "--json"])).stdout) as Array<{ jevel: string; model: string; asks: number; p50_ms: number; p95_ms: number }>;
+    const row = rows.find((r) => r.jevel === "wake-gate");
+    expect(row?.model).toBe("jev-1.13.0");
+    expect(row?.asks).toBeGreaterThanOrEqual(1);
+    // How long is the ask test's to prove; here only that a logged duration reaches the report.
+    expect(row?.p50_ms).toBeTypeOf("number");
+    expect(row?.p95_ms).toBeGreaterThanOrEqual(row?.p50_ms ?? Infinity);
+    const table = await run(["report", "--speed", "--jevel", "wake-gate"]);
+    expect(table.status).toBe(0);
+    expect(table.stdout).toMatch(/p50 ms/);
   });
   it("fails report with a documented exit and one sentence when the log cannot be read", async () => {
     // `report` was the one command without a try/catch, so a log it cannot read left commander's

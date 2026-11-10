@@ -135,7 +135,8 @@ export interface AskInput {
   model?: string;
 }
 
-export type AskResult = { ok: true; document: AskDocument } | { ok: false; error: ErrorBody };
+/** `ms` is the wait for the model. It is the log's, never the document's: the stdout schema takes no other key. */
+export type AskResult = { ok: true; document: AskDocument; ms: number } | { ok: false; error: ErrorBody };
 
 /** The clients of a Jev server jevelry did not start: its failures name that server, and its log is not jevelry's. */
 export const SERVER_CLIENTS = new WeakSet<TypeSafeClient>();
@@ -173,7 +174,10 @@ export async function ask(input: AskInput): Promise<AskResult> {
       };
     }
     const model = input.model ?? input.jevel?.model;
+    // The request alone is timed, retries and a local model's load included: that is what the caller waited for.
+    const started = Date.now();
     const result = readEnvelope(await input.client.systemOne(model === undefined ? { state: input.state, questions } : { state: input.state, questions, model }));
+    const ms = Date.now() - started;
     const answers: Record<string, Answer> = {};
     for (const name of Object.keys(questions)) {
       const raw = Object.hasOwn(result.answers, name) ? result.answers[name] : undefined;
@@ -190,7 +194,7 @@ export async function ask(input: AskInput): Promise<AskResult> {
       answers,
       usage: result.usage,
     };
-    return { ok: true, document };
+    return { ok: true, document, ms };
   } catch (error) {
     return { ok: false, error: errorBody(error, who) };
   }

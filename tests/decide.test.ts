@@ -51,6 +51,8 @@ describe("decide", () => {
     const lines = (await readLog(home)) as AskLine[];
     expect(lines).toHaveLength(1);
     expect(lines[0]?.id).toBe(d.logId);
+    // A program that decides in-process is timed like the CLI, so `report --speed` covers both.
+    expect(lines[0]?.ms).toBeTypeOf("number");
     expect(Object.keys(lines[0]?.answers ?? {})).toEqual(["worth_a_turn", "depth", "same_as[0]", "same_as[1]"]);
   });
 
