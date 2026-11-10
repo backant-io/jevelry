@@ -194,6 +194,18 @@ On an Apple M4 Pro with 24 GB that prints:
 
 Each row is one model at the quant that suits this machine. `download` is the size of the file, `needs` the memory it takes while it answers, `fit` whether this machine has that memory (`runs well`, `tight` or `won't fit`), `score` its result on the index, `s/question` the seconds a question of about 500 tokens takes here, and `licence` what you may use it for. Models that run well come first, then tight ones, then the ones that won't fit, each group by best score, so row 1 is the one to pick. [Local models](#local-models) says where each number comes from. `--json` prints the same rows for a program.
 
+The index is not the whole answer for the jevels that ship here. These five models were each asked the 74 cases of the 17 shipped jevels, 186 expected answers in all, on an M4 Pro with llama.cpp 0.9.0 on 10 November 2026. The brackets are 95% intervals.
+
+| Model | Download | Right, of 186 | Sure enough to act | Right when it acts |
+|---|---|---|---|---|
+| vLLM-SR d3-nano 2B | 2.6 GB | 83% [77-88] | 70% | 95% [89-97] |
+| Interfaze lev 4B | 4.5 GB | 82% [76-87] | 82% | 90% [84-93] |
+| Liquid d1 3B | 2.9 GB | 80% [74-85] | 72% | 94% [89-97] |
+| Kev 4B | 4.5 GB | 48% [41-56] | 25% | 93% [82-98] |
+| Kev 0.8B | 0.8 GB | 35% [29-43] | 23% | 62% [47-75] |
+
+The index puts Kev 4B above Liquid d1 3B and d3-nano 2B; on these cases it is the other way round, and Kev 4B is seldom sure enough to act, though right when it is. The other models in the list were not measured. For a jevel of your own, `jevelry eval <jevel>` gives the same figures for the model you have set up.
+
 Then install one by its id or its row number:
 
 ```sh
