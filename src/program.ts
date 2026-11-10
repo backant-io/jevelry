@@ -13,7 +13,7 @@ import { installSkill, knownAgents, promptForKey, unknownAgents, whereToPutTheKe
 import { JevelError, checkState, discoveryDirs, expandQuestions, isEntry, listJevels, loadJevel } from "./jevel.js";
 import { defaultClient, fallenAnswers, renderTypes } from "./decide.js";
 import { type Machine, budgetBytes, detectMachine } from "./estimate.js";
-import { type EvalResult, type Evaluation, agreement, evaluate, readCases, renderAgreement, renderEval } from "./eval.js";
+import { type EvalResult, type Evaluation, agreement, casesFromLog, evaluate, readCases, renderAgreement, renderEval } from "./eval.js";
 import { resolveKey, storeKey } from "./key.js";
 import { cacheFromEnv, findRepeat, jevelryHome, logAsk, logStateFromEnv, readLog, recordOutcome } from "./log.js";
 import { type AskDocument, EXIT, EXIT_CASES_FAILED, type ErrorBody, type ErrorDocument, PROTOCOL, type RunReport } from "./protocol.js";
@@ -581,6 +581,24 @@ export function buildProgram(): Command {
       if (opts.json) out(agreed ? { ...result.evaluation, agreement: agreed } : result.evaluation);
       else process.stdout.write(renderEval(result.evaluation) + (agreed ? renderAgreement(agreed) : ""));
       if (result.evaluation.right < result.evaluation.checks) process.exit(EXIT_CASES_FAILED);
+    });
+
+  program
+    .command("cases <jevel>")
+    .description("print, as cases, the asks of this jevel that a person confirmed or corrected in the log (they need their state logged)")
+    .option("--jevels <dir>", "a jevels directory searched first (repeatable)", (d: string, all: string[]) => [...all, d], [] as string[])
+    .action(async (name: string, opts: { jevels: string[] }) => {
+      try {
+        const { jevel } = loadJevel(name, dirs(opts.jevels));
+        const file = join(dirname(jevel.path), "cases.json");
+        // A state the jevel's cases already hold is not offered again.
+        const known = new Set(existsSync(file) ? readCases(file).map((c) => stateHash(c.state)) : []);
+        const found = casesFromLog(await readLog(home()), jevel.name, Object.keys(jevel.questions), known);
+        out(found.cases);
+        say(`${found.cases.length} cases from the log${found.withoutState > 0 ? `; ${found.withoutState} reviewed asks kept only a hash of their state and cannot become one (log the state with --log-state)` : ""}`);
+      } catch (error) {
+        failCommand(error);
+      }
     });
 
   program

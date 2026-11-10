@@ -25,7 +25,7 @@ export { appendLine, findAsk, jevelryHome, logAsk, outcomeOf, readLog, recordOut
 export { dispatcherOf, planCall, type Call, type RunArgs } from "./run.js";
 export * from "./protocol.js";
 export { renderReport, renderSpeed, report, speed, type QuestionReport, type SpeedReport } from "./report.js";
-export { agreement, evaluate, judge, readCases, renderAgreement, renderEval, wilson, type Agreement, type Case, type Check, type EvalResult, type Evaluation, type Expected, type QuestionEval } from "./eval.js";
+export { agreement, casesFromLog, evaluate, judge, readCases, renderAgreement, renderEval, wilson, type Agreement, type Case, type Check, type EvalResult, type Evaluation, type Expected, type QuestionEval } from "./eval.js";
 export { DEFAULT_THRESHOLDS, certaintyOf, mergeThresholds, decisionOf, type Thresholds } from "./decision.js";
 export {
   defaultClient,
