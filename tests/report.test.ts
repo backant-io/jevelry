@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AskLine, LogLine } from "../src/log.js";
-import { renderReport, renderSpeed, report, speed } from "../src/report.js";
+import { measuredSpeed, renderReport, renderSpeed, report, speed } from "../src/report.js";
 
 const askLine = (id: string, at: string, decision: "act" | "mark" | "fall_back", certainty: number, name = "wake-gate"): AskLine => ({
   kind: "ask",
@@ -130,5 +130,23 @@ describe("speed", () => {
     expect(text.split("\n")[0]).toMatch(/jevel\s+model\s+asks\s+p50 ms\s+p95 ms\s+tokens\/s\s+cold\s+cold p50 ms/);
     expect(text.split("\n")[1]).toMatch(/wake-gate\s+local\/a\.gguf\s+1\s+123\s+123\s+4052\s+0\s+-/);
     expect(renderSpeed([])).toBe("no timed asks in the log\n");
+  });
+});
+
+// The s/question column of the model list is worked out from published numbers of another model. Measured on one Mac,
+// the same local model read 800 tokens a second on a busy afternoon and 1,650 on a quiet one: once a model has
+// answered here, what it actually did is the number to show.
+describe("measuredSpeed", () => {
+  const local = (id: string, ms: number, tokens: number, model = "local/a.gguf", extra: Partial<AskLine> = {}): AskLine => ({ ...askLine(id, "2026-09-22T10:00:00.000Z", "act", 0.95), model, usage: { input_tokens: tokens, output_tokens: 0 }, ms, ...extra });
+  it("gives each local model's tokens a second over its warm asks, whatever jevel they were for", () => {
+    const rows = measuredSpeed([local("a", 1000, 1500), local("b", 500, 900), { ...local("c", 800, 800), jevel: { name: "other", version: 1 } }, local("d", 2000, 1000, "local/b.gguf")]);
+    expect(rows).toEqual([
+      { model: "local/a.gguf", asks: 3, tokens_per_s: (3200 * 1000) / 2300 },
+      { model: "local/b.gguf", asks: 1, tokens_per_s: 500 },
+    ]);
+  });
+  it("leaves out hosted models, cold asks, copies from the log and asks without a duration", () => {
+    const { ms: _none, ...untimed } = local("u", 1, 1);
+    expect(measuredSpeed([local("h", 400, 600, "jev-1.13.0"), local("c", 9000, 600, "local/a.gguf", { cold: true }), local("k", 2, 0, "local/a.gguf", { cached_from: "x" }), untimed])).toEqual([]);
   });
 });
