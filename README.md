@@ -566,11 +566,11 @@ Every answered ask is logged with how long the model took, and `report --speed` 
 
     npx jevelry report --speed
 
-    jevel          model                     asks  p50 ms  p95 ms  tokens/s
-    ticket-triage  jev-1.13.0                6     405     1260    1166
-    ticket-triage  local/Kev-4B-Q4_K_M.gguf  5     930     8440    264
+    jevel          model              asks  p50 ms  p95 ms  tokens/s  cold  cold p50 ms
+    ticket-triage  jev-1.13.0         6     405     1260    1166      0     -
+    ticket-triage  local/Kev-4B-Q8_0  4     918     951     691       1     8440
 
-The median is what an ask usually costs, and the 95th percentile is where a local model that had to load first shows up. `tokens/s` is input tokens per second of waiting, the whole round trip. Asks logged before jevelry kept durations are left out. The numbers above show the layout and are not a measurement.
+The median is what an ask usually costs. An ask that waited for the local model to start or load is counted apart, under `cold`, with its own median, so the load does not sit in the warm numbers. `tokens/s` is input tokens per second of waiting, the whole round trip. Asks logged before jevelry kept durations are left out. The numbers above show the layout and are not a measurement.
 
 A local model answers the same prompt the same way every time, and no faster the second time. With `--cache`, `jevel(name, { cache: true })` or `JEVELRY_CACHE=1`, an ask whose state and questions are exactly those of an earlier ask by the same local model is answered from the log: the same answer, read by today's thresholds, in a few milliseconds and without the model loaded. Its log line names the ask it came from in `cached_from`, its `usage` is zero, and `report --speed` leaves it out. Hosted Jev is always asked.
 
@@ -736,7 +736,7 @@ npm run test:live -- tests/live/jevels.test.ts
 
 `npm run scoreboard` writes the numbers each change is judged on into `scoreboard/<date>-<commit>.json`: the CLI's start-up next to bare Node, the size and time of an install, how long logged asks took per jevel and model, a running model server's memory next to jevelry's estimate for it, and, with `--eval`, every jevel's cases. It never starts a model, it asks one only with `--eval`, and it lists what it could not measure.
 
-561 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. The local-model tests among them use a fake `llama-server`, a fake jevd, a fake Homebrew and a fake Hugging Face, so no test downloads a model or starts a real server, and they check that a 27B model is never offered as runnable on a 24 GB Mac. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
+563 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. The local-model tests among them use a fake `llama-server`, a fake jevd, a fake Homebrew and a fake Hugging Face, so no test downloads a model or starts a real server, and they check that a 27B model is never offered as runnable on a 24 GB Mac. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## License
 

@@ -52,12 +52,14 @@ describe("npm run scoreboard", () => {
     expect(board.commit).toMatch(/^[0-9a-f]{7,}$/);
     expect(board.start.bare_node_ms.median).toBeGreaterThan(0);
     expect(board.start.jevelry_version_ms.median).toBeGreaterThan(0);
-    expect(board.speed).toEqual([{ jevel: "ticket-triage", model: "local/a.gguf", asks: 3, p50_ms: 200, p95_ms: 300, tokens_per_s: 2500 }]);
+    expect(board.speed).toEqual([{ jevel: "ticket-triage", model: "local/a.gguf", asks: 3, p50_ms: 200, p95_ms: 300, tokens_per_s: 2500, cold_asks: 0, cold_p50_ms: null }]);
     expect([board.install, board.footprint, board.quality]).toEqual([null, null, null]);
     const left = (board.not_measured as string[]).join("\n");
     expect(left).toMatch(/install/);
     expect(left).toMatch(/model server/);
     expect(left).toMatch(/--eval/);
+    // No logged ask waited for a model to load, so there is no cold time to give.
+    expect(left).toMatch(/cold asks/);
     // Asking is never the default: on hosted Jev every case costs money, and a local model would have to load.
     expect(server.requests.length).toBe(before);
   });
