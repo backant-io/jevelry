@@ -296,6 +296,10 @@ export function errorBody(error: unknown, who = "TypeSafe"): ErrorBody {
     return body("auth", `${who} refused the key: ${error.message}; check TYPESAFE_API_KEY`);
   }
   if (error instanceof BadRequestError || error instanceof UnprocessableEntityError) {
+    // llama-server's words for a prompt over its context end in "try increasing it", which nobody asking through jevelry
+    // can do. It is the caller's state that is too long, as with a hosted ceiling: the same code and the same advice.
+    const over = who === MANAGED ? /request \((\d+) tokens\) exceeds the available context size \((\d+) tokens\)/.exec(error.message) : null;
+    if (over) return body("over_budget", `the state with one question came to ${over[1]} tokens and the local model takes ${over[2]} at most; filter the state before asking`);
     return body("bad_input", `${who} refused the request: ${error.message}`);
   }
   if (error instanceof APIError) return transport(`${who} answered ${error.status}: ${error.message}`);
