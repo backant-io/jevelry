@@ -116,6 +116,20 @@ describe("launchArgs", () => {
     expect(ubatch("kev")).toBe("512");
     for (const family of ["vllm-d3", "clef", "laya", "lfm2-d1-omni", "openjev", "mystery-decider"]) expect(ubatch(family), family).toBe("4096");
   });
+  // With one slot the server reads the whole state again for every question. With a slot for each question it reads the
+  // state once and each question after it. Measured on Kev 0.8B (llama.cpp 0.9.0): the 91 shipped prompts cost 80,970
+  // processed tokens instead of 100,923, a three-question ask on a 7,300-token state 7.8 s instead of 22.7 s, and every
+  // value and decision stayed the same; the fourth decimal of a certainty now depends on what was asked before.
+  // Without `-kvu` each slot gets a quarter of the context and long states are refused.
+  // The families that evaluate a prompt in one ubatch have nothing to share, and vllm-d3 was no faster with three slots.
+  it("gives kev four slots that share one context, and every other family one slot", () => {
+    const slots = (decisionType: string): string[] => {
+      const args = launchArgs({ repo: "r", file: "x.gguf", quant: "Q8_0", name: "X", decisionType, path: "/m/x.gguf", port: 41000, alias: "local/x" });
+      return [args[args.indexOf("-np") + 1] ?? "", ...args.filter((a) => a === "-kvu")];
+    };
+    expect(slots("kev")).toEqual(["4", "-kvu"]);
+    for (const family of ["vllm-d3", "clef", "laya", "lfm2-d1-omni", "openjev", "mystery-decider"]) expect(slots(family), family).toEqual(["1"]);
+  });
 });
 
 describe("ensureServer and stopServer", () => {

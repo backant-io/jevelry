@@ -51,7 +51,7 @@ export function serverBuild(path: string): number | null {
 }
 
 /**
- * `-np 1` for every family because vllm-d3's answers change when requests share a batch; `-b` and
+ * `-np 1` for every family but kev because vllm-d3's answers change when requests share a batch; `-b` and
  * `-ub` hold a whole prompt because laya, clef, vllm-d3 and lfm2-d1-omni evaluate it in one ubatch;
  * `-c` is always given because the default is 262144; `--no-mmproj` because the file is given with
  * `-m`; and the model unloads after 300 idle seconds, so an idle jevelry gives the GPU memory back.
@@ -66,13 +66,30 @@ export function serverBuild(path: string): number | null {
  *
  * Three slots instead of one were tried on vllm-d3 (llama.cpp 0.9.0): a jevel's questions then run side by side
  * and every answer stayed the same, byte for byte, but on a quiet machine it was no faster (15.5 s against 15.2 s).
+ * A family that evaluates a prompt in one ubatch keeps nothing of the state that a second question could use.
+ *
+ * kev gets four slots that share one context. With one slot the server reads the whole state again for every
+ * question; with a slot for each question it reads the state once and each question after it. Measured on Kev 0.8B
+ * (llama.cpp 0.9.0, M4 Pro): over the 91 shipped examples and cases the server processed 80,970 tokens instead of
+ * 100,923, by its own counter, and took about a fifth less time; three questions on a 2,000-token state took 2.3 s
+ * instead of 5.1 s, and on a 7,300-token state 7.8 s instead of 22.7 s. The server grew from 840 MB to 900 MB.
+ * `-kvu` is what lets the slots share the 8192 tokens: without it each slot gets 2048 and a longer question is
+ * refused. With it the ceiling is where it was, 8192 tokens for the state and one question.
+ *
+ * What it costs: with one slot a prompt got the same bytes whatever came before it. With four, the fourth decimal of
+ * a certainty depends on what the server was asked before, because that decides which slot leads. Asked in the same
+ * order, the 91 prompts got the same bytes on every run; asked backwards, or 16 at a time, 81 to 200 of the 267
+ * answers were the same bytes and the largest move was 0.0011. No value and no decision changed in any run, and
+ * against one slot the largest move was 0.0007. Sending asks one at a time from jevelry was tried and changed
+ * neither that nor the time, so jevelry does not queue them.
  */
 export function launchArgs(local: LocalModel): string[] {
-  // ponytail: only kev is measured; the other families that do not need one ubatch (lev, nimble, d1, openjev) keep 4096 until they are.
-  const ubatch = local.decisionType === "kev" ? "512" : "4096";
+  // ponytail: only kev is measured; the other families that do not need one ubatch (lev, nimble, d1, openjev) keep 4096 and one slot until they are.
+  // ponytail: four slots because no shipped jevel asks more than four questions; a jevel that asks more has its state read once for every four.
+  const perFamily = local.decisionType === "kev" ? ["-ub", "512", "-np", "4", "-kvu"] : ["-ub", "4096", "-np", "1"];
   return [
     "-m", local.path, "--host", "127.0.0.1", "--port", String(local.port), "--alias", local.alias,
-    "--no-webui", "--no-mmproj", "-c", "8192", "-b", "4096", "-ub", ubatch, "-np", "1", "--sleep-idle-seconds", "300", "-lv", "2",
+    "--no-webui", "--no-mmproj", "-c", "8192", "-b", "4096", ...perFamily, "--sleep-idle-seconds", "300", "-lv", "2",
   ];
 }
 
