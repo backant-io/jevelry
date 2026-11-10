@@ -51,8 +51,9 @@ export function serverBuild(path: string): number | null {
 }
 
 /**
- * `-np 1` for every family but kev because vllm-d3's answers change when requests share a batch; `-b` and
- * `-ub` hold a whole prompt because laya, clef, vllm-d3 and lfm2-d1-omni evaluate it in one ubatch;
+ * `-np 1` for every family but kev and lev because vllm-d3's answers change when requests share a batch; `-b` and
+ * `-ub` hold a whole prompt because laya, clef, vllm-d3, lfm2-d1-omni, lfm3-d1 and lfm3-d1-omni evaluate it in one
+ * ubatch (on Liquid d1 2B and d1-Omni 2B a question of 6,556 tokens is refused as too large for the batch of 4096);
  * `-c` is always given because the default is 262144; `--no-mmproj` because the file is given with
  * `-m`; and the model unloads after 300 idle seconds, so an idle jevelry gives the GPU memory back.
  *

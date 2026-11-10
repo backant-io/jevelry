@@ -17,7 +17,12 @@ describe("listModels", () => {
   // Only what llama-server can serve and ggml-org or LiquidAI built may reach the picker: a test
   // build, an unknown decision type or a broken clef conversion would install and then fail.
   it("keeps only supported decision models with a Q8_0 or Q4_K_M file", () => {
-    expect(models.map((m) => m.id).sort()).toEqual(["clef", "d1-3b", "kev-4b", "openjev", "vllm-d3", "vllm-d3-flash"]);
+    expect(models.map((m) => m.id).sort()).toEqual(["clef", "d1-2b", "d1-3b", "d1-omni-2b", "kev-4b", "openjev", "vllm-d3", "vllm-d3-flash"]);
+  });
+  // ggml-org and LiquidAI both publish d1-Omni-2B, and both would be listed under one id: a person would see the model
+  // twice and could not say which one `install --local d1-omni-2b` means. One row a model, and the copy the index scores.
+  it("lists a model once when two authors publish it, keeping the copy the index scores", () => {
+    expect(models.filter((m) => m.id === "d1-omni-2b").map((m) => m.repo)).toEqual(["LiquidAI/d1-Omni-2B-GGUF"]);
   });
 
   // Asking both official authors with the decision filter is what keeps the list to official decision builds.
@@ -35,7 +40,7 @@ describe("listModels", () => {
       { quant: "Q8_0", file: "vllm-d3-flash-Q8_0.gguf", bytes: Math.round(8.95e9 * 1.07) },
       { quant: "Q4_K_M", file: "vllm-d3-flash-Q4_K_M.gguf", bytes: Math.round(8.95e9 * 0.74) },
     ]);
-    expect(flash).toMatchObject({ repo: "ggml-org/vllm-d3-flash-GGUF", name: "vLLM-SR d3-flash 9B", decisionType: "vllm-d3", params: 8.95e9, score: 55.79 });
+    expect(flash).toMatchObject({ repo: "ggml-org/vllm-d3-flash-GGUF", name: "vLLM-SR d3-flash 9B", decisionType: "vllm-d3", params: 8.95e9, score: 54.27 });
   });
 
   // OpenJev and Nimble are non-commercial and Liquid's licence has a revenue limit: a person must see that before downloading.
@@ -88,7 +93,7 @@ describe("rank and choose", () => {
     const ranked = rank(models, M4_PRO_24);
     const fits = ranked.map((c) => c.fit);
     expect(fits).toEqual([...fits].sort((a, b) => ["runs well", "tight", "won't fit"].indexOf(a) - ["runs well", "tight", "won't fit"].indexOf(b)));
-    expect(ranked.filter((c) => c.fit === "runs well").map((c) => c.model.id)).toEqual(["vllm-d3-flash", "kev-4b", "d1-3b"]);
+    expect(ranked.filter((c) => c.fit === "runs well").map((c) => c.model.id)).toEqual(["vllm-d3-flash", "kev-4b", "d1-2b", "d1-omni-2b", "d1-3b"]);
     expect(ranked.filter((c) => c.fit === "won't fit").map((c) => c.model.id)).toEqual(["vllm-d3", "clef", "openjev"]);
   });
 
@@ -126,9 +131,9 @@ describe("renderTable", () => {
     const text = renderTable(rank(models, M4_PRO_24), M4_PRO_24);
     const lines = text.split("\n");
     expect(lines[0]).toBe("This machine: Apple M4 Pro, 24 GB memory, about 17 GB usable by the GPU");
-    expect(lines[1]).toBe("Ranked by the Jev Decision Index 0.3.2, where hosted Jev 1.14 scores 61.5");
+    expect(lines[1]).toBe("Ranked by the Jev Decision Index 0.4.1, where hosted Jev 1.14 scores 60.2");
     expect(lines[3]).toMatch(/^ {2}# {2}id +model +quant +download +needs {2}fit +score {2}s\/question {2}licence$/);
-    expect(lines[4]).toMatch(/^ {2}1 {2}vllm-d3-flash +vLLM-SR d3-flash 9B +Q8_0 +9\.6 GB +11\.2 GB {2}runs well +55\.8 +2\.1 {2}Apache-2\.0$/);
+    expect(lines[4]).toMatch(/^ {2}1 {2}vllm-d3-flash +vLLM-SR d3-flash 9B +Q8_0 +9\.6 GB +11\.2 GB {2}runs well +54\.3 +2\.1 {2}Apache-2\.0$/);
     const openjev = lines.find((l) => l.includes("OpenJev 27B ")) ?? "";
     expect(openjev).toMatch(/won't fit +- +- {2}CC BY-NC 4\.0, non-commercial$/);
     // Fixed columns: every row's licence starts where the header's does.

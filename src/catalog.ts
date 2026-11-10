@@ -25,31 +25,37 @@ export const MIN_BUILD: Record<string, number> = {
   "vllm-decision2": 11571,
   "vllm-d3": 11572,
   "granite-switch": 11700,
+  // llama.cpp #31275, merged 2026-10-27: 165 commits before build 12110.
+  "lfm3-d1": 11945,
+  "lfm3-d1-omni": 11945,
 };
 
 /** Hosted Jev 1.14's score on the same index, the reference every local score is read against. */
-export const INDEX = { name: "Jev Decision Index 0.3.2", hosted: 61.53 };
+export const INDEX = { name: "Jev Decision Index 0.4.1", hosted: 60.24 };
 
-// https://huggingface.co/spaces/multimodalart/jev-decision-index (data/v03.json, full score, chance-corrected, 2026-10-16).
-// Scores are of the 16-bit models.
+// https://huggingface.co/spaces/multimodalart/jev-decision-index (data/v03.json, edition 0.4, the index value `v`:
+// 0.6 of the same-skills score and 0.4 of the new-domains score, equated; generated 2026-11-06).
+// Scores are of the 16-bit models. Kev is on the index once per size (9B v2, 4B r10, 0.8B r15): that entry is taken.
 export const SCORES: Record<string, { name: string; score: number | null; note?: string }> = {
-  "ggml-org/vllm-d3-GGUF": { name: "vLLM-SR d3 27B", score: 66.26 },
-  "ggml-org/vllm-d3-flash-GGUF": { name: "vLLM-SR d3-flash 9B", score: 55.79 },
-  "ggml-org/Bespoke-Nimble-9B-v3-GGUF": { name: "Bespoke Nimble 9B v3", score: 54.67 },
-  "ggml-org/Clef-GGUF": { name: "Cloudflare Clef 27B", score: 53.08 },
-  "ggml-org/vllm-d3-mini-GGUF": { name: "vLLM-SR d3-mini 4B", score: 52.61 },
-  "ggml-org/Clef-Flash-GGUF": { name: "Cloudflare Clef-Flash 9B", score: 47.61 },
-  "ggml-org/Kev-9B-GGUF": { name: "Kev 9B", score: 43.27 },
-  "ggml-org/Kev-4B-GGUF": { name: "Kev 4B", score: 39.5 },
-  "LiquidAI/d1-3B-GGUF": { name: "Liquid d1 3B", score: 38.9 },
-  "ggml-org/vllm-d3-nano-GGUF": { name: "vLLM-SR d3-nano 2B", score: 38.86 },
-  "ggml-org/lev-GGUF": { name: "Interfaze lev 4B", score: 36.53 },
-  "ggml-org/vllm-d3-lite-GGUF": { name: "vLLM-SR d3-lite 0.8B", score: 32.33 },
-  "ggml-org/vllm-d3-edge-GGUF": { name: "vLLM-SR d3-edge 0.75B", score: 20.24 },
-  "ggml-org/Kev-0.8B-GGUF": { name: "Kev 0.8B", score: 13.66 },
-  "LiquidAI/d1-omni-600M-GGUF": { name: "Liquid d1-omni 600M", score: 9.09 },
-  "ggml-org/Laya-GGUF": { name: "Convai Laya 421M", score: 4.43 },
-  "ggml-org/Julia-1-GGUF": { name: "Supersonic Julia-1 144M", score: 2.56 },
+  "ggml-org/vllm-d3-GGUF": { name: "vLLM-SR d3 27B", score: 67.15 },
+  "ggml-org/Clef-GGUF": { name: "Cloudflare Clef 27B", score: 54.92 },
+  "ggml-org/vllm-d3-flash-GGUF": { name: "vLLM-SR d3-flash 9B", score: 54.27 },
+  "ggml-org/Bespoke-Nimble-9B-v3-GGUF": { name: "Bespoke Nimble 9B v3", score: 51.06 },
+  "ggml-org/vllm-d3-mini-GGUF": { name: "vLLM-SR d3-mini 4B", score: 49.97 },
+  "ggml-org/Clef-Flash-GGUF": { name: "Cloudflare Clef-Flash 9B", score: 44.43 },
+  "ggml-org/Kev-9B-GGUF": { name: "Kev 9B", score: 40.91 },
+  "ggml-org/lev-GGUF": { name: "Interfaze lev 4B", score: 35.47 },
+  "ggml-org/Kev-4B-GGUF": { name: "Kev 4B", score: 34.93 },
+  "LiquidAI/d1-2B-GGUF": { name: "Liquid d1 2B", score: 34.39 },
+  "ggml-org/vllm-d3-nano-GGUF": { name: "vLLM-SR d3-nano 2B", score: 34.3 },
+  "LiquidAI/d1-Omni-2B-GGUF": { name: "Liquid d1-Omni 2B", score: 33.58 },
+  "LiquidAI/d1-3B-GGUF": { name: "Liquid d1 3B", score: 31.12 },
+  "ggml-org/vllm-d3-lite-GGUF": { name: "vLLM-SR d3-lite 0.8B", score: 26.16 },
+  "ggml-org/vllm-d3-edge-GGUF": { name: "vLLM-SR d3-edge 0.75B", score: 17.69 },
+  "ggml-org/Kev-0.8B-GGUF": { name: "Kev 0.8B", score: 16.3 },
+  "LiquidAI/d1-omni-600M-GGUF": { name: "Liquid d1-omni 600M", score: 11.75 },
+  "ggml-org/Laya-GGUF": { name: "Convai Laya 421M", score: 9.21 },
+  "ggml-org/Julia-1-GGUF": { name: "Supersonic Julia-1 144M", score: 4.75 },
   "ggml-org/OpenJev-GGUF": { name: "OpenJev 27B", score: null, note: "not on the index; its card reports 84.0% against hosted Jev's 85.4% on its own 10,000 questions" },
 };
 
@@ -146,7 +152,15 @@ function modelOf(row: HfRow): CatalogModel | undefined {
 export async function listModels(options: { hfUrl: string; fetch?: typeof fetch }): Promise<CatalogModel[]> {
   const pages = await Promise.all(AUTHORS.map((author) =>
     hfJson(`${options.hfUrl}/api/models?author=${author}&filter=gguf&filter=decision-model&expand[]=gguf&expand[]=siblings&expand[]=cardData&limit=200`, options.fetch)));
-  return pages.flatMap((page) => (Array.isArray(page) ? (page as HfRow[]) : [])).flatMap((row) => modelOf(row) ?? []);
+  const models = pages.flatMap((page) => (Array.isArray(page) ? (page as HfRow[]) : [])).flatMap((row) => modelOf(row) ?? []);
+  // Two authors may publish one model (ggml-org and LiquidAI both have d1-Omni-2B), and both rows would carry one id.
+  // One row a model: the copy the index scores, else the first listed.
+  const byId = new Map<string, CatalogModel>();
+  for (const model of models) {
+    const kept = byId.get(model.id);
+    if (!kept || (kept.score === null && model.score !== null)) byId.set(model.id, model);
+  }
+  return [...byId.values()];
 }
 
 /** The licence in words a person can act on: two of these models are non-commercial and one has a revenue limit. */
