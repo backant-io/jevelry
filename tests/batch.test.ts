@@ -67,25 +67,20 @@ afterEach(() => {
 
 describe("ask --batch", () => {
   // The point of a batch is that N decisions cost one boot and one latency, not N of either.
-  it("answers N asks concurrently within the bound, with one client, in about one latency per wave", async () => {
+  it("answers N asks concurrently within the bound, with one client, a full wave at a time", async () => {
     const lines = Array.from({ length: 8 }, (_, i) => JSON.stringify({ id: `a${i}`, questions: QUESTIONS, state: `ticket ${i}` }));
-    const started = Date.now();
     const out = await batch(lines, ["--concurrency", "4"]);
-    const elapsed = Date.now() - started;
     expect(constructed).toHaveBeenCalledTimes(1);
-    expect(maxInFlight).toBeGreaterThan(1);
-    expect(maxInFlight).toBeLessThanOrEqual(4);
-    // Two waves of four: about 2 latencies. Serial would be 8.
-    expect(elapsed).toBeLessThan(LATENCY * 4);
+    // Four asks open at once, never five: waves of four, where serial asks would never have two open. Counted, not
+    // timed: a bound in milliseconds failed on a busy machine that had done nothing wrong.
+    expect(maxInFlight).toBe(4);
     expect(out.map((l) => l.id).sort()).toEqual(lines.map((_, i) => `a${i}`).sort());
     for (const line of out) expect(line).toMatchObject({ protocol: 2, answers: { urgent: { decision: "act" } } });
   });
 
   it("runs every ask at once under the default bound", async () => {
     const lines = Array.from({ length: 10 }, (_, i) => JSON.stringify({ id: i, questions: QUESTIONS, state: "x" }));
-    const started = Date.now();
     const out = await batch(lines);
-    expect(Date.now() - started).toBeLessThan(LATENCY * 3);
     expect(maxInFlight).toBe(10);
     expect(out).toHaveLength(10);
   });

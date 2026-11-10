@@ -10,7 +10,7 @@ import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 import { type AskLine, type LogLine, type OutcomeLine, readLog } from "../src/log.js";
 import { App } from "../src/tui/app.js";
-import { stateLines } from "../src/tui/review.js";
+import { HELD_MS, REPEAT_MS, stateLines } from "../src/tui/review.js";
 
 const SHIPPED = join(process.cwd(), "jevels");
 const hash = `sha256:${"0".repeat(64)}`;
@@ -173,17 +173,29 @@ describe("review", () => {
   // outlasts or nearly outlasts the next card's settle time, and the first repeat must still not be a second verdict.
   it("records exactly one outcome for a held c whatever the terminal's first repeat delay", async () => {
     for (const delay of [300, 500, 660, 1000]) {
-      const { home, stdin, lastFrame, unmount } = review(LOG);
-      await tick(SETTLE);
-      stdin.write("c");
-      await tick(delay);
-      for (let i = 0; i < 9; i++) { stdin.write("c"); await tick(33); }
-      await tick(200);
-      expect((await outcomes(home)).length, `delay ${delay} ms`).toBe(2);
-      expect(lastFrame()).toContain("Review 2 of 3");
-      unmount();
+      // The waits are real, and a starved machine stretches them: keys that arrive further apart than a repeat are
+      // separate presses, which the screen is right to count (this test failed that way at a load average near 70).
+      // Such a try says nothing about a held key, so it is made again; five in a row fail the test and say why.
+      let held = false;
+      for (let attempt = 0; attempt < 5 && !held; attempt++) {
+        const { home, stdin, lastFrame, unmount } = review(LOG);
+        await tick(SETTLE);
+        const at: number[] = [];
+        const key = (): void => { at.push(Date.now()); stdin.write("c"); };
+        key();
+        await tick(delay);
+        for (let i = 0; i < 9; i++) { key(); await tick(33); }
+        await tick(200);
+        held = (at[1] ?? 0) - (at[0] ?? 0) < HELD_MS && at.slice(2).every((t, i) => t - (at[i + 1] ?? 0) < REPEAT_MS);
+        if (held) {
+          expect((await outcomes(home)).length, `delay ${delay} ms`).toBe(2);
+          expect(lastFrame()).toContain("Review 2 of 3");
+        }
+        unmount();
+      }
+      expect(held, `delay ${delay} ms: five tries, and in each the machine stretched the key repeats past ${REPEAT_MS} ms`).toBe(true);
     }
-  }, 20000);
+  }, 90000);
 
   // A person who means it presses again after a pause, or presses another key first: that verdict counts.
   it("takes the same verdict key again after a pause, or right after another key", async () => {
