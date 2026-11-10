@@ -82,8 +82,8 @@ describe("speed", () => {
   it("gives the median, the 95th percentile and tokens per second for each jevel and model", () => {
     const rows = speed([timed("a", 100), timed("b", 300), timed("c", 200), timed("d", 2000, "jev-1.13.0")]);
     expect(rows).toEqual([
-      { jevel: "wake-gate", model: "jev-1.13.0", asks: 1, p50_ms: 2000, p95_ms: 2000, tokens_per_s: 250 },
-      { jevel: "wake-gate", model: "local/a.gguf", asks: 3, p50_ms: 200, p95_ms: 300, tokens_per_s: 2500 },
+      { jevel: "wake-gate", model: "jev-1.13.0", asks: 1, p50_ms: 2000, p95_ms: 2000, tokens_per_s: 250, cold_asks: 0, cold_p50_ms: null },
+      { jevel: "wake-gate", model: "local/a.gguf", asks: 3, p50_ms: 200, p95_ms: 300, tokens_per_s: 2500, cold_asks: 0, cold_p50_ms: null },
     ]);
   });
   // The median says what an ask usually costs; the 95th percentile is where a model that had to load shows up.
@@ -101,13 +101,22 @@ describe("speed", () => {
   it("takes the jevel and since filters of report", () => {
     const all = [timed("a", 100), timed("b", 100, "local/a.gguf", "2026-09-20T10:00:00.000Z"), timed("c", 100, "local/a.gguf", "2026-09-22T10:00:00.000Z", "return-kind")];
     expect(speed(all, { jevel: "wake-gate", since: "2026-09-21T00:00:00.000Z" })).toEqual([
-      { jevel: "wake-gate", model: "local/a.gguf", asks: 1, p50_ms: 100, p95_ms: 100, tokens_per_s: 5000 },
+      { jevel: "wake-gate", model: "local/a.gguf", asks: 1, p50_ms: 100, p95_ms: 100, tokens_per_s: 5000, cold_asks: 0, cold_p50_ms: null },
     ]);
+  });
+  // A model that had to load answers seconds late: in the warm percentiles it would hide what an ask usually costs.
+  it("counts the asks that waited for the model to load apart from the warm ones", () => {
+    const rows = speed([timed("a", 100), timed("b", 300), { ...timed("c", 9000), cold: true }, { ...timed("d", 7000), cold: true }]);
+    expect(rows).toEqual([{ jevel: "wake-gate", model: "local/a.gguf", asks: 2, p50_ms: 100, p95_ms: 300, tokens_per_s: 2500, cold_asks: 2, cold_p50_ms: 7000 }]);
+    // Only cold asks so far: there is no warm number to give, and none is made up.
+    expect(speed([{ ...timed("c", 9000), cold: true }])).toEqual([{ jevel: "wake-gate", model: "local/a.gguf", asks: 0, p50_ms: null, p95_ms: null, tokens_per_s: null, cold_asks: 1, cold_p50_ms: 9000 }]);
+    expect(renderSpeed(rows).split("\n")[0]).toMatch(/tokens\/s\s+cold\s+cold p50 ms$/);
+    expect(renderSpeed(rows).split("\n")[1]).toMatch(/2500\s+2\s+7000$/);
   });
   it("renders a table and a sentence for a log without durations", () => {
     const text = renderSpeed(speed([timed("a", 123.4)]));
-    expect(text.split("\n")[0]).toMatch(/jevel\s+model\s+asks\s+p50 ms\s+p95 ms\s+tokens\/s/);
-    expect(text.split("\n")[1]).toMatch(/wake-gate\s+local\/a\.gguf\s+1\s+123\s+123\s+4052/);
+    expect(text.split("\n")[0]).toMatch(/jevel\s+model\s+asks\s+p50 ms\s+p95 ms\s+tokens\/s\s+cold\s+cold p50 ms/);
+    expect(text.split("\n")[1]).toMatch(/wake-gate\s+local\/a\.gguf\s+1\s+123\s+123\s+4052\s+0\s+-/);
     expect(renderSpeed([])).toBe("no timed asks in the log\n");
   });
 });

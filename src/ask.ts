@@ -142,17 +142,24 @@ export interface AskInput {
  * `ms` is the wait for the model, `request_hash` the state and the questions as they were asked, and `cached_from` the
  * ask whose logged answer this is. They are the log's, never the document's: the stdout schema takes no other key.
  */
-export type AskResult = { ok: true; document: AskDocument; ms: number; request_hash: string; cached_from?: string } | { ok: false; error: ErrorBody };
+export type AskResult = { ok: true; document: AskDocument; ms: number; request_hash: string; cached_from?: string; cold?: true } | { ok: false; error: ErrorBody };
 
 /** What an answered ask adds to its log line beyond the document. */
-export const logFields = (result: Extract<AskResult, { ok: true }>): Pick<AskLine, "ms" | "request_hash" | "cached_from"> => ({
+export const logFields = (result: Extract<AskResult, { ok: true }>): Pick<AskLine, "ms" | "request_hash" | "cached_from" | "cold"> => ({
   ms: result.ms,
   request_hash: result.request_hash,
   ...(result.cached_from === undefined ? {} : { cached_from: result.cached_from }),
+  ...(result.cold ? { cold: true } : {}),
 });
 
 /** The clients of a Jev server jevelry did not start: its failures name that server, and its log is not jevelry's. */
 export const SERVER_CLIENTS = new WeakSet<TypeSafeClient>();
+
+/**
+ * Set by a local client's fetch when a request had to wait for the model server to start or load. Read and
+ * cleared around each ask, so the log can keep cold asks out of the warm numbers.
+ */
+export const COLD = new WeakMap<TypeSafeClient, { cold: boolean }>();
 
 /** What a failure of jevelry's own llama-server is said to come from; only it has a llama-server.log to point at. */
 const MANAGED = "the local model server";
@@ -212,8 +219,12 @@ export async function ask(input: AskInput): Promise<AskResult> {
       }));
       return { ok: true, document: documentOf(local, answers, { input_tokens: 0, output_tokens: 0 }), ms: Date.now() - started, request_hash: requestHash, cached_from: logged.id };
     }
+    // ponytail: asks in flight together on one client share the mark; a model woken from its idle sleep is not marked at all, the server does not say.
+    const waited = COLD.get(input.client);
+    if (waited) waited.cold = false;
     const result = readEnvelope(await input.client.systemOne(model === undefined ? { state: input.state, questions } : { state: input.state, questions, model }));
     const ms = Date.now() - started;
+    const cold = waited?.cold === true;
     const answers: Record<string, Answer> = {};
     for (const name of names) {
       const raw = Object.hasOwn(result.answers, name) ? result.answers[name] : undefined;
@@ -221,7 +232,7 @@ export async function ask(input: AskInput): Promise<AskResult> {
       checkFits(name, raw, questions[name]);
       answers[name] = shapeAnswer(name, raw, thresholds[name] ?? DEFAULT_THRESHOLDS);
     }
-    return { ok: true, document: documentOf(result.model, answers, result.usage), ms, request_hash: requestHash };
+    return { ok: true, document: documentOf(result.model, answers, result.usage), ms, request_hash: requestHash, ...(cold ? { cold: true as const } : {}) };
   } catch (error) {
     return { ok: false, error: errorBody(error, who) };
   }

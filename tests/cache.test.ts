@@ -97,6 +97,6 @@ describe("speed with repeats in the log", () => {
   it("leaves out asks answered from the log", () => {
     const named = (extra: Partial<AskLine>): AskLine => logged({ jevel: { name: "gate", version: 1 }, ...extra });
     const rows = speed([named({ id: "a", ms: 1500 }), named({ id: "b", ms: 3, cached_from: "a", usage: { input_tokens: 0, output_tokens: 0 } })]);
-    expect(rows).toEqual([{ jevel: "gate", model: LOCAL, asks: 1, p50_ms: 1500, p95_ms: 1500, tokens_per_s: (40 * 1000) / 1500 }]);
+    expect(rows).toEqual([{ jevel: "gate", model: LOCAL, asks: 1, p50_ms: 1500, p95_ms: 1500, tokens_per_s: (40 * 1000) / 1500, cold_asks: 0, cold_p50_ms: null }]);
   });
 });

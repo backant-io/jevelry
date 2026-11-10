@@ -30,6 +30,8 @@ export interface AskLine {
   request_hash?: string;
   /** Set when the answer was read from the log: the id of the ask the model itself answered. */
   cached_from?: string;
+  /** Set when the ask waited for the local model server to start or load, so its duration is not a warm one. */
+  cold?: boolean;
   cwd: string;
   /** Set when a library `decide` got no answer from Jev. The CLI logs only answers. */
   error?: ErrorBody;
@@ -66,7 +68,7 @@ export async function appendLine(home: string, line: LogLine): Promise<void> {
  */
 export async function logAsk(
   home: string,
-  fields: Pick<AskLine, "jevel" | "model" | "state_hash" | "state" | "answers" | "usage" | "ms" | "request_hash" | "cached_from" | "error">,
+  fields: Pick<AskLine, "jevel" | "model" | "state_hash" | "state" | "answers" | "usage" | "ms" | "request_hash" | "cached_from" | "cold" | "error">,
   warn: (message: string) => void,
 ): Promise<string | null> {
   const id = randomUUID();

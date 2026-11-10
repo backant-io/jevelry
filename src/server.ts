@@ -290,7 +290,8 @@ type WaitOptions = {
   still?: () => boolean;
 };
 
-async function waitReady(home: string, local: LocalModel, env: NodeJS.ProcessEnv, options: WaitOptions): Promise<void> {
+/** Resolves `true` when the server was not ready at once, so the caller waited for a start or a load. */
+async function waitReady(home: string, local: LocalModel, env: NodeJS.ProcessEnv, options: WaitOptions): Promise<boolean> {
   if (process.platform === "win32") throw new Error(WINDOWS);
   const log = join(home, SERVER_LOG);
   const timeoutMs = options.timeoutMs ?? 300000;
@@ -332,13 +333,17 @@ async function waitReady(home: string, local: LocalModel, env: NodeJS.ProcessEnv
     await sleep(500);
     state = await health(local.port);
   }
+  return told !== undefined;
 }
 
 /** One wait per port in this process, so a batch of concurrent asks starts one server, not one each. */
-const waits = new Map<number, Promise<void>>();
+const waits = new Map<number, Promise<boolean>>();
 
-/** Resolves once the server for `local` is ours and ready, starting it when nothing listens on its port. */
-export function ensureServer(home: string, local: LocalModel, env: NodeJS.ProcessEnv, options: WaitOptions = {}): Promise<void> {
+/**
+ * Resolves once the server for `local` is ours and ready, starting it when nothing listens on its port: `true` when
+ * that took a start or a load. Asks that wait together share the one wait, and each of them learns it waited.
+ */
+export function ensureServer(home: string, local: LocalModel, env: NodeJS.ProcessEnv, options: WaitOptions = {}): Promise<boolean> {
   let wait = waits.get(local.port);
   if (!wait) {
     // Forgotten once settled: the next ask checks again, so a server stopped in the meantime is started again.
@@ -463,16 +468,17 @@ export async function stopServerAndWait(home: string, { killAfterMs = 15000 }: {
  * starts it. The SDK's timeout and a caller's abort end the wait for a slow load too, and the wait
  * gives up 2 s before the SDK does, so the error a person reads names the log.
  */
-export function localFetch(home: string, local: LocalModel, env: NodeJS.ProcessEnv, timeoutMs?: number, still?: () => boolean): (input: string, init?: RequestInit) => Promise<Response> {
+export function localFetch(home: string, local: LocalModel, env: NodeJS.ProcessEnv, timeoutMs?: number, still?: () => boolean, onCold?: () => void): (input: string, init?: RequestInit) => Promise<Response> {
   // Never under 1 s: a shorter wait would give up the moment the server is spawned.
   const options: WaitOptions = { ...(timeoutMs === undefined ? {} : { timeoutMs: Math.max(timeoutMs - 2000, 1000) }), ...(still ? { still } : {}) };
   return async (input, init) => {
     const signal = init?.signal;
     signal?.throwIfAborted();
-    await new Promise<void>((resolve, reject) => {
+    const waited = await new Promise<boolean>((resolve, reject) => {
       if (signal) signal.addEventListener("abort", () => reject(signal.reason), { once: true });
       ensureServer(home, local, env, options).then(resolve, reject);
     });
+    if (waited) onCold?.();
     return fetch(input, init);
   };
 }

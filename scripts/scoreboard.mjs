@@ -141,7 +141,7 @@ const judged = quality();
 const memory = footprint();
 const rows = speed(await readLog(home, () => {}));
 if (!rows.some((row) => row.model.startsWith("local/"))) notMeasured.push("warm local asks: the log holds no timed ask of a local model");
-notMeasured.push("cold asks apart from warm ones: the log cannot tell an ask that waited for a model to load from one that did not");
+if (!rows.some((row) => row.cold_asks > 0)) notMeasured.push("cold asks: the log holds no ask that waited for a local model to start or load");
 
 const board = {
   date,

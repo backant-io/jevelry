@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { type EntryType, TypeSafeClient } from "@typesafe-ai/sdk";
-import { SERVER_CLIENTS, ask, errorBody, logFields, stateHash } from "./ask.js";
+import { COLD, SERVER_CLIENTS, ask, errorBody, logFields, stateHash } from "./ask.js";
 import { type JevServer, type LocalModel, jevServer, localModel } from "./config.js";
 import { type Jevel, JevelError, type JevelQuestion, checkState, discoveryDirs, expandQuestions, isEntry, loadJevel } from "./jevel.js";
 import { resolveKey } from "./key.js";
@@ -31,7 +31,8 @@ const SDK_LOGGER = { debug: toStderr, info: toStderr, warn: toStderr, error: toS
 export function localClient(home: string, local: LocalModel, env: NodeJS.ProcessEnv, still?: () => boolean): TypeSafeClient {
   // A first ask also waits for the model to load.
   const timeout = Number(env.JEVELRY_TIMEOUT_MS ?? 300000);
-  return new TypeSafeClient({
+  const waited = { cold: false };
+  const client = new TypeSafeClient({
     timeout,
     logger: SDK_LOGGER,
     apiKey: "local",
@@ -39,8 +40,10 @@ export function localClient(home: string, local: LocalModel, env: NodeJS.Process
     defaultModel: local.alias,
     // A local 5xx is a real answer, not a blip a retry would get past.
     retry: { maxRetries: 0 },
-    fetch: localFetch(home, local, env, timeout, still),
+    fetch: localFetch(home, local, env, timeout, still, () => { waited.cold = true; }),
   });
+  COLD.set(client, waited);
+  return client;
 }
 
 /**

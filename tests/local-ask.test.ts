@@ -125,6 +125,16 @@ describe("jevelry ask in local mode", () => {
     expect(asks.map((l) => l.cached_from)).toEqual([undefined, a?.log_id]);
   });
 
+  // The first ask after a start waits for the model to load. Marked in the log, the speed table keeps it out of the warm numbers.
+  it("marks in the log the ask that waited for the model to load, and not the next one", async () => {
+    const { home, env } = await fixture();
+    const ask = ["ask", "--questions", QUESTIONS, "--state", '"Help!"'];
+    expect((await run(ask, env)).status).toBe(0);
+    expect((await run(ask, env)).status).toBe(0);
+    const lines = readFileSync(join(home, "log.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l) as { cold?: boolean });
+    expect(lines.map((l) => l.cold)).toEqual([true, undefined]);
+  });
+
   // A batch fires its asks at once on a cold start; each starting its own server would load the model many times.
   it("starts one server for a batch of concurrent asks", async () => {
     const { local, env, starts } = await fixture();
