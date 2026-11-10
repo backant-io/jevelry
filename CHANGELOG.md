@@ -13,6 +13,7 @@ The first release with local models. Everything below was merged after 0.6.0 (1 
 - The model list ranks by the index's current edition, 0.4.1, and offers Liquid d1 2B and d1-Omni 2B, which on the shipped cases are as good as any small model measured, at 1.8 GB. A model two authors publish is listed once. (#62)
 - After a switch to another model, `install --local` offers to remove the previous model's file, and removes the folders made for it when they are empty. (#43, #51)
 - A state too long for the local model exits 5 with the advice to filter it. It exited 2 with llama-server's own words. (#56)
+- vLLM-SR d3 and Liquid d1 2B models take a state with one question of up to 8,192 tokens, where they took 4,096: their server gets a batch as large as the context. The answers and the speed on shorter states are the same. (#68)
 
 ### Faster
 

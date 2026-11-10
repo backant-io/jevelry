@@ -96,7 +96,7 @@ describe("launchArgs", () => {
     const { path } = { path: "/m/x.gguf" };
     expect(launchArgs({ repo: "r", file: "x.gguf", quant: "Q8_0", name: "X", decisionType: "vllm-d3", path, port: 41000, alias: "local/x" })).toEqual([
       "-m", "/m/x.gguf", "--host", "127.0.0.1", "--port", "41000", "--alias", "local/x", "--no-webui", "--no-mmproj",
-      "-c", "8192", "-b", "4096", "-ub", "4096", "-np", "1", "--sleep-idle-seconds", "300", "-lv", "2",
+      "-c", "8192", "-b", "8192", "-ub", "8192", "-np", "1", "--sleep-idle-seconds", "300", "-lv", "2",
     ]);
   });
   // At its default level the server writes three lines for every question it answers, about 1 KB an ask, into a log
@@ -114,7 +114,22 @@ describe("launchArgs", () => {
       return args[args.indexOf("-ub") + 1];
     };
     expect(ubatch("kev")).toBe("512");
-    for (const family of ["vllm-d3", "clef", "laya", "lfm2-d1-omni", "openjev", "mystery-decider"]) expect(ubatch(family), family).toBe("4096");
+    for (const family of ["clef", "laya", "lfm2-d1", "lfm2-d1-omni", "lfm3-d1-omni", "lev", "openjev", "mystery-decider"]) expect(ubatch(family), family).toBe("4096");
+  });
+  // vllm-d3 and lfm3-d1 read a whole prompt in one ubatch, so the ubatch is the longest state they take: with 4096
+  // they refused a question of 4,467 tokens, with 8192 they answered one of 7,629. Measured on d3-nano 2B, d3-flash 9B
+  // and Liquid d1 2B: all 267 ordinary answers the same bytes, the shipped examples as fast in a paired test (75.4 s
+  // against 74.5 s), and the 9B server at 7.10 GiB after its longest state, under jevelry's estimate of 7.67 GiB.
+  it("gives the families measured to read a prompt in one ubatch a batch and a ubatch of the whole context", () => {
+    const batch = (decisionType: string): string[] => {
+      const args = launchArgs({ repo: "r", file: "x.gguf", quant: "Q8_0", name: "X", decisionType, path: "/m/x.gguf", port: 41000, alias: "local/x" });
+      return [args[args.indexOf("-b") + 1] ?? "", args[args.indexOf("-ub") + 1] ?? ""];
+    };
+    expect(batch("vllm-d3")).toEqual(["8192", "8192"]);
+    expect(batch("lfm3-d1")).toEqual(["8192", "8192"]);
+    // Not measured with the larger batch, so as before.
+    for (const family of ["clef", "laya", "lfm2-d1-omni", "lfm3-d1-omni", "lev", "mystery-decider"]) expect(batch(family), family).toEqual(["4096", "4096"]);
+    expect(batch("kev")).toEqual(["4096", "512"]);
   });
   // With one slot the server reads the whole state again for every question. With a slot for each question it reads the
   // state once and each question after it. Measured on Kev 0.8B (llama.cpp 0.9.0): the 91 shipped prompts cost 80,970
