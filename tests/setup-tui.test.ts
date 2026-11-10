@@ -61,8 +61,8 @@ function fakeInstall() {
 }
 
 const LOCAL: LocalModel = {
-  repo: "ggml-org/vllm-d3-flash-GGUF", file: "vllm-d3-flash-Q8_0.gguf", quant: "Q8_0", name: "vLLM-SR d3-flash 9B", decisionType: "vllm-d3",
-  path: "/nowhere/vllm-d3-flash-Q8_0.gguf", port: 1, alias: "local/vllm-d3-flash-Q8_0",
+  repo: "ggml-org/vllm-d3-flash-GGUF", file: "vllm-d3-flash-Q4_K_M.gguf", quant: "Q4_K_M", name: "vLLM-SR d3-flash 9B", decisionType: "vllm-d3",
+  path: "/nowhere/vllm-d3-flash-Q4_K_M.gguf", port: 1, alias: "local/vllm-d3-flash-Q4_K_M",
 };
 
 /** Waits until the frame shows `text`, for the steps that resolve a promise first. */
@@ -189,7 +189,7 @@ describe("setup with a model on this machine", () => {
       await toList(press);
       fills(lastFrame(), size);
       // The recommendation is the first row and the cursor is on it.
-      expect(lastFrame()).toMatch(/> vLLM-SR d3-flash 9B Q8_0\s+9\.6 GB · runs well · 54\.3 · 2\.1s/);
+      expect(lastFrame()).toMatch(/> vLLM-SR d3-flash 9B Q4_K_M\s+6\.6 GB · runs well · 54\.3 · 2\.1s/);
       expect(lastFrame()).toMatch(/vLLM-SR d3 27B Q4_K_M\s+19\.9 GB · too big · 67\.2 · -/);
       expect(lastFrame()).toMatch(/OpenJev 27B Q4_K_M\s+19\.9 GB · too big · - · -/);
       expect(lastFrame()).not.toContain("won't fit");
@@ -208,7 +208,7 @@ describe("setup with a model on this machine", () => {
       const lines = (lastFrame() ?? "").split("\n");
       const first = lines.findIndex((l) => l.includes("> Use jevk5-v0.3-mlx8, already running"));
       expect(lines[first]).toContain(`${jevd.url.replace("http://", "")} · no download`);
-      expect(lines[first + 1]).toContain("vLLM-SR d3-flash 9B Q8_0");
+      expect(lines[first + 1]).toContain("vLLM-SR d3-flash 9B Q4_K_M");
       await press(ENTER, "Jev now runs on jevk5-v0.3-mlx8 on this machine");
       expect(readConfig(h)).toEqual({ backend: "server", server: { url: jevd.url, model: jevd.id } });
       expect(lastFrame()).not.toContain("Set up Jev");
@@ -257,9 +257,9 @@ describe("setup with a model on this machine", () => {
       fills(lastFrame(), size);
       const frame = lastFrame() ?? "";
       expect(frame).toMatch(/repo {6}ggml-org\/vllm-d3-flash-GGUF/);
-      expect(frame).toMatch(/quant {5}Q8_0/);
-      expect(frame).toMatch(/download {2}about 9\.6 GB/);
-      expect(frame).toMatch(/needs {5}11\.2 GB of about 17\.2 GB for models/);
+      expect(frame).toMatch(/quant {5}Q4_K_M/);
+      expect(frame).toMatch(/download {2}about 6\.6 GB/);
+      expect(frame).toMatch(/needs {5}8\.2 GB of about 17\.2 GB for models/);
       expect(frame).toMatch(/fit {7}runs well/);
       expect(frame).toMatch(/score {5}54\.3, hosted Jev 60\.2 \(Jev Decision Index 0\.4\.1\)/);
       expect(frame).toMatch(/speed {5}about 2\.1 s\/question/);
@@ -296,11 +296,11 @@ describe("setup with a model on this machine", () => {
       await toList(press);
       await press(ENTER, "Install vLLM-SR d3-flash 9B");
       await press(ENTER, "Installing vLLM-SR d3-flash 9B");
-      expect(inst.calls.map((c) => [c.model.id, c.quant.quant])).toEqual([["vllm-d3-flash", "Q8_0"]]);
+      expect(inst.calls.map((c) => [c.model.id, c.quant.quant])).toEqual([["vllm-d3-flash", "Q4_K_M"]]);
       // The confirm dialog asked already, Homebrew included, so the installer's own questions are answered yes.
       expect(await inst.io().confirm("install llama.cpp with Homebrew (brew install llama.cpp)?")).toBe(true);
       inst.io().progress("download", 4.2e9, 9.6e9);
-      await until(lastFrame, "Downloading vllm-d3-flash-Q8_0.gguf");
+      await until(lastFrame, "Downloading vllm-d3-flash-Q4_K_M.gguf");
       fills(lastFrame(), size);
       expect(lastFrame()).toMatch(/█+\S*\s+43% {2}4\.2 of 9\.6 GB/);
       inst.io().progress("loading the model");

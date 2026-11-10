@@ -77,15 +77,20 @@ describe("listModels", () => {
 
 describe("rank and choose", () => {
   // A 27B model crashed this 24 GiB Mac's GPU today: the picker exists so that never happens again.
-  it("never offers a 27B as runnable on an Apple M4 Pro with 24 GB, and recommends vllm-d3-flash Q8_0", () => {
+  // A model runs well up to 60% of the usable memory, 9 GiB here: the 9B's Q8_0 needs 10.4 GiB and is a tight fit,
+  // its Q4_K_M needs 7.7 GiB and runs well, so that is the one recommended.
+  it("never offers a 27B as runnable on an Apple M4 Pro with 24 GB, and recommends vllm-d3-flash at Q4_K_M", () => {
     const ranked = rank(models, M4_PRO_24);
     for (const c of ranked.filter((c) => c.model.params > 20e9)) expect(c.fit).toBe("won't fit");
-    expect(ranked[0]).toMatchObject({ model: { id: "vllm-d3-flash" }, quant: { quant: "Q8_0" }, fit: "runs well" });
+    expect(ranked[0]).toMatchObject({ model: { id: "vllm-d3-flash" }, quant: { quant: "Q4_K_M" }, fit: "runs well" });
   });
 
-  // On 16 GB the Q8_0 would squeeze the machine; the Q4_K_M runs well and changes few answers.
-  it("gives a 16 GB Mac vllm-d3-flash in Q4_K_M", () => {
-    expect(rank(models, M2_16)[0]).toMatchObject({ model: { id: "vllm-d3-flash" }, quant: { quant: "Q4_K_M" }, fit: "runs well" });
+  // On 16 GB 60% of the usable memory is 5.8 GiB: a 9B is a tight fit even at Q4_K_M, and the first model that
+  // runs well is a 4B at Q4_K_M.
+  it("gives a 16 GB Mac a 4B model at Q4_K_M first, and calls the 9B tight even at Q4_K_M", () => {
+    const ranked = rank(models, M2_16);
+    expect(ranked[0]).toMatchObject({ model: { id: "kev-4b" }, quant: { quant: "Q4_K_M" }, fit: "runs well" });
+    expect(ranked.find((c) => c.model.id === "vllm-d3-flash")).toMatchObject({ quant: { quant: "Q4_K_M" }, fit: "tight" });
   });
 
   // The order is the advice: what runs well first, best score first, a model without a score after the scored ones.
@@ -117,9 +122,10 @@ describe("findModel", () => {
 
   // Forcing a quant must not carry over the other quant's fit: a forced Q8_0 of a 27B still won't fit.
   it("forces a quant with a suffix and works its need and fit out again", () => {
-    const q4 = findModel(ranked(), "vllm-d3-flash:q4_k_m", M4_PRO_24)!;
-    expect(q4.quant.quant).toBe("Q4_K_M");
-    expect(q4.need).toBeLessThan(findModel(ranked(), "vllm-d3-flash")!.need);
+    const q8 = findModel(ranked(), "vllm-d3-flash:q8_0", M4_PRO_24)!;
+    expect(q8.quant.quant).toBe("Q8_0");
+    expect(q8.need).toBeGreaterThan(findModel(ranked(), "vllm-d3-flash")!.need);
+    expect(q8.fit).toBe("tight");
     expect(findModel(rank(models, M2_16), "vllm-d3-flash:Q8_0", M2_16)).toMatchObject({ quant: { quant: "Q8_0" }, fit: "tight" });
     expect(findModel(ranked(), "clef:Q8_0", M4_PRO_24)).toBeUndefined();
   });
@@ -133,7 +139,7 @@ describe("renderTable", () => {
     expect(lines[0]).toBe("This machine: Apple M4 Pro, 24 GB memory, about 17 GB usable by the GPU");
     expect(lines[1]).toBe("Ranked by the Jev Decision Index 0.4.1, where hosted Jev 1.14 scores 60.2");
     expect(lines[3]).toMatch(/^ {2}# {2}id +model +quant +download +needs {2}fit +score {2}s\/question {2}licence$/);
-    expect(lines[4]).toMatch(/^ {2}1 {2}vllm-d3-flash +vLLM-SR d3-flash 9B +Q8_0 +9\.6 GB +11\.2 GB {2}runs well +54\.3 +2\.1 {2}Apache-2\.0$/);
+    expect(lines[4]).toMatch(/^ {2}1 {2}vllm-d3-flash +vLLM-SR d3-flash 9B +Q4_K_M +6\.6 GB +8\.2 GB {2}runs well +54\.3 +2\.1 {2}Apache-2\.0$/);
     const openjev = lines.find((l) => l.includes("OpenJev 27B ")) ?? "";
     expect(openjev).toMatch(/won't fit +- +- {2}CC BY-NC 4\.0, non-commercial$/);
     // Fixed columns: every row's licence starts where the header's does.

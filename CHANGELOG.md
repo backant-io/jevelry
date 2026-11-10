@@ -7,6 +7,7 @@ The first release with local models. Everything below was merged after 0.6.0 (1 
 ### Local models
 
 - `jevelry install --local` sets up a Jev-compatible decision model on this machine: it picks one that fits, downloads and verifies it, starts llama.cpp's `llama-server` and asks it one question before it writes the config. `jevelry models --local` lists what fits, with size, memory and speed; `jevelry stop` takes the model out of memory; `install --local-url` uses a Jev server that already runs. (#20)
+- A model counts as running well when it needs at most 60% of the memory the GPU may use, less the 1 GiB llama.cpp keeps free, so that other programs keep theirs. On a 24 GB Mac the 9B models are therefore offered at Q4_K_M (6.6 GB) and the smaller ones at Q8_0; `install --local <id>:Q8_0` or `<id>:Q4_K_M` takes the other file. (#64)
 - `models --local` and `install --local` say when a model needs more memory than is free right now, and `models --local` says when the Mac is in Low Power Mode, where a local model answers at about two thirds of its speed. (#29, #30, #50)
 - Once a model has answered, `models --local` shows its measured speed next to the estimate. (#45)
 - The model list ranks by the index's current edition, 0.4.1, and offers Liquid d1 2B and d1-Omni 2B, which on the shipped cases are as good as any small model measured, at 1.8 GB. A model two authors publish is listed once. (#62)

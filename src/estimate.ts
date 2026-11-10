@@ -139,10 +139,14 @@ export function needBytes(model: { bytes: number; params: number; decisionType: 
   return model.bytes + (model.params > 15e9 ? 2.5 : 1.5) * GIB + logits * GIB;
 }
 
-/** llama.cpp keeps 1 GiB free, and a model at 90% of what is left still leaves the rest of the machine room. */
+/**
+ * llama.cpp keeps 1 GiB free, and a model runs well when it needs at most 60% of what is left: the rest of what the
+ * GPU may use stays with the other programs on the machine. It was 90%, and a model that ran well by that rule took
+ * the memory that other work on the same Mac needed.
+ */
 export function fitOf(need: number, budget: number): Fit {
   const usable = budget - GIB;
-  if (need <= 0.9 * usable) return "runs well";
+  if (need <= 0.6 * usable) return "runs well";
   return need <= budget ? "tight" : "won't fit";
 }
 

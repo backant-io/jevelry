@@ -110,7 +110,7 @@ describe("jevelry models --local", () => {
     expect((await run(["models", "--local"], { ...env, JEVELRY_POWER_MODE: "2" })).stdout).not.toContain("Low Power Mode");
     expect((await run(["models", "--local"], env)).stdout).not.toContain("Low Power Mode");
   });
-  it("ranks the models for a 24 GB M4 Pro: the 27B rows won't fit and vllm-d3-flash Q8_0 runs well first", async () => {
+  it("ranks the models for a 24 GB M4 Pro: the 27B rows won't fit and vllm-d3-flash at Q4_K_M runs well first", async () => {
     const { env } = fixture();
     const r = await run(["models", "--local"], env);
     expect(r.stderr).toBe("");
@@ -118,7 +118,7 @@ describe("jevelry models --local", () => {
     const lines = r.stdout.trimEnd().split("\n");
     expect(lines[0]).toBe("This machine: Apple M4 Pro, 24 GB memory, about 17 GB usable by the GPU");
     const rows = lines.slice(lines.findIndex((l) => l.trimStart().startsWith("#")) + 1).filter((l) => /^\s+\d+\s/.test(l));
-    expect(rows[0]).toMatch(/^\s+1\s+vllm-d3-flash\s+vLLM-SR d3-flash 9B\s+Q8_0\s.*runs well/);
+    expect(rows[0]).toMatch(/^\s+1\s+vllm-d3-flash\s+vLLM-SR d3-flash 9B\s+Q4_K_M\s.*runs well/);
     const big = rows.filter((l) => l.includes("27B"));
     expect(big.length).toBe(3);
     for (const row of big) expect(row).toContain("won't fit");
@@ -131,7 +131,7 @@ describe("jevelry models --local", () => {
     expect(r.status).toBe(0);
     const rows = JSON.parse(r.stdout) as Array<{ id: string; name: string; fit: string; seconds_per_question: number | null }>;
     expect(rows[0]).toEqual({
-      id: "vllm-d3-flash", repo: "ggml-org/vllm-d3-flash-GGUF", name: "vLLM-SR d3-flash 9B", quant: "Q8_0", file: "vllm-d3-flash-Q8_0.gguf",
+      id: "vllm-d3-flash", repo: "ggml-org/vllm-d3-flash-GGUF", name: "vLLM-SR d3-flash 9B", quant: "Q4_K_M", file: "vllm-d3-flash-Q4_K_M.gguf",
       download_bytes: expect.any(Number), need_bytes: expect.any(Number), fit: "runs well", score: 54.27,
       seconds_per_question: expect.any(Number), licence: "Apache-2.0", decision_type: "vllm-d3",
     });
@@ -183,10 +183,10 @@ describe("jevelry install --local <model> --yes, then ask and stop", () => {
   it("writes config.json, starts the server and prints the smoke answer", () => {
     expect(installed.status).toBe(0);
     const config = readConfig(home);
-    expect(config).toMatchObject({ backend: "local", local: { repo: "ggml-org/vllm-d3-flash-GGUF", quant: "Q8_0", alias: "local/vllm-d3-flash-Q8_0" } });
+    expect(config).toMatchObject({ backend: "local", local: { repo: "ggml-org/vllm-d3-flash-GGUF", quant: "Q4_K_M", alias: "local/vllm-d3-flash-Q4_K_M" } });
     expect(existsSync(config.local!.path)).toBe(true);
     expect(installed.stderr).toMatch(/^jevelry: vLLM-SR d3-flash 9B answered in \d+ ms on this machine$/m);
-    expect(installed.stderr).toContain("jevelry: jevelry now asks vLLM-SR d3-flash 9B on this machine (local/vllm-d3-flash-Q8_0)\n");
+    expect(installed.stderr).toContain("jevelry: jevelry now asks vLLM-SR d3-flash 9B on this machine (local/vllm-d3-flash-Q4_K_M)\n");
     // Not a terminal: progress is whole lines, never carriage returns that garble a CI log.
     expect(installed.stderr).not.toContain("\r");
     expect(existsSync(join(home, SERVER_FILE))).toBe(true);
@@ -198,7 +198,7 @@ describe("jevelry install --local <model> --yes, then ask and stop", () => {
     expect(r.stderr).toBe("");
     expect(r.status).toBe(0);
     const doc = JSON.parse(r.stdout) as { model: string; answers: { urgent: { decision: string } } };
-    expect(doc.model).toBe("local/vllm-d3-flash-Q8_0");
+    expect(doc.model).toBe("local/vllm-d3-flash-Q4_K_M");
     expect(doc.answers.urgent.decision).toBe("act");
     // The ask reused the server the install left running instead of loading the model again.
     expect(readFileSync(argv, "utf8").trim().split("\n")).toHaveLength(1);

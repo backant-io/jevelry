@@ -142,11 +142,11 @@ describe("installLocal", () => {
     const { dir, env } = fixture();
     const r = recorder(true);
     const local = await installLocal(choice("vllm-d3-flash"), dir, r.io, env);
-    const path = modelPath(dir, "ggml-org/vllm-d3-flash-GGUF", "vllm-d3-flash-Q8_0.gguf");
+    const path = modelPath(dir, "ggml-org/vllm-d3-flash-GGUF", "vllm-d3-flash-Q4_K_M.gguf");
     // params is kept so every later start can check the model still fits the machine it runs on.
-    expect(local).toMatchObject({ repo: "ggml-org/vllm-d3-flash-GGUF", file: "vllm-d3-flash-Q8_0.gguf", quant: "Q8_0", name: "vLLM-SR d3-flash 9B", decisionType: "vllm-d3", path, alias: "local/vllm-d3-flash-Q8_0", params: 8.95e9 });
+    expect(local).toMatchObject({ repo: "ggml-org/vllm-d3-flash-GGUF", file: "vllm-d3-flash-Q4_K_M.gguf", quant: "Q4_K_M", name: "vLLM-SR d3-flash 9B", decisionType: "vllm-d3", path, alias: "local/vllm-d3-flash-Q4_K_M", params: 8.95e9 });
     expect(readConfig(dir)).toEqual({ backend: "local", local });
-    expect(readFileSync(path)).toEqual(fileBytes("vllm-d3-flash-Q8_0.gguf"));
+    expect(readFileSync(path)).toEqual(fileBytes("vllm-d3-flash-Q4_K_M.gguf"));
     expect(await health(local.port)).toBe("ok");
     expect(r.said).toEqual([expect.stringMatching(/^vLLM-SR d3-flash 9B answered in \d+ ms on this machine$/)]);
     expect(r.progress.filter(([step]) => step === "download").at(-1)).toEqual(["download", 6000, 6000]);
