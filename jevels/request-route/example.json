@@ -1,0 +1,7 @@
+{
+  "request": {
+    "prompt": "Translate into German: The invoice is attached, and payment is due within 30 days.",
+    "context": "first message",
+    "tools": "none"
+  }
+}

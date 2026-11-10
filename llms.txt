@@ -56,5 +56,5 @@ When Jev cannot answer, every question comes back `fall_back` with the reason in
 
 ## Links
 
-- [The seventeen jevels that ship with the package](https://github.com/backant-io/jevelry/blob/main/jevels/README.md): triage, urgency, duplicates, severity, risky changes, failing test causes and more, each with an `example.json` and a `cases.json`.
+- [The eighteen jevels that ship with the package](https://github.com/backant-io/jevelry/blob/main/jevels/README.md): triage, urgency, duplicates, severity, risky changes, failing test causes, routing a request to a small or a large model and more, each with an `example.json` and a `cases.json`.
 - [The guide to writing your own jevel](https://github.com/backant-io/jevelry/blob/main/skills/jevelry/references/writing-jevels.md): questions, criteria, state, decisions and the cases that prove it.
