@@ -108,6 +108,23 @@ describe("jevelry ask in local mode", () => {
     expect((await run(["ask", "--questions", QUESTIONS, "--state", '"Help!"'], { ...gone, JEVELRY_CACHE: "1" })).status).toBe(0);
   });
 
+  // `run` asks the way `ask` does, so an exact repeat costs it no model time either.
+  it("plans a repeated run from the log with --cache, with no model server running", async () => {
+    const { home, env } = await fixture();
+    const args = ["run", "run-gate", "--jevels", join("tests", "fixtures", "jevels"), "--dry-run", "--cache", "--state", '{"test":"login times out now and then"}'];
+    const first = await run(args, env);
+    expect(first.status, first.stderr).toBe(0);
+    await stopServerAndWait(home);
+    const second = await run(args, { ...env, JEVELRY_LLAMA_SERVER: join(home, "no-such-llama-server") });
+    expect(second.status, second.stderr).toBe(0);
+    const [a, b] = [first, second].map((r) => JSON.parse(r.stdout) as { log_id: string; run: { option: string; decision: string }; usage: unknown });
+    expect(b?.run).toMatchObject({ option: "flaky", decision: "act" });
+    expect(b?.run).toEqual(a?.run);
+    expect(b?.usage).toEqual({ input_tokens: 0, output_tokens: 0 });
+    const asks = readFileSync(join(home, "log.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l) as { kind: string; cached_from?: string }).filter((l) => l.kind === "ask");
+    expect(asks.map((l) => l.cached_from)).toEqual([undefined, a?.log_id]);
+  });
+
   // A batch fires its asks at once on a cold start; each starting its own server would load the model many times.
   it("starts one server for a batch of concurrent asks", async () => {
     const { local, env, starts } = await fixture();

@@ -285,6 +285,7 @@ printf '%s\n' '{"id":"a","jevel":"ticket-triage","state":{"ticket":{"subject":"C
 | `--model <id>` | the model, over the jevel's pin and `JEVELRY_MODEL` |
 | `--jevels <dir>` | a jevels folder searched first; repeatable |
 | `--log-state` | writes the state itself into the log line, next to its hash |
+| `--cache` | answers an exact repeat of a local model's ask from the log instead of asking again |
 
 ### `outcome`
 
@@ -615,7 +616,7 @@ OpenJev 27B is not on the index; its card reports 84.0% against hosted Jev's 85.
 | `JEVELRY_JEVELS` | more jevel folders, colon separated | none |
 | `JEVELRY_TIMEOUT_MS` | the request timeout, per attempt | `30000`, and `300000` with a local model, whose first ask waits for it to load |
 | `JEVELRY_LOG_STATE` | `1` writes the state itself into each ask line, for `ask`, `run` and `decide` | off, only the hash |
-| `JEVELRY_CACHE` | `1` answers an exact repeat of a local model's ask from the log, for `ask` and `decide` | off, every ask reaches the model |
+| `JEVELRY_CACHE` | `1` answers an exact repeat of a local model's ask from the log, for `ask`, `run` and `decide` | off, every ask reaches the model |
 | `JEVELRY_KEY_STORE` | `file` keeps the key in `$JEVELRY_HOME/env` on macOS too | the keychain on macOS |
 | `JEVELRY_MACHINE` | JSON of a machine (`os`, `chip`, `cpus`, `ramBytes`, `darwinMajor`, `gpu`) that replaces detection, to see the local models for another machine | this machine |
 | `JEVELRY_HF_URL` | the Hugging Face root for the model list and downloads | `https://huggingface.co` |
@@ -735,7 +736,7 @@ npm run test:live -- tests/live/jevels.test.ts
 
 `npm run scoreboard` writes the numbers each change is judged on into `scoreboard/<date>-<commit>.json`: the CLI's start-up next to bare Node, the size and time of an install, how long logged asks took per jevel and model, a running model server's memory next to jevelry's estimate for it, and, with `--eval`, every jevel's cases. It never starts a model, it asks one only with `--eval`, and it lists what it could not measure.
 
-560 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. The local-model tests among them use a fake `llama-server`, a fake jevd, a fake Homebrew and a fake Hugging Face, so no test downloads a model or starts a real server, and they check that a 27B model is never offered as runnable on a 24 GB Mac. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
+561 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. The local-model tests among them use a fake `llama-server`, a fake jevd, a fake Homebrew and a fake Hugging Face, so no test downloads a model or starts a real server, and they check that a 27B model is never offered as runnable on a 24 GB Mac. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## License
 

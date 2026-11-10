@@ -15,7 +15,7 @@ import { defaultClient, fallenAnswers, renderTypes } from "./decide.js";
 import { type Machine, budgetBytes, detectMachine } from "./estimate.js";
 import { type EvalResult, evaluate, readCases, renderEval } from "./eval.js";
 import { resolveKey, storeKey } from "./key.js";
-import { cacheFromEnv, jevelryHome, logAsk, logStateFromEnv, readLog, recordOutcome } from "./log.js";
+import { cacheFromEnv, findRepeat, jevelryHome, logAsk, logStateFromEnv, readLog, recordOutcome } from "./log.js";
 import { type AskDocument, EXIT, EXIT_CASES_FAILED, type ErrorBody, type ErrorDocument, PROTOCOL, type RunReport } from "./protocol.js";
 import { type Call, dispatcherOf, execute, logRun, planCall } from "./run.js";
 import { type QuestionReport, type SpeedReport, renderReport, renderSpeed, report, speed } from "./report.js";
@@ -361,10 +361,11 @@ export function buildProgram(): Command {
     .requiredOption("--state <source>", "@file, - for stdin, or inline JSON")
     .option("--yes", "run a mark without asking")
     .option("--dry-run", "print what would run and run nothing")
+    .option("--cache", "answer an exact repeat of a local model's ask from the log instead of asking again (or JEVELRY_CACHE=1)")
     .option("--model <id>", "model id, overriding the jevel's pin and JEVELRY_MODEL")
     .option("--jevels <dir>", "a jevels directory searched first (repeatable)", (d: string, all: string[]) => [...all, d], [] as string[])
     .option("--log-state", "write the state itself into the log line, not only its hash (or JEVELRY_LOG_STATE=1)")
-    .action(async (name: string, opts: { state: string; yes?: boolean; dryRun?: boolean; model?: string; jevels: string[]; logState?: boolean }) => {
+    .action(async (name: string, opts: { state: string; yes?: boolean; dryRun?: boolean; cache?: boolean; model?: string; jevels: string[]; logState?: boolean }) => {
       let jevel!: ReturnType<typeof loadJevel>["jevel"];
       let state: unknown;
       try {
@@ -382,7 +383,8 @@ export function buildProgram(): Command {
       }
       let result: Awaited<ReturnType<typeof ask>>;
       try {
-        result = await ask({ client: defaultClient(home()), state: state as never, jevel, ...(opts.model ? { model: opts.model } : {}) });
+        const repeat = opts.cache === true || cacheFromEnv(process.env) ? { repeat: (hash: string, model: string) => findRepeat(home(), hash, model) } : {};
+        result = await ask({ client: defaultClient(home()), state: state as never, jevel, ...(opts.model ? { model: opts.model } : {}), ...repeat });
       } catch (error) {
         result = { ok: false, error: errorBody(error) };
       }
