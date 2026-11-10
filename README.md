@@ -240,7 +240,7 @@ Every ask then sends the server's own model whatever the jevel pins, and no `x-j
 | `jevelry ask [jevel]` | asks every question of a jevel (or of `--questions`) about a state and prints one JSON document; `--batch` asks many from stdin at once |
 | `jevelry run <jevel>` | asks a jevel whose options name commands, then runs the command for Jev's decision |
 | `jevelry outcome <log_id> <question> <value>` | records what proved true: `agree`, `disagree`, an option, a level index, `yes` or `no` |
-| `jevelry report` | agreement per jevel and question, from the log |
+| `jevelry report` | agreement per jevel and question, from the log; `--speed` for how long asks took |
 | `jevelry tui` | the full-screen view: the start screen, the dashboard, Review, Jevel, Try and History |
 | `jevelry list` | every jevel jevelry can find, with its folder; the first folder wins |
 | `jevelry show <jevel>` | the resolved frontmatter as JSON, then the body, then `example.json` when the jevel has one |
@@ -296,6 +296,7 @@ printf '%s\n' '{"id":"a","jevel":"ticket-triage","state":{"ticket":{"subject":"C
 |---|---|
 | `--jevel <name>` | only this jevel |
 | `--since <iso>` | only asks at or after this time |
+| `--speed` | how long asks took per jevel and model, instead of agreement |
 | `--json` | machine-readable rows |
 
 ### `tui`
@@ -538,6 +539,16 @@ Every ask goes into `$JEVELRY_HOME/log.jsonl` with its answers, its decisions an
 
 `agree(act)` is how often `act` was right, and that is the number you move a threshold by. For a question that repeats over a list, the question name carries the index, so you write `same_as[0]`.
 
+Every answered ask is logged with how long the model took, and `report --speed` reads that back per jevel and model:
+
+    npx jevelry report --speed
+
+    jevel          model                     asks  p50 ms  p95 ms  tokens/s
+    ticket-triage  jev-1.13.0                6     405     1260    1166
+    ticket-triage  local/Kev-4B-Q4_K_M.gguf  5     930     8440    264
+
+The median is what an ask usually costs, and the 95th percentile is where a local model that had to load first shows up. `tokens/s` is input tokens per second of waiting, the whole round trip. Asks logged before jevelry kept durations are left out. The numbers above show the layout and are not a measurement.
+
 ### Tuning thresholds
 
 Once a question has 20 reviewed decisions, the Jevel screen proposes a lower act threshold when the decisions above it were right at least 90% of the time and at least as often as at the current threshold, less two points. `T` writes it into the jevel file. A jevel that came with jevelry is first copied into `./jevels`, and from then on your project uses that copy.
@@ -696,7 +707,7 @@ npm run test:live -- tests/live/jevels.test.ts
 
 ## How do we know you can trust it
 
-519 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. The local-model tests among them use a fake `llama-server`, a fake jevd, a fake Homebrew and a fake Hugging Face, so no test downloads a model or starts a real server, and they check that a 27B model is never offered as runnable on a 24 GB Mac. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
+526 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. The local-model tests among them use a fake `llama-server`, a fake jevd, a fake Homebrew and a fake Hugging Face, so no test downloads a model or starts a real server, and they check that a 27B model is never offered as runnable on a 24 GB Mac. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## License
 

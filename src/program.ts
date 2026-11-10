@@ -17,7 +17,7 @@ import { resolveKey, storeKey } from "./key.js";
 import { jevelryHome, logAsk, logStateFromEnv, readLog, recordOutcome } from "./log.js";
 import { type AskDocument, EXIT, type ErrorBody, type ErrorDocument, PROTOCOL, type RunReport } from "./protocol.js";
 import { type Call, dispatcherOf, execute, logRun, planCall } from "./run.js";
-import { renderReport, report } from "./report.js";
+import { type QuestionReport, type SpeedReport, renderReport, renderSpeed, report, speed } from "./report.js";
 import { findRunningServers, serverModels, stopServerAndWait } from "./server.js";
 import { type SetupIO, installLocal, useServer, useTypesafe } from "./setup.js";
 
@@ -399,7 +399,7 @@ export function buildProgram(): Command {
       const logged = opts.logState === true || logStateFromEnv(process.env) ? { state } : {};
       const ref = { name: jevel.name, version: jevel.version };
       const logId = result.ok
-        ? await logAsk(home(), { jevel: ref, model: result.document.model, state_hash: result.document.state_hash, ...logged, answers: result.document.answers, usage: result.document.usage }, warn)
+        ? await logAsk(home(), { jevel: ref, model: result.document.model, state_hash: result.document.state_hash, ...logged, answers: result.document.answers, usage: result.document.usage, ms: result.ms }, warn)
         : await logAsk(home(), { jevel: ref, model: null, state_hash: stateHash(state), ...logged, answers: fallenAnswers(jevel, state), usage: null, error: result.error }, warn);
       // A ./jevels folder in the project comes first in discovery, so the path says whose commands these are.
       const from = `${call.option ?? "fall_back"} from ${jevel.path}: ${call.command}`;
@@ -456,12 +456,15 @@ export function buildProgram(): Command {
     .description("agreement per jevel and question from the log")
     .option("--jevel <name>")
     .option("--since <iso>")
+    .option("--speed", "how long asks took per jevel and model, instead of agreement")
     .option("--json", "machine-readable rows")
-    .action(async (opts: { jevel?: string; since?: string; json?: boolean }) => {
+    .action(async (opts: { jevel?: string; since?: string; speed?: boolean; json?: boolean }) => {
       try {
-        const rows = report(await readLog(home()), { ...(opts.jevel ? { jevel: opts.jevel } : {}), ...(opts.since ? { since: opts.since } : {}) });
+        const filter = { ...(opts.jevel ? { jevel: opts.jevel } : {}), ...(opts.since ? { since: opts.since } : {}) };
+        const lines = await readLog(home());
+        const rows = opts.speed ? speed(lines, filter) : report(lines, filter);
         if (opts.json) out(rows);
-        else process.stdout.write(renderReport(rows));
+        else process.stdout.write(opts.speed ? renderSpeed(rows as SpeedReport[]) : renderReport(rows as QuestionReport[]));
       } catch (error) {
         failCommand(error);
       }

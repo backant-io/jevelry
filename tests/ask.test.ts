@@ -37,6 +37,20 @@ describe("ask with one-off questions", () => {
       expect(`${JSON.stringify(result.document, null, 2)}\n`).toBe(expected);
     });
   }
+  // The wait for the model is what a person or an agent feels: the log can only say how fast a jevel is if the ask times it.
+  it("times the wait for the model and keeps the duration out of the stdout document", async () => {
+    const slow = async (): Promise<Response> => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      return jsonResponse(200, NOUL_BODY);
+    };
+    const result = await ask({ client: client(slow), state: REFERENCE_STATE, questions: NOUL_QUESTIONS as never });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // A timer may fire a millisecond early; a duration that left the wait out would read near zero.
+    expect(result.ms).toBeGreaterThanOrEqual(25);
+    expect(result.ms).toBeLessThan(5000);
+    expect(result.document).not.toHaveProperty("ms");
+  });
   it("refuses a probability outside [0, 1] instead of passing it into the document", async () => {
     const { fetch } = scriptedFetch([
       () => jsonResponse(200, { ...CHOICE_BODY, answers: { department: { ...CHOICE_BODY.answers.department, probabilities: { billing: 1.5, technical: -0.5 } } } }),

@@ -212,7 +212,7 @@ export function jevel<N extends string>(
     const logged = (options.logState ?? logStateFromEnv(process.env)) ? { state } : {};
     if (result.ok) {
       const { model, state_hash, answers, usage } = result.document;
-      const logId = options.log === false ? null : await logAsk(home, { jevel: jevelRef, model, state_hash, ...logged, answers, usage }, warn);
+      const logId = options.log === false ? null : await logAsk(home, { jevel: jevelRef, model, state_hash, ...logged, answers, usage, ms: result.ms }, warn);
       const decided = Object.fromEntries(Object.entries(answers).map(([q, a]) => [q, withAnswer(a)]));
       return { logId, error: null, model, usage, ...decided } as never;
     }

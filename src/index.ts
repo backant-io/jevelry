@@ -23,7 +23,7 @@ export { configured, readConfig, type Config, type LocalModel } from "./config.j
 export { appendLine, findAsk, jevelryHome, logAsk, outcomeOf, readLog, recordOutcome, LOG_FILE, type AskLine, type LogLine, type OnSkipped, type OutcomeLine, type RunLine } from "./log.js";
 export { dispatcherOf, planCall, type Call, type RunArgs } from "./run.js";
 export * from "./protocol.js";
-export { renderReport, report, type QuestionReport } from "./report.js";
+export { renderReport, renderSpeed, report, speed, type QuestionReport, type SpeedReport } from "./report.js";
 export { DEFAULT_THRESHOLDS, certaintyOf, mergeThresholds, decisionOf, type Thresholds } from "./decision.js";
 export {
   defaultClient,

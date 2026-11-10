@@ -24,6 +24,8 @@ export interface AskLine {
   /** On a line with `error`, every question is a FallBackAnswer. */
   answers: Record<string, Answer | FallBackAnswer>;
   usage: Usage | null;
+  /** How long the model took to answer, in ms. Absent on a line with `error` and on lines written before durations were kept. */
+  ms?: number;
   cwd: string;
   /** Set when a library `decide` got no answer from Jev. The CLI logs only answers. */
   error?: ErrorBody;
@@ -60,7 +62,7 @@ export async function appendLine(home: string, line: LogLine): Promise<void> {
  */
 export async function logAsk(
   home: string,
-  fields: Pick<AskLine, "jevel" | "model" | "state_hash" | "state" | "answers" | "usage" | "error">,
+  fields: Pick<AskLine, "jevel" | "model" | "state_hash" | "state" | "answers" | "usage" | "ms" | "error">,
   warn: (message: string) => void,
 ): Promise<string | null> {
   const id = randomUUID();
