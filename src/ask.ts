@@ -134,6 +134,11 @@ export interface AskInput {
   jevel?: Jevel;
   questions?: Questions;
   model?: string;
+  /**
+   * Ask only these questions of the jevel, by name; a repeated question comes with all its repeats. A host asks a
+   * gating question first and the rest only when its answer leaves them open.
+   */
+  only?: string[];
   /** The logged answer to this exact request by this model, when an exact repeat may be answered from the log. */
   repeat?: (requestHash: string, model: string) => Promise<AskLine | undefined>;
 }
@@ -177,7 +182,17 @@ export async function ask(input: AskInput): Promise<AskResult> {
     if (input.jevel) {
       checkState(input.jevel, input.state);
       ({ questions, thresholds } = expandQuestions(input.jevel, input.state));
+      if (input.only !== undefined) {
+        if (input.only.length === 0) throw new JevelError("only", "only names no question");
+        const known = input.jevel.questions;
+        const unknown = input.only.find((name) => !Object.hasOwn(known, name));
+        if (unknown !== undefined) throw new JevelError("only", `${unknown} is no question of ${input.jevel.name}, which has ${Object.keys(known).join(", ")}`);
+        const wanted = new Set(input.only);
+        // In the jevel's own order, whatever order they were named in.
+        questions = Object.fromEntries(Object.entries(questions).filter(([name]) => wanted.has(name.replace(/\[\d+\]$/, "")))) as Questions;
+      }
     } else {
+      if (input.only !== undefined) throw new JevelError("only", "only picks among a jevel's questions; with questions of your own, give just the ones you want");
       questions = input.questions ?? {};
       thresholds = Object.fromEntries(Object.keys(questions).map((k) => [k, DEFAULT_THRESHOLDS]));
     }

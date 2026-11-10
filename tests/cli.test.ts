@@ -211,6 +211,22 @@ describe("ask --batch", () => {
   });
 });
 
+describe("ask --only", () => {
+  // The gate first, the rest only when the gate leaves them open: two asks of one jevel instead of one ask of everything.
+  it("asks and answers only the named questions, on the command line and in a batch line", async () => {
+    const before = server.requests.length;
+    const r = await run(["ask", "wake-gate", "--only", "worth_a_turn", "--state", JSON.stringify(state)]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(Object.keys((JSON.parse(r.stdout) as { answers: object }).answers)).toEqual(["worth_a_turn"]);
+    expect(Object.keys((server.requests[before] as { questions: object }).questions)).toEqual(["worth_a_turn"]);
+    const batch = await run(["ask", "--batch"], { input: `${JSON.stringify({ id: 1, jevel: "wake-gate", state, only: ["depth", "same_as"] })}\n` });
+    expect(Object.keys((JSON.parse(batch.stdout) as { answers: object }).answers)).toEqual(["depth", "same_as[0]", "same_as[1]"]);
+    const bad = await run(["ask", "wake-gate", "--only", "nope", "--state", JSON.stringify(state)]);
+    expect(bad.status).toBe(2);
+    expect(JSON.parse(bad.stdout)).toMatchObject({ error: { code: "bad_input", field: "only" } });
+  });
+});
+
 describe("eval", () => {
   const logLines = (): number => {
     try {

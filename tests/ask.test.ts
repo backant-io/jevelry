@@ -83,6 +83,28 @@ describe("ask with a jevel", () => {
     "same_as[0]": { type: "noul", noul: 0.97 },
     "same_as[1]": { type: "noul", noul: 0.4 },
   };
+  // Measured on the shipped jevels with a gating question: 15 to 44% of their tokens went to questions the gate's
+  // answer had already made moot. With `only`, a host asks the gate first and the rest only when it has to.
+  it("asks only the questions named in `only`, a repeated one with all its repeats, and answers only those", async () => {
+    const pick = (names: string[]) => Object.fromEntries(Object.entries(answers).filter(([name]) => names.includes(name)));
+    const gate = scriptedFetch([() => jsonResponse(200, { model: "jev-1.13.0", answers: pick(["worth_a_turn"]), usage: { input_tokens: 120, output_tokens: 1 } })]);
+    const first = await ask({ client: client(gate.fetch), state, jevel, only: ["worth_a_turn"] });
+    expect(Object.keys(gate.calls[0]?.body.questions)).toEqual(["worth_a_turn"]);
+    expect(first.ok && Object.keys(first.document.answers)).toEqual(["worth_a_turn"]);
+    const rest = scriptedFetch([() => jsonResponse(200, { model: "jev-1.13.0", answers: pick(["depth", "same_as[0]", "same_as[1]"]), usage: { input_tokens: 380, output_tokens: 3 } })]);
+    const second = await ask({ client: client(rest.fetch), state, jevel, only: ["same_as", "depth"] });
+    // Asked in the jevel's own order, whatever order they were named in.
+    expect(Object.keys(rest.calls[0]?.body.questions)).toEqual(["depth", "same_as[0]", "same_as[1]"]);
+    expect(second.ok && second.document.answers.depth?.decision).toBe("act");
+    // Two different sets of questions are two different requests to the repeat cache.
+    expect(first.ok && second.ok && first.request_hash !== second.request_hash).toBe(true);
+  });
+  it("refuses a name in `only` that is no question of the jevel, and an empty `only`, before any request", async () => {
+    const { fetch, calls } = scriptedFetch([]);
+    expect(await ask({ client: client(fetch), state, jevel, only: ["worth_a_tun"] })).toMatchObject({ ok: false, error: { code: "bad_input", field: "only", message: expect.stringContaining("worth_a_tun") } });
+    expect(await ask({ client: client(fetch), state, jevel, only: [] })).toMatchObject({ ok: false, error: { code: "bad_input", field: "only" } });
+    expect(calls).toHaveLength(0);
+  });
   it("expands, sends the pinned model, and applies per-question thresholds", async () => {
     const { fetch, calls } = scriptedFetch([() => jsonResponse(200, { model: "jev-1.13.0", answers, usage: { input_tokens: 500, output_tokens: 40 } })]);
     const result = await ask({ client: client(fetch), state, jevel });
