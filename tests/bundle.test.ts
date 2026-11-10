@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -40,6 +41,15 @@ describe("the published build", () => {
       expect(code, file).not.toMatch(/from\s*"react-devtools-core"/);
     }
     expect(readFileSync(join("dist", "THIRD-PARTY-LICENSES.txt"), "utf8")).not.toMatch(/^ws@/m);
+  });
+  // Node's fetch implementation takes about 18 ms to load, and a jevelry command is a new process every time. Importing
+  // node:http as an ES module loads it without anyone asking: its namespace carries WebSocket and friends as getters.
+  // That made every command 18 ms slower for a day (--version 61 ms to 79 ms).
+  it("loads none of Node's fetch implementation just by starting", () => {
+    const loaded = (entry: string): string => spawnSync(process.execPath, ["--input-type=module", "-e", `await import(${JSON.stringify(entry)}); console.log(process.moduleLoadList.filter((m) => m.includes("undici")).length)`], { encoding: "utf8" }).stdout.trim();
+    expect(loaded("./dist/index.js")).toBe("0");
+    const version = spawnSync(process.execPath, ["--input-type=module", "-e", 'process.on("exit", () => console.log(`undici:${process.moduleLoadList.filter((m) => m.includes("undici")).length}`)); process.argv[2] = "--version"; await import("./dist/cli.js")'], { encoding: "utf8" });
+    expect(version.stdout).toContain("undici:0");
   });
   // A copy of someone's code travels with their licence: MIT and ISC both ask for the notice in every copy.
   it("ships the licence of every package it carries", () => {

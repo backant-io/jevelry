@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { accessSync, closeSync, constants, existsSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { request } from "node:http";
+import { createRequire } from "node:module";
 import { basename, delimiter, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { MIN_BUILD } from "./catalog.js";
@@ -91,6 +91,14 @@ export async function health(port: number): Promise<"ok" | "loading" | "down"> {
   }
 }
 
+/**
+ * node:http through require, and only once a request is made. Imported as an ES module it loads Node's fetch
+ * implementation too, about 18 ms at every start: its namespace carries WebSocket and friends as getters, and an
+ * import reads them all. Measured: `jevelry --version` 61 ms without it, 79 ms with it at the top of this file.
+ */
+let httpRequest: typeof import("node:http").request | undefined;
+const loadHttp = createRequire(import.meta.url);
+
 /** What the SDK and jevelry read of an answer from the model server: that much of a Response, and no more. */
 export interface LocalResponse {
   status: number;
@@ -120,7 +128,8 @@ export function localRequest(url: string, init: { method?: string; headers?: Rec
       done();
       reject(error);
     };
-    const outgoing = request(url, { method: init.method ?? "GET", ...(init.headers ? { headers: init.headers } : {}) }, (incoming) => {
+    httpRequest ??= (loadHttp("node:http") as typeof import("node:http")).request;
+    const outgoing = httpRequest(url, { method: init.method ?? "GET", ...(init.headers ? { headers: init.headers } : {}) }, (incoming) => {
       const chunks: Buffer[] = [];
       incoming.on("data", (chunk: Buffer) => chunks.push(chunk));
       incoming.on("error", fail);
