@@ -53,9 +53,15 @@ export function serverBuild(path: string): number | null {
 /**
  * `-np 1` for every family but kev and lev because vllm-d3's answers change when requests share a batch; `-b` and
  * `-ub` hold a whole prompt because laya, clef, vllm-d3, lfm2-d1-omni, lfm3-d1 and lfm3-d1-omni evaluate it in one
- * ubatch (on Liquid d1 2B and d1-Omni 2B a question of 6,556 tokens is refused as too large for the batch of 4096);
- * `-c` is always given because the default is 262144; `--no-mmproj` because the file is given with
+ * ubatch; `-c` is always given because the default is 262144; `--no-mmproj` because the file is given with
  * `-m`; and the model unloads after 300 idle seconds, so an idle jevelry gives the GPU memory back.
+ *
+ * For a family that evaluates a prompt in one ubatch, the ubatch is the longest state with one question it takes.
+ * vllm-d3 and lfm3-d1 get 8192, the whole context. With 4096, vLLM-SR d3-nano 2B refused a question of 4,467 tokens
+ * and Liquid d1 2B one of 5,364; with 8192 they answered 7,629 and 6,358. On both, all 267 answers to the shipped
+ * prompts were the same bytes, and the 17 shipped examples took 75.4 s against 74.5 s on d1 2B, the two taken in turn
+ * four times each. Memory grows only when a long state arrives: after its longest, d3-nano's server stood at 1,487 MB
+ * instead of 725 MB, and vLLM-SR d3-flash 9B at 7.10 GiB resident against an estimate of 7.67 GiB.
  *
  * kev alone gets 512 tokens a ubatch. It keeps full-vocabulary logits for every token of a ubatch,
  * about 1 MB a token, and keeps them after the answer. Measured on Kev 0.8B (llama.cpp 0.9.0, M4 Pro):
@@ -94,11 +100,13 @@ export function serverBuild(path: string): number | null {
 export function launchArgs(local: LocalModel): string[] {
   // ponytail: the small ubatch is measured on kev alone; nimble and openjev are measured for neither flag, because their only models are a 9B and a 27B.
   // ponytail: four slots because no shipped jevel asks more than four questions; a jevel that asks more has its state read once for every four.
+  // ponytail: the whole-context batch is measured on vllm-d3 and lfm3-d1; laya, clef, lfm2-d1-omni and lfm3-d1-omni read a prompt in one ubatch too and keep 4096 until they are.
   const kev = local.decisionType === "kev";
   const shared = kev || local.decisionType === "lev";
+  const whole = local.decisionType === "vllm-d3" || local.decisionType === "lfm3-d1";
   return [
     "-m", local.path, "--host", "127.0.0.1", "--port", String(local.port), "--alias", local.alias,
-    "--no-webui", "--no-mmproj", "-c", "8192", "-b", "4096", "-ub", kev ? "512" : "4096", "-np", shared ? "4" : "1", ...(shared ? ["-kvu"] : []),
+    "--no-webui", "--no-mmproj", "-c", "8192", "-b", whole ? "8192" : "4096", "-ub", kev ? "512" : whole ? "8192" : "4096", "-np", shared ? "4" : "1", ...(shared ? ["-kvu"] : []),
     "--sleep-idle-seconds", "300", "-lv", "2",
   ];
 }
