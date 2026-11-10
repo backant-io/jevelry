@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { type CatalogModel, listModels, rank } from "../src/catalog.js";
@@ -166,11 +166,27 @@ describe("installLocal", () => {
     await installLocal(choice("d1-3b"), dir, yes.io, env);
     expect(existsSync(second.path)).toBe(false);
     expect(yes.said.at(-1)).toMatch(/^removed Kev 4B, [\d.]+ GB$/);
+    // The folders made for that file go with it, or every model ever tried leaves an empty folder behind. Only empty
+    // ones: the folder of the model now in use, and the models folder itself, stay.
+    expect(existsSync(dirname(second.path))).toBe(false);
+    expect(readdirSync(join(dir, "models")).length).toBe(1);
+    expect(existsSync(first.path)).toBe(true);
     // The model that is already set up is the one in use: installing it again asks nothing and removes nothing.
     const again = recorder(true);
     await installLocal(choice("d1-3b"), dir, again.io, env);
     expect(again.asked).toEqual([]);
     expect(existsSync(first.path)).toBe(true);
+  });
+
+  // Something a person put next to a model file is theirs: the file jevelry downloaded goes, the folder and the note stay.
+  it("keeps the previous model's folder when something else is in it", async () => {
+    const { dir, env } = fixture();
+    const first = await installLocal(choice("d1-3b"), dir, recorder(true).io, env);
+    const note = join(dirname(first.path), "notes.txt");
+    writeFileSync(note, "mine");
+    await installLocal(choice("kev-4b"), dir, recorder(true).io, env);
+    expect(existsSync(first.path)).toBe(false);
+    expect(readFileSync(note, "utf8")).toBe("mine");
   });
 
   // Two models loaded at once is how a GPU runs out of memory: switching stops the old server first.

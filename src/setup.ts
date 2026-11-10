@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, rmSync, statSync } from "node:fs";
-import { join, sep } from "node:path";
+import { existsSync, mkdirSync, rmSync, rmdirSync, statSync } from "node:fs";
+import { dirname, join, sep } from "node:path";
 import { createServer } from "node:net";
 import { createInterface } from "node:readline";
 import { ask } from "./ask.js";
@@ -161,6 +161,11 @@ export async function installLocal(choice: Choice, home: string, io: SetupIO, en
       const size = gb(statSync(before.path).size);
       if (await io.confirm(`${before.name} is still on disk and jevelry no longer asks it: remove its ${size}?`)) {
         rmSync(before.path, { force: true });
+        // The folders made for that file go with it, up to the models folder. rmdir refuses a folder that still holds
+        // something, so whatever a person put there stays, and so does its folder.
+        for (let dir = dirname(before.path); dir.startsWith(`${join(home, "models")}${sep}`); dir = dirname(dir)) {
+          try { rmdirSync(dir); } catch { break; }
+        }
         io.say(`removed ${before.name}, ${size}`);
       } else {
         io.say(`${before.name} stays on disk at ${before.path}`);
