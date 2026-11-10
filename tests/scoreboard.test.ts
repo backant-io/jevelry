@@ -42,7 +42,8 @@ const timedAsk = (id: string, ms: number): string =>
 describe("npm run scoreboard", () => {
   it("times start-up and reads the speed of logged asks without asking a model, and names what it did not measure", async () => {
     const home = makeHome();
-    writeFileSync(join(home, ".jevelry", "log.jsonl"), `${[timedAsk("a", 100), timedAsk("b", 300), timedAsk("c", 200)].join("\n")}\n`);
+    const copy = JSON.stringify({ ...JSON.parse(timedAsk("d", 3)), cached_from: "a", usage: { input_tokens: 0, output_tokens: 0 } });
+    writeFileSync(join(home, ".jevelry", "log.jsonl"), `${[timedAsk("a", 100), timedAsk("b", 300), timedAsk("c", 200), copy].join("\n")}\n`);
     const out = join(home, "board.json");
     const before = server.requests.length;
     const r = await run(home, ["--out", out]);
@@ -54,6 +55,8 @@ describe("npm run scoreboard", () => {
     expect(board.start.jevelry_version_ms.median).toBeGreaterThan(0);
     expect(board.speed).toEqual([{ jevel: "ticket-triage", model: "local/a.gguf", asks: 3, p50_ms: 200, p95_ms: 300, tokens_per_s: 2500, cold_asks: 0, cold_p50_ms: null }]);
     expect([board.install, board.footprint, board.quality]).toEqual([null, null, null]);
+    // What the repeat cache saved shows next to the model's own speed: one ask in four here never reached the model.
+    expect(board.repeats).toEqual({ answered_by_model: 3, answered_from_log: 1 });
     const left = (board.not_measured as string[]).join("\n");
     expect(left).toMatch(/install/);
     expect(left).toMatch(/model server/);
@@ -104,4 +107,27 @@ describe("npm run scoreboard", () => {
     expect(quality.some((q) => q.jevel === "run-gate")).toBe(false);
     expect(not_measured.join("\n")).toMatch(/run-gate/);
   });
+  // What lets a release wait on the cases without anyone choosing a bar: the same model must not answer worse than
+  // it did in the last record.
+  it("fails with --gate when a jevel's cases score worse than in an earlier result of the same model, and passes when they do not", async () => {
+    const home = makeHome();
+    const first = join(home, "first.json");
+    expect((await run(home, ["--eval", "--out", first])).status).toBe(0);
+    const same = await run(home, ["--eval", "--gate", first, "--out", join(home, "second.json")]);
+    expect(same.status, same.stderr).toBe(0);
+    expect(same.stdout).toMatch(/gate: against first\.json: \d+ jevels compared, none worse/);
+    // An earlier result in which every case was right: against it this run is worse wherever it misses one.
+    const perfect = JSON.parse(readFileSync(first, "utf8")) as { quality: Array<{ right: number; checks: number; wrong_at_act: number }> };
+    for (const row of perfect.quality) { row.right = row.checks; row.wrong_at_act = 0; }
+    writeFileSync(join(home, "perfect.json"), JSON.stringify(perfect));
+    const worse = await run(home, ["--eval", "--gate", join(home, "perfect.json"), "--out", join(home, "third.json")]);
+    expect(worse.status).toBe(8);
+    expect(worse.stdout).toMatch(/gate: against perfect\.json: \d+ jevels compared, \d+ worse/);
+    expect(worse.stdout).toMatch(/worse: [a-z-]+: \d+ of \d+ right, was \d+/);
+    // The result is still written: a failed gate is a record too.
+    expect(JSON.parse(readFileSync(join(home, "third.json"), "utf8")).quality.length).toBeGreaterThan(0);
+    const noEval = await run(home, ["--gate", first, "--out", join(home, "fourth.json")]);
+    expect(noEval.status).toBe(1);
+    expect(noEval.stderr).toMatch(/--eval/);
+  }, 90000);
 });

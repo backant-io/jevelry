@@ -3,12 +3,14 @@
 // It never starts a model, and it asks one only with --eval: it times what runs without a model, reads
 // what the log already holds, looks at a model server that is already running, and names the rest.
 //   --eval        ask every jevel's cases of the model that is set up (hosted Jev charges for each ask)
+//   --gate [file] with --eval: exit 8 when a jevel's cases score worse than in an earlier result of the same model;
+//                 the file is that result, by default the newest one in scoreboard/
 //   --quick       three timing rounds and no install, for the test suite
 //   --out <file>  where the result goes; by default scoreboard/<date>-<commit>.json
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { cpus, homedir, tmpdir, totalmem } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { jevelryHome, needBytes, readLog, speed, wilson } from "../dist/index.js";
 
@@ -27,6 +29,12 @@ const refuse = () => {
   process.exit(1);
 };
 if (existsSync(out)) refuse();
+const gateAt = args.indexOf("--gate");
+const gateFile = gateAt !== -1 && args[gateAt + 1] && !args[gateAt + 1].startsWith("--") ? args[gateAt + 1] : null;
+if (gateAt !== -1 && !args.includes("--eval")) {
+  process.stderr.write("scoreboard: --gate compares the jevels' cases with an earlier result, so it needs --eval\n");
+  process.exit(1);
+}
 
 const cli = (...argv) => spawnSync(process.execPath, [join(root, "dist", "cli.js"), ...argv], { cwd: root, encoding: "utf8" });
 const round = (n) => Math.round(n * 10) / 10;
@@ -139,7 +147,10 @@ const installed = install();
 const judged = quality();
 // Read after the eval, so the server it may have started is the one measured.
 const memory = footprint();
-const rows = speed(await readLog(home, () => {}));
+const logged = await readLog(home, () => {});
+const rows = speed(logged);
+const answered = logged.filter((line) => line.kind === "ask" && !line.error);
+const fromLog = answered.filter((line) => line.cached_from !== undefined).length;
 if (!rows.some((row) => row.model.startsWith("local/"))) notMeasured.push("warm local asks: the log holds no timed ask of a local model");
 if (!rows.some((row) => row.cold_asks > 0)) notMeasured.push("cold asks: the log holds no ask that waited for a local model to start or load");
 
@@ -151,6 +162,8 @@ const board = {
   start,
   install: installed,
   speed: rows,
+  // What the repeat cache saved: these asks never reached the model, and the speed rows above leave them out.
+  repeats: { answered_by_model: answered.length - fromLog, answered_from_log: fromLog },
   footprint: memory,
   quality: judged,
   not_measured: notMeasured,
@@ -163,3 +176,29 @@ try {
   throw error;
 }
 process.stdout.write(`${out}\n${notMeasured.map((line) => `not measured: ${line}`).join("\n")}\n`);
+
+// The gate: the same model must not answer a jevel's cases worse than it did in the earlier result. It asks nobody to
+// choose a bar. The result above is written either way: a failed gate is a record too.
+if (gateAt !== -1) {
+  const dir = join(root, "scoreboard");
+  const newest = () => (existsSync(dir) ? readdirSync(dir).filter((name) => name.endsWith(".json")).map((name) => join(dir, name)).filter((file) => resolve(file) !== resolve(out)).sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0] : undefined);
+  const earlier = gateFile ?? newest();
+  if (!earlier) {
+    process.stdout.write("gate: no earlier result to compare with\n");
+  } else {
+    const before = JSON.parse(readFileSync(earlier, "utf8")).quality ?? [];
+    const worse = [];
+    let compared = 0;
+    for (const row of judged) {
+      const was = before.find((b) => b.jevel === row.jevel && b.model === row.model);
+      if (!was) continue;
+      compared += 1;
+      // A jevel whose cases changed is not held to its old count; one more wrong and confident answer always is.
+      if (was.checks === row.checks && row.right < was.right) worse.push(`${row.jevel}: ${row.right} of ${row.checks} right, was ${was.right}`);
+      if (row.wrong_at_act > was.wrong_at_act) worse.push(`${row.jevel}: ${row.wrong_at_act} wrong at act, was ${was.wrong_at_act}`);
+    }
+    process.stdout.write(`gate: against ${basename(earlier)}: ${compared} jevels compared, ${worse.length === 0 ? "none" : worse.length} worse\n${worse.map((line) => `worse: ${line}\n`).join("")}`);
+    if (compared === 0) process.stdout.write("gate: the earlier result holds no cases of this model, so nothing was held to it\n");
+    if (worse.length > 0) process.exit(8);
+  }
+}
