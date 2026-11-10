@@ -154,11 +154,18 @@ const fromLog = answered.filter((line) => line.cached_from !== undefined).length
 if (!rows.some((row) => row.model.startsWith("local/"))) notMeasured.push("warm local asks: the log holds no timed ask of a local model");
 if (!rows.some((row) => row.cold_asks > 0)) notMeasured.push("cold asks: the log holds no ask that waited for a local model to start or load");
 
+/** macOS only: 0 automatic, 1 low power, 2 high power. A local model answers about half as fast outside high power on a busy machine, so a speed without it says little. */
+function powerMode() {
+  if (process.platform !== "darwin") return null;
+  const found = /powermode\s+(\d)/.exec(spawnSync("pmset", ["-g"], { encoding: "utf8" }).stdout ?? "");
+  return found ? Number(found[1]) : null;
+}
+
 const board = {
   date,
   commit,
   dirty: git("status", "--porcelain") !== "",
-  machine: { chip: cpus()[0]?.model ?? "unknown", cpus: cpus().length, ram_gb: Math.round(totalmem() / 2 ** 30), platform: process.platform, node: process.version },
+  machine: { chip: cpus()[0]?.model ?? "unknown", cpus: cpus().length, ram_gb: Math.round(totalmem() / 2 ** 30), platform: process.platform, node: process.version, power_mode: powerMode() },
   start,
   install: installed,
   speed: rows,

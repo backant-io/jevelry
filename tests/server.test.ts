@@ -94,8 +94,14 @@ describe("launchArgs", () => {
     const { path } = { path: "/m/x.gguf" };
     expect(launchArgs({ repo: "r", file: "x.gguf", quant: "Q8_0", name: "X", decisionType: "vllm-d3", path, port: 41000, alias: "local/x" })).toEqual([
       "-m", "/m/x.gguf", "--host", "127.0.0.1", "--port", "41000", "--alias", "local/x", "--no-webui", "--no-mmproj",
-      "-c", "8192", "-b", "4096", "-ub", "4096", "-np", "1", "--sleep-idle-seconds", "300",
+      "-c", "8192", "-b", "4096", "-ub", "4096", "-np", "1", "--sleep-idle-seconds", "300", "-lv", "2",
     ]);
+  });
+  // At its default level the server writes three lines for every question it answers, about 1 KB an ask, into a log
+  // nothing ever trims. Measured: at level 2 it writes 145 bytes at a start and nothing for an ask, and still its warnings and errors.
+  it("asks the server for warnings and errors only, so its log does not grow with every ask", () => {
+    const args = launchArgs({ repo: "r", file: "x.gguf", quant: "Q8_0", name: "X", decisionType: "kev", path: "/m/x.gguf", port: 41000, alias: "local/x" });
+    expect(args.slice(args.indexOf("-lv"), args.indexOf("-lv") + 2)).toEqual(["-lv", "2"]);
   });
   // kev keeps full-vocabulary logits for every token of a ubatch, about 1 MB a token. Measured on Kev 0.8B: one 2239-token
   // prompt left its server at 2.8 GB with 4096 tokens a ubatch and at 0.8 GB with 512, and all 91 shipped prompts were
