@@ -12,7 +12,7 @@ import { configured, jevServer, localModel } from "./config.js";
 import { installSkill, knownAgents, promptForKey, unknownAgents, whereToPutTheKey } from "./install.js";
 import { JevelError, checkState, discoveryDirs, expandQuestions, isEntry, listJevels, loadJevel } from "./jevel.js";
 import { defaultClient, fallenAnswers, renderTypes } from "./decide.js";
-import { type Machine, budgetBytes, detectMachine } from "./estimate.js";
+import { type Machine, budgetBytes, detectMachine, lowPowerMode } from "./estimate.js";
 import { type EvalResult, type Evaluation, agreement, casesFromLog, evaluate, readCases, renderAgreement, renderEval } from "./eval.js";
 import { resolveKey, storeKey } from "./key.js";
 import { cacheFromEnv, findRepeat, jevelryHome, logAsk, logStateFromEnv, readLog, recordOutcome } from "./log.js";
@@ -640,6 +640,7 @@ export function buildProgram(): Command {
             for (const m of measuredSpeed(await readLog(home()))) {
               process.stdout.write(`Measured on this machine: ${m.model} read ${Math.round(m.tokens_per_s)} prompt tokens a second over ${m.asks} warm asks, about ${(0.05 + 500 / m.tokens_per_s).toFixed(1)} s for a question of 500; the s/question column is an estimate\n`);
             }
+            if (lowPowerMode()) process.stdout.write("This Mac is in Low Power Mode: a local model answers at about two thirds of the speed it has in High Power mode, and every command starts slower\n");
             return;
           }
           out(choices.map((c) => ({

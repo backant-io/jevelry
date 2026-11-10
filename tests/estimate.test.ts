@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { budgetBytes, detectMachine, fitOf, needBytes, secondsPerQuestion } from "../src/estimate.js";
+import { budgetBytes, detectMachine, lowPowerMode, powerModeOf, fitOf, needBytes, secondsPerQuestion } from "../src/estimate.js";
 import { LINUX_CPU, M2_16, M4_PRO_24, RTX_4090 } from "./fixtures/sandbox.js";
 
 const GIB = 2 ** 30;
@@ -76,5 +76,23 @@ describe("secondsPerQuestion", () => {
     // A later "Apple M10" contains "Apple M1": read as an M1 it would be promised a fraction of its speed.
     expect(secondsPerQuestion({ params: 8.95e9, quant: "Q8_0" }, { ...M4_PRO_24, chip: "Apple M10 Pro" })).toBeNull();
     expect(secondsPerQuestion({ params: 8.95e9, quant: "Q8_0" }, LINUX_CPU)).toBeNull();
+  });
+});
+
+// On battery a Mac may run in Low Power Mode. Measured on an M4 Pro: bare Node starts in 61 ms there against 40 ms in
+// High Power mode, and a 2B local model reads about 1,100 tokens a second against 1,650. A person choosing a model
+// should know which of the two they are looking at.
+describe("lowPowerMode", () => {
+  it("reads the mode out of what pmset prints, in the new spelling and the old one", () => {
+    expect(powerModeOf("Battery Power:\n lowpowermode         0\n powermode            1\n standby              1\n")).toBe(1);
+    expect(powerModeOf(" powermode            2\n")).toBe(2);
+    expect(powerModeOf(" lowpowermode         1\n")).toBe(1);
+    expect(powerModeOf(" lowpowermode         0\n")).toBe(0);
+    expect(powerModeOf(" standby              1\n")).toBeNull();
+  });
+  it("takes JEVELRY_POWER_MODE when it is set, and says nothing for a machine that is not this one", () => {
+    expect(lowPowerMode({ JEVELRY_POWER_MODE: "1" })).toBe(true);
+    expect(lowPowerMode({ JEVELRY_POWER_MODE: "2" })).toBe(false);
+    expect(lowPowerMode({ JEVELRY_MACHINE: JSON.stringify(RTX_4090) })).toBe(false);
   });
 });

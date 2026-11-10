@@ -1,0 +1,49 @@
+{
+  "date": "2026-11-10",
+  "commit": "c7cecc4",
+  "dirty": false,
+  "machine": {
+    "chip": "Apple M4 Pro",
+    "cpus": 12,
+    "ram_gb": 24,
+    "platform": "darwin",
+    "node": "v25.9.0",
+    "power_mode": 1
+  },
+  "start": {
+    "bare_node_ms": {
+      "min": 58.8,
+      "p25": 60.2,
+      "median": 61.2
+    },
+    "jevelry_version_ms": {
+      "min": 92.1,
+      "p25": 95.4,
+      "median": 97.1
+    },
+    "jevelry_check_ms": {
+      "min": 101.1,
+      "p25": 105.8,
+      "median": 106.5
+    }
+  },
+  "install": {
+    "packages": 2,
+    "megabytes": 2.9,
+    "seconds": 1.06,
+    "tarball_bytes": 545650
+  },
+  "speed": [],
+  "repeats": {
+    "answered_by_model": 18,
+    "answered_from_log": 0
+  },
+  "footprint": null,
+  "quality": null,
+  "not_measured": [
+    "accuracy on the jevels' cases: pass --eval to ask every case of the model that is set up (hosted Jev charges for each ask)",
+    "memory of the model server: no model server jevelry started is running",
+    "warm local asks: the log holds no timed ask of a local model",
+    "cold asks: the log holds no ask that waited for a local model to start or load"
+  ]
+}

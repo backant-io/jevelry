@@ -101,6 +101,15 @@ describe("jevelry models --local", () => {
     const none = fixture();
     expect((await run(["models", "--local"], none.env)).stdout).not.toContain("Measured on this machine");
   });
+  // The speeds in the table are for a machine at full power. On battery in Low Power Mode it is about two thirds of that.
+  it("says under the table when this Mac is in Low Power Mode", async () => {
+    const { env } = fixture();
+    const low = await run(["models", "--local"], { ...env, JEVELRY_POWER_MODE: "1" });
+    expect(low.status, low.stderr).toBe(0);
+    expect(low.stdout).toMatch(/^This Mac is in Low Power Mode: /m);
+    expect((await run(["models", "--local"], { ...env, JEVELRY_POWER_MODE: "2" })).stdout).not.toContain("Low Power Mode");
+    expect((await run(["models", "--local"], env)).stdout).not.toContain("Low Power Mode");
+  });
   it("ranks the models for a 24 GB M4 Pro: the 27B rows won't fit and vllm-d3-flash Q8_0 runs well first", async () => {
     const { env } = fixture();
     const r = await run(["models", "--local"], env);
