@@ -138,6 +138,23 @@ describe("renderTable", () => {
     expect(text.endsWith("\n")).toBe(true);
   });
 
+  // "runs well" is judged against what the GPU may use at most. Measured here: an 11.2 GB model read "runs well"
+  // while about 10 GB was free, and loading into memory other programs hold is what pushes them out.
+  it("names the models that need more memory than is free right now, and says nothing when all of them have room", () => {
+    const GIB = 2 ** 30;
+    const busy = renderTable(rank(models, M4_PRO_24), { ...M4_PRO_24, freeBytes: 6 * GIB });
+    const note = busy.trimEnd().split("\n").at(-1) ?? "";
+    expect(note).toMatch(/^About 6\.4 GB of memory is free right now\. These need more, so close other programs before you install one: /);
+    // 11.2 GB and 6.6 GB do not fit in 6.4 GB; d1-3b's 4.5 GB does, and a model that will not fit at all is not offered here.
+    expect(note).toContain("vllm-d3-flash");
+    expect(note).toContain("kev-4b");
+    expect(note).not.toContain("d1-3b");
+    expect(note).not.toContain("openjev");
+    expect(renderTable(rank(models, M4_PRO_24), { ...M4_PRO_24, freeBytes: 20 * GIB })).not.toContain("free right now");
+    // Another machine's picks, from JEVELRY_MACHINE, carry no free memory: this machine's would say nothing about it.
+    expect(renderTable(rank(models, M4_PRO_24), M4_PRO_24)).not.toContain("free right now");
+  });
+
   // Without a known GPU there is no published speed to scale, and the line says so instead of guessing.
   it("says no supported GPU was found on a CPU-only machine", () => {
     expect(renderTable(rank(models, LINUX_CPU), LINUX_CPU).split("\n")[0]).toBe("This machine: AMD EPYC 7763 64-Core Processor, 64 GB memory, no supported GPU found (speed not estimated)");

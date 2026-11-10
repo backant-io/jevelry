@@ -11,6 +11,13 @@ describe("detectMachine", () => {
     expect(detectMachine({ JEVELRY_MACHINE: JSON.stringify(RTX_4090) })).toEqual(RTX_4090);
     expect(() => detectMachine({ JEVELRY_MACHINE: "{ nope" })).toThrow(/JEVELRY_MACHINE is not JSON/);
   });
+  // What is free now is only ever this machine's: a machine described in JEVELRY_MACHINE is taken as given.
+  it("reads the memory that is free right now on this machine, and none for a machine it was given", () => {
+    const here = detectMachine({});
+    expect(here.freeBytes).toBeGreaterThan(0);
+    expect(here.freeBytes).toBeLessThanOrEqual(here.ramBytes);
+    expect(detectMachine({ JEVELRY_MACHINE: JSON.stringify(RTX_4090) }).freeBytes).toBeUndefined();
+  });
 });
 
 describe("budgetBytes, needBytes and fitOf", () => {

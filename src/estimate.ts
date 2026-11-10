@@ -11,6 +11,8 @@ export interface Machine {
   darwinMajor: number | null;
   /** NVIDIA only, from nvidia-smi on linux and win32. */
   gpu: { name: string; vramBytes: number } | null;
+  /** The memory programs can still take right now. Only ever this machine's: absent for a machine given in `JEVELRY_MACHINE`. */
+  freeBytes?: number;
 }
 
 /**
@@ -37,6 +39,8 @@ export function detectMachine(env: NodeJS.ProcessEnv = process.env): Machine {
     ramBytes: Math.min(totalmem(), process.constrainedMemory() || Infinity),
     darwinMajor: darwin ? Number(release().split(".")[0]) : null,
     gpu: darwin ? null : nvidiaGpu(),
+    // On a Mac this counts free and inactive pages and not what the system could still compress or drop, so it is the careful figure.
+    freeBytes: process.availableMemory(),
   };
 }
 
