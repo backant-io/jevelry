@@ -212,6 +212,12 @@ describe("jevelry ask in local mode", () => {
     const r = await run(["ask", "--questions", QUESTIONS, "--state", '"Help!"'], env);
     expect(r.status).toBe(5);
     expect(JSON.parse(r.stdout)).toMatchObject({ error: { code: "over_budget", message: "the state with one question came to 9025 tokens and the local model takes 8192 at most; filter the state before asking" } });
+    // A model that reads its prompt in one batch says it another way, and with a 500: measured on Liquid d1 2B and
+    // d1-Omni 2B, where a 6,556-token question came back as a transport failure that pointed at the server's log.
+    const batch = await fixture({ FAKE_LLAMA_ANSWER_STATUS: "500", FAKE_LLAMA_ANSWER_MESSAGE: "input (6556 tokens) is too large to process. increase the physical batch size (current batch size: 4096)" });
+    const b = await run(["ask", "--questions", QUESTIONS, "--state", '"Help!"'], batch.env);
+    expect(b.status).toBe(5);
+    expect(JSON.parse(b.stdout)).toMatchObject({ error: { code: "over_budget", message: "the state with one question came to 6556 tokens and the local model takes 4096 at most; filter the state before asking" } });
     // Any other refusal keeps its own words and stays a bad request.
     const other = await fixture({ FAKE_LLAMA_ANSWER_STATUS: "400" });
     const o = await run(["ask", "--questions", QUESTIONS, "--state", '"Help!"'], other.env);
