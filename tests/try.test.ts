@@ -101,9 +101,10 @@ describe("Try", () => {
       const logged = await asks(h);
       expect(logged).toHaveLength(1);
       expect(logged[0]).toMatchObject({ jevel: { name: "ticket-triage", version: 3 }, model: "jev-1.13.0" });
-      // r asks again, and that ask is logged too.
+      // r asks again, and that ask is logged too. Waited for, not timed: on a busy machine the second ask was not
+      // in the log 300 ms after the key.
       stdin.write("r");
-      await tick(300);
+      for (let i = 0; i < 100 && (await asks(h)).length < 2; i++) await tick(40);
       expect(await asks(h)).toHaveLength(2);
       unmount();
     }
