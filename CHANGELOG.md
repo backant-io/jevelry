@@ -29,7 +29,7 @@ The first release with local models. Everything below was merged after 0.6.0 (1 
 
 ### Lighter
 
-- Every dependency but TypeSafe's SDK is in the build: an install is 2 packages where it was 43, and the package is 547 kB where it was 1,361 kB. (#24, #42, #46)
+- Every dependency but TypeSafe's SDK is in the build: an install is 2 packages where it was 43, and the package is 552 kB where it was 1,361 kB. (#24, #42, #46)
 - Kev models start with a 512-token ubatch: 71% less server memory, with the same answers. (#26)
 - The local server's log no longer grows with every ask. (#42)
 
