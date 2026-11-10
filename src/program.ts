@@ -18,7 +18,7 @@ import { resolveKey, storeKey } from "./key.js";
 import { cacheFromEnv, findRepeat, jevelryHome, logAsk, logStateFromEnv, readLog, recordOutcome } from "./log.js";
 import { type AskDocument, EXIT, EXIT_CASES_FAILED, type ErrorBody, type ErrorDocument, PROTOCOL, type RunReport } from "./protocol.js";
 import { type Call, dispatcherOf, execute, logRun, planCall } from "./run.js";
-import { type QuestionReport, type SpeedReport, renderReport, renderSpeed, report, speed } from "./report.js";
+import { type QuestionReport, type SpeedReport, measuredSpeed, renderReport, renderSpeed, report, speed } from "./report.js";
 import { findRunningServers, serverModels, stopServerAndWait } from "./server.js";
 import { type SetupIO, installLocal, useServer, useTypesafe } from "./setup.js";
 
@@ -635,6 +635,10 @@ export function buildProgram(): Command {
           if (!opts.json) {
             for (const s of await findRunningServers()) process.stdout.write(`Already running here: ${s.model} at ${s.url}; jevelry install --local-url ${s.url} uses it with no download\n`);
             process.stdout.write(renderTable(choices, machine));
+            // The s/question column is worked out from another model's published numbers. Once a model has answered here, what it did is said too.
+            for (const m of measuredSpeed(await readLog(home()))) {
+              process.stdout.write(`Measured on this machine: ${m.model} read ${Math.round(m.tokens_per_s)} prompt tokens a second over ${m.asks} warm asks, about ${(0.05 + 500 / m.tokens_per_s).toFixed(1)} s for a question of 500; the s/question column is an estimate\n`);
+            }
             return;
           }
           out(choices.map((c) => ({

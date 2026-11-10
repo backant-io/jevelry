@@ -189,6 +189,27 @@ export function speed(lines: LogLine[], filter: Filter = {}): SpeedReport[] {
   return rows.sort((a, b) => a.jevel.localeCompare(b.jevel) || a.model.localeCompare(b.model));
 }
 
+/**
+ * What each local model actually did on this machine: input tokens a second over its warm asks, whatever jevel
+ * they were for. Hosted models answer over a network, cold asks carry a load, and a copy from the log took no
+ * model time: none of them says how fast the model is here.
+ */
+export function measuredSpeed(lines: LogLine[]): Array<{ model: string; asks: number; tokens_per_s: number }> {
+  const totals = new Map<string, { asks: number; tokens: number; ms: number }>();
+  for (const line of lines) {
+    if (line.kind !== "ask" || typeof line.ms !== "number" || line.model === null || !line.model.startsWith("local/") || line.cold === true || line.cached_from !== undefined) continue;
+    let total = totals.get(line.model);
+    if (!total) {
+      total = { asks: 0, tokens: 0, ms: 0 };
+      totals.set(line.model, total);
+    }
+    total.asks += 1;
+    total.tokens += line.usage?.input_tokens ?? 0;
+    total.ms += line.ms;
+  }
+  return [...totals].filter(([, t]) => t.ms > 0 && t.tokens > 0).map(([model, t]) => ({ model, asks: t.asks, tokens_per_s: (t.tokens * 1000) / t.ms })).sort((a, b) => a.model.localeCompare(b.model));
+}
+
 const SPEED_COLUMNS = ["jevel", "model", "asks", "p50 ms", "p95 ms", "tokens/s", "cold", "cold p50 ms"];
 
 export function renderSpeed(rows: SpeedReport[]): string {

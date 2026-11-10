@@ -88,6 +88,19 @@ async function configuredLocal(home: string): Promise<LocalModel> {
 describe("jevelry models --local", () => {
   // A too-big model crashed this machine's GPU: the list a person picks from must say a 27B won't fit
   // on a 24 GB M4 Pro and put the model that runs well at the top, where Enter takes it.
+  // The table's speed is an estimate from another model's published numbers. A model that has answered on this machine has a measured one.
+  it("says under the table what a local model actually did on this machine, from the log", async () => {
+    const { home, env } = fixture();
+    const ask = (id: string, ms: number, tokens: number): string =>
+      JSON.stringify({ kind: "ask", id, at: "2026-11-10T10:00:00.000Z", jevel: { name: "ticket-triage", version: 3 }, model: "local/vllm-d3-nano-Q8_0", state_hash: "sha256:s", answers: {}, usage: { input_tokens: tokens, output_tokens: 0 }, ms, cwd: "/w" });
+    writeFileSync(join(home, "log.jsonl"), `${[ask("a", 700, 1160), ask("b", 550, 872)].join("\n")}\n`);
+    const r = await run(["models", "--local"], env);
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain("Measured on this machine: local/vllm-d3-nano-Q8_0 read 1626 prompt tokens a second over 2 warm asks, about 0.4 s for a question of 500; the s/question column is an estimate");
+    // Without a timed local ask there is nothing measured to say.
+    const none = fixture();
+    expect((await run(["models", "--local"], none.env)).stdout).not.toContain("Measured on this machine");
+  });
   it("ranks the models for a 24 GB M4 Pro: the 27B rows won't fit and vllm-d3-flash Q8_0 runs well first", async () => {
     const { env } = fixture();
     const r = await run(["models", "--local"], env);
