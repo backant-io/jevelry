@@ -170,12 +170,12 @@ When you find out whether the ticket above was really urgent, you record it agai
     npx jevelry outcome <log_id> urgent yes
     npx jevelry report --jevel ticket-triage
 
-    jevel          question     asks  act  mark  fall_back  outcomes  agree(act)  agree(mark)  certainty
-    ticket-triage  frustration  1     0    1     0          0         -           -            0.64
-    ticket-triage  team         1     1    0     0          0         -           -            1.00
-    ticket-triage  urgent       1     1    0     0          1         100%        -            0.98
+    jevel          question     asks  act  mark  fall_back  outcomes  agree(act)  agree(mark)  certainty  overconfident
+    ticket-triage  frustration  1     0    1     0          0         -           -            0.64       -
+    ticket-triage  team         1     1    0     0          0         -           -            1.00       -
+    ticket-triage  urgent       1     1    0     0          1         100%        -            0.98       -2 pts
 
-`agree(act)` is the share of `act` decisions that matched reality, and that is the number you move a threshold by. A question that agrees 95% of the time at `act: 0.85` can probably come down; one that agrees 70% of the time goes up or gets rewritten.
+`agree(act)` is the share of `act` decisions that matched reality, and that is the number you move a threshold by. `overconfident` is how far the model's certainty ran ahead of how often a person agreed, over the answers that were reviewed: `+20 pts` is a model that was sure 87% of the time and right 67%, and a threshold on it lets through more wrong answers than its number says. A question that agrees 95% of the time at `act: 0.85` can probably come down; one that agrees 70% of the time goes up or gets rewritten.
 
 ## When it fails
 

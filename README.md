@@ -556,12 +556,12 @@ Every ask goes into `$JEVELRY_HOME/log.jsonl` with its answers, its decisions an
     npx jevelry outcome <log_id> urgent yes
     npx jevelry report --jevel ticket-triage
 
-    jevel          question     asks  act  mark  fall_back  outcomes  agree(act)  agree(mark)  certainty
-    ticket-triage  frustration  1     0    1     0          0         -           -            0.64
-    ticket-triage  team         1     1    0     0          0         -           -            1.00
-    ticket-triage  urgent       1     1    0     0          1         100%        -            0.98
+    jevel          question     asks  act  mark  fall_back  outcomes  agree(act)  agree(mark)  certainty  overconfident
+    ticket-triage  frustration  1     0    1     0          0         -           -            0.64       -
+    ticket-triage  team         1     1    0     0          0         -           -            1.00       -
+    ticket-triage  urgent       1     1    0     0          1         100%        -            0.98       -2 pts
 
-`agree(act)` is how often `act` was right, and that is the number you move a threshold by. For a question that repeats over a list, the question name carries the index, so you write `same_as[0]`.
+`agree(act)` is how often `act` was right, and that is the number you move a threshold by. `overconfident` is how far the model's certainty ran ahead of how often a person agreed, over the answers that were reviewed: `+20 pts` is a model that was sure 87% of the time and right 67%, and a threshold on it lets through more wrong answers than its number says. For a question that repeats over a list, the question name carries the index, so you write `same_as[0]`.
 
 Every answered ask is logged with how long the model took, and `report --speed` reads that back per jevel and model:
 
@@ -737,7 +737,7 @@ npm run test:live -- tests/live/jevels.test.ts
 
 `npm run scoreboard` writes the numbers each change is judged on into `scoreboard/<date>-<commit>.json`: the CLI's start-up next to bare Node, the size and time of an install, how long logged asks took per jevel and model, a running model server's memory next to jevelry's estimate for it, and, with `--eval`, every jevel's cases. It never starts a model, it asks one only with `--eval`, and it lists what it could not measure.
 
-567 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. The local-model tests among them use a fake `llama-server`, a fake jevd, a fake Homebrew and a fake Hugging Face, so no test downloads a model or starts a real server, and they check that a 27B model is never offered as runnable on a 24 GB Mac. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
+568 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. The local-model tests among them use a fake `llama-server`, a fake jevd, a fake Homebrew and a fake Hugging Face, so no test downloads a model or starts a real server, and they check that a 27B model is never offered as runnable on a 24 GB Mac. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## License
 

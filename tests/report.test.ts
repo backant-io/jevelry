@@ -46,6 +46,8 @@ describe("report", () => {
       agreement_act: 0.5,
       agreement_mark: 1,
       mean_certainty: (0.95 + 0.91 + 0.75) / 3,
+      // Sure 87% of the time over the three reviewed answers, right in two of them.
+      overconfidence: expect.closeTo(0.87 - 2 / 3, 6),
     });
     const s = rows.find((r) => r.jevel === "wake-gate" && r.question === "same_as");
     expect(s?.asks).toBe(3);
@@ -62,6 +64,16 @@ describe("report", () => {
     const { decision, ...rest } = old.answers.worth_a_turn as { decision: string };
     old.answers = { worth_a_turn: { ...rest, verdict: decision } as unknown as AskLine["answers"][string] };
     expect(report([old])[0]?.decisions).toEqual({ act: 0, mark: 1, fall_back: 0 });
+  });
+  // Agreement alone does not say whether a threshold can be trusted: a model that is 90% sure and 70% right
+  // acts on answers it should have marked. The gap is that, in points, over the answers a person reviewed.
+  it("says by how many points the model's certainty ran ahead of how often it was right, and nothing without outcomes", () => {
+    const rows = report(lines);
+    expect(rows.find((r) => r.jevel === "wake-gate" && r.question === "same_as")?.overconfidence).toBeNull();
+    const text = renderReport(rows);
+    expect(text.split("\n")[0]).toMatch(/certainty\s+overconfident$/);
+    expect(text.split("\n").find((l) => l.includes("worth_a_turn") && l.includes("wake-gate"))).toMatch(/0\.87\s+\+20 pts$/);
+    expect(text.split("\n").find((l) => l.includes("same_as") && l.includes("wake-gate"))).toMatch(/\s-$/);
   });
   it("renders a table and a sentence for an empty log", () => {
     const text = renderReport(report(lines));
