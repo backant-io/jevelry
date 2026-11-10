@@ -234,6 +234,12 @@ export function renderTable(choices: Choice[], m: Machine): string {
   const widths = header.map((h, i) => Math.max(i === 0 ? 3 : h.length, ...rows.map((row) => row[i]?.length ?? 0)));
   const line = (cells: string[]): string => cells.map((cell, i) => (right.has(i) ? cell.padStart(widths[i] ?? 0) : cell.padEnd(widths[i] ?? 0))).join("  ").trimEnd();
   const notes = choices.filter((c) => c.model.note).map((c) => `${c.model.name}: ${c.model.note}`);
+  // The fit is judged against what the GPU may use at most. A model that needs more than is free now loads into memory other programs hold.
+  const free = m.freeBytes;
+  const crowded = free === undefined ? [] : choices.filter((c) => c.fit !== "won't fit" && c.need > free);
+  const room = free !== undefined && crowded.length > 0
+    ? ["", `About ${gb(free)} of memory is free right now. These need more, so close other programs before you install one: ${crowded.map((c) => c.model.id).join(", ")}`]
+    : [];
   return [
     machine,
     `Ranked by the ${INDEX.name}, where hosted Jev 1.14 scores ${INDEX.hosted.toFixed(1)}`,
@@ -241,5 +247,6 @@ export function renderTable(choices: Choice[], m: Machine): string {
     line(header),
     ...rows.map(line),
     ...(notes.length > 0 ? ["", ...notes] : []),
+    ...room,
   ].join("\n") + "\n";
 }
