@@ -1,6 +1,6 @@
 ---
 name: task-difficulty
-version: 3
+version: 4
 model: jev-1.13.0
 state:
   required: [task]
@@ -38,15 +38,8 @@ questions:
     criteria:
       true:
         what: "The description or the acceptance names a field where a generalist would be guessing"
-        examples:
-          - "rotate the KMS keys that encrypt customer data"
-          - "rewrite the replication setup of the primary database"
-          - "the change needs sign-off under the payment card rules"
       false:
         what: "A competent generalist can finish it with what `task` says"
-        examples:
-          - "add a --json flag to the export command"
-          - "cache the product list in memory or in the Redis the team already runs"
     thresholds: { act: 0.85, mark: 0.7 }
   well_specified:
     type: noul
@@ -57,16 +50,8 @@ questions:
     criteria:
       true:
         what: "The acceptance names a check somebody can run or see to know the task is done"
-        examples:
-          - "export --json prints a JSON array with one object per row"
-          - "p95 of the product list under 200 ms in the load test"
-          - "a unit test covers both paths"
       false:
         what: "The acceptance is empty, restates the title, or leaves done to somebody's taste or approval"
-        examples:
-          - "onboarding feels better"
-          - "security is happy with it"
-          - "done when done"
     thresholds: { act: 0.8, mark: 0.6 }
 ---
 # task-difficulty
