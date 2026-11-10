@@ -8,7 +8,9 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import type { LocalModel } from "../src/config.js";
 import { GIB, budgetBytes, realMachine } from "../src/estimate.js";
-import { SERVER_FILE, buildOf, ensureServer, health, launchArgs, llamaServerPath, localFetch, serverBuild, startServer, stopServer, stopServerAndWait, takeOver } from "../src/server.js";
+import { ask } from "../src/ask.js";
+import { localClient } from "../src/decide.js";
+import { SERVER_FILE, buildOf, ensureServer, health, launchArgs, llamaServerPath, localFetch, localRequest, serverBuild, sleeping, startServer, stopServer, stopServerAndWait, takeOver } from "../src/server.js";
 import { FAKE_LLAMA, killFakes, sandboxEnv, sandboxPath } from "./fixtures/sandbox.js";
 
 const freePort = (): Promise<number> => new Promise((resolve) => {
@@ -433,5 +435,59 @@ describe("localFetch", () => {
     const started = Date.now();
     await expect(localFetch(home, local, env)(`http://127.0.0.1:${local.port}/v1/models`, { signal: AbortSignal.timeout(1000) })).rejects.toThrow(/aborted due to timeout/);
     expect(Date.now() - started).toBeLessThan(2500);
+  });
+});
+
+// Node sets its fetch up the first time a process uses it, and that takes about 30 ms: measured, 32 ms for the first
+// call against 4 ms for the same call through node:http. A jevelry command is a new process for every ask, so on the
+// way to its own model server it does not use fetch at all.
+describe("the way to jevelry's own model server", () => {
+  it("asks, checks health and reads the sleep state without Node's fetch", async () => {
+    const { home, local, env } = await fixture({ FAKE_LLAMA_LOAD_MS: "50" });
+    const real = globalThis.fetch;
+    globalThis.fetch = (() => { throw new Error("fetch was used on the way to the local model server"); }) as typeof fetch;
+    try {
+      const result = await ask({ client: localClient(home, local, env), state: "Help!", questions: { urgent: { type: "noul", instructions: "Is it urgent?" } } as never });
+      expect(result).toMatchObject({ ok: true, document: { model: local.alias, usage: { input_tokens: expect.any(Number) } } });
+      expect(await health(local.port)).toBe("ok");
+      expect(await sleeping(local.port)).toBe(false);
+    } finally {
+      globalThis.fetch = real;
+    }
+  });
+  it("answers with what the SDK reads of a response: the status, a header by any case, and the body as text or JSON", async () => {
+    const server = createHttpServer((req, res) => {
+      let body = "";
+      req.on("data", (chunk) => { body += chunk; });
+      req.on("end", () => {
+        res.writeHead(req.url === "/missing" ? 404 : 200, { "content-type": "application/json", "x-request-id": "r-1" });
+        res.end(JSON.stringify({ method: req.method, sent: body, header: req.headers["x-test"] ?? null }));
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const port = (server.address() as { port: number }).port;
+    try {
+      const ok = await localRequest(`http://127.0.0.1:${port}/v1/systemone`, { method: "POST", headers: { "X-Test": "yes" }, body: '{"a":1}' });
+      expect([ok.status, ok.ok, ok.headers.get("Content-Type"), ok.headers.get("x-request-id"), ok.headers.get("absent")]).toEqual([200, true, "application/json", "r-1", null]);
+      expect(await ok.json()).toEqual({ method: "POST", sent: '{"a":1}', header: "yes" });
+      expect(ok.clone().body).toBeUndefined();
+      const missing = await localRequest(`http://127.0.0.1:${port}/missing`);
+      expect([missing.status, missing.ok]).toEqual([404, false]);
+      expect(JSON.parse(await missing.text())).toMatchObject({ method: "GET" });
+    } finally {
+      await new Promise((resolve) => server.close(resolve));
+    }
+  });
+  it("gives up when its signal fires, and says a refused connection is one", async () => {
+    const hang = createHttpServer(() => { /* never answers */ });
+    await new Promise<void>((resolve) => hang.listen(0, "127.0.0.1", resolve));
+    const port = (hang.address() as { port: number }).port;
+    try {
+      await expect(localRequest(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(100) })).rejects.toMatchObject({ name: "TimeoutError" });
+    } finally {
+      hang.closeAllConnections();
+      await new Promise((resolve) => hang.close(resolve));
+    }
+    await expect(localRequest(`http://127.0.0.1:${await freePort()}/`)).rejects.toMatchObject({ code: "ECONNREFUSED" });
   });
 });
