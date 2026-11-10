@@ -64,6 +64,7 @@ Each jevel's body says what its state looks like and its `example.json` is a sta
 | `npx jevelry list` | the jevels jevelry can find |
 | `npx jevelry show <jevel>` | the resolved frontmatter and the body |
 | `npx jevelry check <jevel>` | refuses a jevel the API would refuse and warns about questions Jev handles poorly |
+| `npx jevelry eval <jevel> [--model <id>] [--json]` | asks every case in the jevel's `cases.json` and counts the expected answers with a 95% interval; exits 8 when one is not; one ask per case, nothing logged |
 | `npx jevelry ask <jevel> --state @file` | asks every question in the jevel about the state, prints one JSON document |
 | `npx jevelry ask --questions '<json>' --state '<json>'` | a one-off ask with the API's question shape |
 | `npx jevelry run <jevel> --state @file [--yes] [--dry-run]` | asks the jevel and runs the command of the option Jev picked: `act` runs it, `mark` asks first, `fall_back` runs the jevel's `fall_back` |
@@ -137,6 +138,6 @@ switch (d.team?.decision) {
 
 - Keep the key out of your output, your logs and every commit. The SDK reads `TYPESAFE_API_KEY`, and jevelry also looks in the keychain and in `~/.jevelry/env`.
 - Questions and thresholds stay in `./jevels/<name>/JEVEL.md`, in one place, so the person you work with reviews them before they merge. Say in your summary which jevel you wrote and what its thresholds are.
-- Run `check` before `ask`, and prove the jevel with its `cases.json` (an obvious yes, an obvious no, an unsure one) before you wire a decision into anything.
+- Run `check` before `ask`, and prove the jevel with its `cases.json` (an obvious yes, an obvious no, an unsure one) by running `eval` before you wire a decision into anything.
 - Pin `model` to a concrete version and bump `version` when you change a question.
 - Reference: https://docs.typesafe.ai for Jev itself; `references/writing-jevels.md` and `references/protocol.md` in this skill for the file format and the document.

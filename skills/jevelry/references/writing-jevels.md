@@ -191,12 +191,19 @@ To ask every case in this repository against the real API, with the key read fro
 
     TYPESAFE_API_KEY=... npm run test:live -- tests/live/jevels.test.ts
 
-In your own project you ask each case the way the suite does and read the answers next to `expect`:
+In your own project `eval` asks each case the way the suite does and holds every answer to its `expect`:
 
-    jq -c '.[]' jevels/<name>/cases.json | while read -r c; do
-      printf '%s\n' "$c" | jq -r .name
-      npx jevelry ask <name> --state "$(printf '%s\n' "$c" | jq -c .state)" | jq -c '.answers | map_values({choice, yes, score, decision})'
-    done
+    npx jevelry eval <name>
+
+    question     checks  right  accuracy (95%)  act  wrong at act
+    frustration  4       4      100% (51-100%)  3/4  0
+    team         4       3      75% (30-95%)    3/3  1
+    urgent       4       4      100% (51-100%)  3/4  0
+
+    4 cases, 12 checks, 11 right against jev-1.13.0; median 405 ms per case
+    wrong: "the export fails for one customer": team expected technical, got billing at act
+
+It exits 8 when an answer is not the expected one, so a script can wait on it, and `--json` gives every case and check. The interval is there because a few cases prove little: three right of three still allows an accuracy of 44%. `wrong at act` counts the answers that were wrong and confident, the kind your code would have acted on. `eval` sends one ask per case, so on hosted Jev it costs what that many asks cost, and it writes nothing to the log.
 
 A clear case that Jev gets wrong, or gets right at `fall_back`, means the criteria or the state are wrong, and you rewrite them. Rewriting the question usually beats lowering the threshold. You move an expectation only when the expectation itself was the mistake, and you say so in the commit.
 

@@ -1,0 +1,22 @@
+[
+  {
+    "name": "a weekly digest and one candidate about the same outage",
+    "state": {
+      "employee": { "title": "COO", "authority": ["read_readings"] },
+      "events": [{ "kind": "note", "actor": "ops", "subject": "weekly digest", "summary": "nothing to do this week" }],
+      "candidates": [{ "id": "c1", "summary": "the same outage, filed an hour earlier" }],
+      "filing": { "summary": "checkout outage on Tuesday" }
+    },
+    "expect": { "worth_a_turn": false, "depth": 0, "same_as[0]": true }
+  },
+  {
+    "name": "a weekly digest and no candidates",
+    "state": {
+      "employee": { "title": "COO", "authority": ["read_readings"] },
+      "events": [{ "kind": "note", "actor": "ops", "subject": "weekly digest", "summary": "nothing to do this week" }],
+      "candidates": [],
+      "filing": { "summary": "checkout outage on Tuesday" }
+    },
+    "expect": { "worth_a_turn": false }
+  }
+]

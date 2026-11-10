@@ -16,7 +16,7 @@ const NO_JEVEL = "(questions)";
 /** Log lines written before protocol 2 carry `verdict` where newer ones carry `decision`; the log on disk holds both. */
 export const recordedDecision = (answer: Answer | FallBackAnswer): Decision => (answer.decision ?? (answer as { verdict?: Decision }).verdict) as Decision;
 /** `same_as[3]` reports under `same_as`. */
-const baseName = (name: string): string => name.replace(/\[\d+\]$/, "");
+export const baseName = (name: string): string => name.replace(/\[\d+\]$/, "");
 
 interface Tally {
   asks: number;
@@ -107,7 +107,7 @@ export function renderReport(rows: QuestionReport[]): string {
   return tableOf(COLUMNS, table);
 }
 
-function tableOf(columns: string[], table: string[][]): string {
+export function tableOf(columns: string[], table: string[][]): string {
   const widths = columns.map((c, i) => Math.max(c.length, ...table.map((row) => row[i]?.length ?? 0)));
   const line = (cells: string[]): string => cells.map((cell, i) => cell.padEnd(widths[i] ?? 0)).join("  ").trimEnd();
   return [line(columns), ...table.map(line)].join("\n") + "\n";
@@ -125,7 +125,7 @@ export interface SpeedReport {
 }
 
 /** Nearest rank: the smallest duration that `percent` of them do not exceed, so it is always one that was measured. */
-const percentile = (sorted: number[], percent: number): number => sorted[Math.max(Math.ceil((percent * sorted.length) / 100), 1) - 1] as number;
+export const percentile = (sorted: number[], percent: number): number => sorted[Math.max(Math.ceil((percent * sorted.length) / 100), 1) - 1] as number;
 
 /**
  * How long answered asks took, per jevel and model: a hosted and a local model answer at different

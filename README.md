@@ -245,6 +245,7 @@ Every ask then sends the server's own model whatever the jevel pins, and no `x-j
 | `jevelry list` | every jevel jevelry can find, with its folder; the first folder wins |
 | `jevelry show <jevel>` | the resolved frontmatter as JSON, then the body, then `example.json` when the jevel has one |
 | `jevelry check <jevel>` | refuses a defective jevel with exit 2 and warns about questions Jev handles poorly |
+| `jevelry eval <jevel>` | asks every case in the jevel's `cases.json` and counts the expected answers, with exit 8 when one is not |
 | `jevelry types` | writes a TypeScript declaration so `jevel(name).decide()` returns each jevel's own answer types |
 | `jevelry models` | the model names your account may send, from `GET /v1/models`; `--local` ranks the decision models this machine can run |
 | `jevelry stop` | stops the local model server jevelry started, and any it did not record, and waits until they have exited; a Jev server jevelry did not start keeps running |
@@ -289,6 +290,14 @@ printf '%s\n' '{"id":"a","jevel":"ticket-triage","state":{"ticket":{"subject":"C
 | Flag | What it does |
 |---|---|
 | `--note <text>` | a sentence kept with the outcome |
+
+### `eval`
+
+| Flag | What it does |
+|---|---|
+| `--model <id>` | model id, overriding the jevel's pin and `JEVELRY_MODEL` |
+| `--jevels <dir>` | a jevels directory searched first, repeatable |
+| `--json` | the whole result, every case and check in it |
 
 ### `report`
 
@@ -496,7 +505,19 @@ Seventeen ship with the package, each with an `example.json` to ask it with and 
 
 jevelry finds jevels in `--jevels <dir>`, then `JEVELRY_JEVELS`, then `./jevels`, then `$JEVELRY_HOME/jevels`, then the ones that ship, and the first one with the name wins. To write your own, copy the nearest folder into `./jevels`, change the `name`, rewrite the questions and run `npx jevelry check <name>` until it prints 0 warnings. `check` refuses what the API would refuse (more than 255 options, a threshold outside 0 to 1, a question with no instructions) and warns about a yes/no question whose "yes" means no, a double negative, options that carry different fields and a model that is not pinned. The whole method is in [skills/jevelry/references/writing-jevels.md](skills/jevelry/references/writing-jevels.md).
 
-Then write a `cases.json` with at least three states from your own data: one clear one way, one clear the other way and one you would ask a colleague about. The clear cases should land on the right answer, and the unclear one should stay below `act`.
+Then write a `cases.json` with at least three states from your own data: one clear one way, one clear the other way and one you would ask a colleague about. The clear cases should land on the right answer, and the unclear one should stay below `act`. `eval` asks every case and holds each answer to that:
+
+    npx jevelry eval ticket-triage
+
+    question     checks  right  accuracy (95%)  act  wrong at act
+    frustration  4       4      100% (51-100%)  3/4  0
+    team         4       3      75% (30-95%)    3/3  1
+    urgent       4       4      100% (51-100%)  3/4  0
+
+    4 cases, 12 checks, 11 right against jev-1.13.0; median 405 ms per case
+    wrong: "the export fails for one customer": team expected technical, got billing at act
+
+It exits 8 when an answer is not the expected one, so a script can wait on it. The interval is there because a few cases prove little: four right of four still allows an accuracy of 51%. `act` is how many of the clear answers were confident, and `wrong at act` counts the answers that were wrong and confident, the kind your code would have acted on. `eval` sends one ask per case, so on hosted Jev it costs what that many asks cost, and it writes nothing to the log. The numbers above show the layout and are not a measurement.
 
 ## Decisions and the log
 
@@ -642,6 +663,7 @@ jevelry starts the local server as `llama-server -m <model> --host 127.0.0.1 --p
 | 5 | over the token budget, and no request was made |
 | 6 | the network, TypeSafe's servers, or a local model server that cannot start or answer, with the reason |
 | 7 | TypeSafe answered a shape this build cannot read |
+| 8 | `jevelry eval` only: every case was asked, and at least one answer was not the expected one |
 | 9 | `jevelry run` only: Jev marked the call and nobody confirmed it, so the command stayed put |
 
 When `jevelry run` runs a command, it exits with that command's exit code.
@@ -707,7 +729,7 @@ npm run test:live -- tests/live/jevels.test.ts
 
 ## How do we know you can trust it
 
-526 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. The local-model tests among them use a fake `llama-server`, a fake jevd, a fake Homebrew and a fake Hugging Face, so no test downloads a model or starts a real server, and they check that a 27B model is never offered as runnable on a 24 GB Mac. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
+541 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. The local-model tests among them use a fake `llama-server`, a fake jevd, a fake Homebrew and a fake Hugging Face, so no test downloads a model or starts a real server, and they check that a 27B model is never offered as runnable on a 24 GB Mac. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## License
 

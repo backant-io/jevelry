@@ -13,9 +13,10 @@ import { installSkill, knownAgents, promptForKey, unknownAgents, whereToPutTheKe
 import { JevelError, checkState, discoveryDirs, expandQuestions, isEntry, listJevels, loadJevel } from "./jevel.js";
 import { defaultClient, fallenAnswers, renderTypes } from "./decide.js";
 import { type Machine, budgetBytes, detectMachine } from "./estimate.js";
+import { type EvalResult, evaluate, readCases, renderEval } from "./eval.js";
 import { resolveKey, storeKey } from "./key.js";
 import { jevelryHome, logAsk, logStateFromEnv, readLog, recordOutcome } from "./log.js";
-import { type AskDocument, EXIT, type ErrorBody, type ErrorDocument, PROTOCOL, type RunReport } from "./protocol.js";
+import { type AskDocument, EXIT, EXIT_CASES_FAILED, type ErrorBody, type ErrorDocument, PROTOCOL, type RunReport } from "./protocol.js";
 import { type Call, dispatcherOf, execute, logRun, planCall } from "./run.js";
 import { type QuestionReport, type SpeedReport, renderReport, renderSpeed, report, speed } from "./report.js";
 import { findRunningServers, serverModels, stopServerAndWait } from "./server.js";
@@ -529,6 +530,33 @@ export function buildProgram(): Command {
       } catch (error) {
         failCommand(error);
       }
+    });
+
+  program
+    .command("eval <jevel>")
+    .description("ask every case in the jevel's cases.json and count the expected answers (exit 8 when one is not)")
+    .option("--model <id>", "model id, overriding the jevel's pin and JEVELRY_MODEL")
+    .option("--jevels <dir>", "a jevels directory searched first (repeatable)", (d: string, all: string[]) => [...all, d], [] as string[])
+    .option("--json", "the whole result, every case and check in it")
+    .action(async (name: string, opts: { model?: string; jevels: string[]; json?: boolean }) => {
+      let result: EvalResult;
+      try {
+        const { jevel, warnings } = loadJevel(name, dirs(opts.jevels));
+        for (const warning of warnings) say(`warning: ${warning}`);
+        const cases = readCases(join(dirname(jevel.path), "cases.json"));
+        const client = defaultClient(home());
+        // Never logged: a case is a rehearsal, and in the log it would count in the report next to the real decisions.
+        result = await evaluate(cases, (state) => ask({ client, state: state as never, jevel, ...(opts.model ? { model: opts.model } : {}) }));
+      } catch (error) {
+        failCommand(error);
+      }
+      if (!result.ok) {
+        say(`case "${result.case}": ${result.error.message}`);
+        process.exit(result.error.exit);
+      }
+      if (opts.json) out(result.evaluation);
+      else process.stdout.write(renderEval(result.evaluation));
+      if (result.evaluation.right < result.evaluation.checks) process.exit(EXIT_CASES_FAILED);
     });
 
   program

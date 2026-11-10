@@ -211,6 +211,47 @@ describe("ask --batch", () => {
   });
 });
 
+describe("eval", () => {
+  const logLines = (): number => {
+    try {
+      return readFileSync(join(home, ".jevelry", "log.jsonl"), "utf8").trim().split("\n").length;
+    } catch {
+      return 0;
+    }
+  };
+  // A case is a rehearsal, not a decision: logged, it would count in the report next to the real ones.
+  it("asks every case, prints accuracy with its interval, exits 0 when all are right and logs nothing", async () => {
+    const before = logLines();
+    const r = await run(["eval", "wake-gate"]);
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toMatch(/worth_a_turn\s+2\s+2\s+100% \(34-100%\)\s+2\/2\s+0/);
+    expect(r.stdout).toContain("2 cases, 4 checks, 4 right against jev-1.13.0");
+    const doc = JSON.parse((await run(["eval", "wake-gate", "--json"])).stdout) as { checks: number; right: number; cases: Array<{ name: string; ms: number }> };
+    expect([doc.checks, doc.right, doc.cases.length]).toEqual([4, 4, 2]);
+    expect(doc.cases[0]?.ms).toBeTypeOf("number");
+    expect(logLines()).toBe(before);
+  });
+  // The exit is what lets a release wait on the cases: a table nobody reads gates nothing.
+  it("exits 8 and names the case when an answer is not the expected one", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "jevelry-eval-"));
+    mkdirSync(join(dir, "wake-gate"));
+    writeFileSync(join(dir, "wake-gate", "JEVEL.md"), readFileSync(join(FIXTURES, "wake-gate", "JEVEL.md"), "utf8"));
+    const cases = JSON.parse(readFileSync(join(FIXTURES, "wake-gate", "cases.json"), "utf8")) as Array<{ name: string; expect: Record<string, unknown> }>;
+    cases[1]!.expect = { worth_a_turn: true };
+    writeFileSync(join(dir, "wake-gate", "cases.json"), JSON.stringify(cases));
+    const r = await run(["eval", "wake-gate", "--jevels", dir]);
+    expect(r.status).toBe(8);
+    expect(r.stdout).toContain('wrong: "a weekly digest and no candidates": worth_a_turn expected true, got false at act');
+    expect(r.stdout).toContain("2 cases, 4 checks, 3 right");
+  });
+  it("exits 2 with one sentence for a jevel that has no cases.json", async () => {
+    const r = await run(["eval", "run-gate"]);
+    expect(r.status).toBe(2);
+    expect(r.stdout).toBe("");
+    expect(r.stderr).toMatch(/no cases\.json/);
+  });
+});
+
 describe("outcome and report", () => {
   it("records an outcome and reports agreement", async () => {
     const asked = JSON.parse((await run(["ask", "wake-gate", "--state", JSON.stringify(state)])).stdout) as { log_id: string };
