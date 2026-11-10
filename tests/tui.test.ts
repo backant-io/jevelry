@@ -60,6 +60,13 @@ const ALL: Filters = { decision: "all", jevel: null, noOutcome: false, failed: f
 const SIZE = { columns: 80, rows: 24 };
 const noop = (): void => undefined;
 const tick = (ms = 60) => new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * Waits until the screen shows `text`, however long the machine takes, up to `ms`. A fixed 200 ms after the key
+ * was too short twice on a busy machine: the queue still counted the mark that had just been reviewed.
+ */
+const shows = async (lastFrame: () => string | undefined, text: string, ms = 10000): Promise<void> => {
+  for (const end = Date.now() + ms; !(lastFrame() ?? "").includes(text) && Date.now() < end;) await tick(20);
+};
 const ENTER = "\r";
 const CTRL_P = "\u0010";
 const ESC = "\u001B";
@@ -207,7 +214,7 @@ describe("recording outcomes from the review queue", () => {
     stdin.write(ENTER);
     await tick(SETTLE);
     stdin.write("c");
-    await tick(200);
+    await shows(lastFrame, "1 marked decision to review");
     // One outcome per visit: the detail closes and the queue shows the next mark.
     expect(lastFrame()).toContain("1 marked decision to review");
     expect(lastFrame()).toContain("Saved: Jev was right on ticket-triage urgent");
@@ -222,7 +229,7 @@ describe("recording outcomes from the review queue", () => {
     stdin.write(DOWN);
     await tick();
     stdin.write(ENTER);
-    await tick(200);
+    await shows(lastFrame, "0 marked decisions to review");
     const recorded = await outcomesIn(home);
     expect(recorded.at(-1)).toMatchObject({ id: A.id, question: "frustration", outcome: "disagree", value: "2", note: null });
     expect(lastFrame()).toContain("0 marked decisions to review");
