@@ -205,15 +205,16 @@ describe("jevelry ask in local mode", () => {
   // Ctrl-C lands at any moment. Between starting the server and writing down which process it is, it
   // would leave a model loaded that nothing knows about: no stop finds it and the next ask loads another.
   it("leaves no server without a record when jevelry ask gets SIGINT around the spawn, 60 runs", async () => {
-    const once = async (atUs: number | null): Promise<{ recordedAtUs: number; orphans: number[]; signal: unknown }> => {
+    const once = async (atUs: number | null): Promise<{ recordedAtUs: number; orphans: number[]; signal: unknown; missed: boolean }> => {
       // The model sits outside the models folder, so only holding the signal can pass, not the stray check.
       const { home, env } = await fixture({ FAKE_LLAMA_LOAD_MS: "100", FAKE_LLAMA_LIFETIME_MS: "6000" });
       const record = join(home, SERVER_FILE);
       const t0 = process.hrtime.bigint();
       const sinceUs = (): number => Number(process.hrtime.bigint() - t0) / 1000;
       const child = spawn(process.execPath, ["bin/jevelry.js", "ask", "--questions", '{"q":{"type":"noul","instructions":"x"}}', "--state", '"x"'], { env, stdio: "ignore" });
-      const closed = new Promise((resolve) => child.on("close", (_code, signal) => resolve(signal)));
+      const closed = new Promise<[number | null, unknown]>((resolve) => child.on("close", (code, signal) => resolve([code, signal])));
       let recordedAtUs = -1;
+      let killedAt = 0;
       // Busy loops, not timers: the window between spawn and record is about a millisecond wide.
       if (atUs === null) {
         while (recordedAtUs < 0 && sinceUs() < 3e6) if (existsSync(record)) recordedAtUs = sinceUs();
@@ -221,9 +222,10 @@ describe("jevelry ask in local mode", () => {
         while (sinceUs() < atUs) {
           // Wait for the moment to interrupt.
         }
+        killedAt = Date.now();
         child.kill("SIGINT");
       }
-      const signal = await closed;
+      const [code, signal] = await closed;
       // A server spawned just before the signal needs a moment to start and write its line.
       await sleep(300);
       let named: unknown = null;
@@ -233,19 +235,39 @@ describe("jevelry ask in local mode", () => {
         // No record at all.
       }
       const orphans = liveFakes(join(home, "argv.ndjson")).map((f) => f.pid).filter((pid) => pid !== named);
+      // An ask that had answered and logged before the signal left was not interrupted at all: the machine got
+      // faster than it was when the moment was measured. A swallowed signal reads differently: the answer is
+      // logged after the signal left. Seen once at a load average near 300, where 9 of 60 runs were flagged.
+      let answeredAt = Number.NaN;
+      try {
+        answeredAt = Date.parse((JSON.parse(readFileSync(join(home, "log.jsonl"), "utf8").trim().split("\n").at(-1) ?? "") as { at: string }).at);
+      } catch {
+        // Nothing was logged: the ask was interrupted before it answered.
+      }
+      const missed = atUs !== null && code === 0 && signal === null && answeredAt <= killedAt;
       stopServer(home);
       killFakes(join(home, "argv.ndjson"));
-      return { recordedAtUs, orphans, signal };
+      return { recordedAtUs, orphans, signal, missed };
     };
     const times: number[] = [];
     for (let i = 0; i < 5; i++) times.push((await once(null)).recordedAtUs);
-    const center = times.sort((a, b) => a - b)[2]!;
+    let center = times.sort((a, b) => a - b)[2]!;
     expect(center).toBeGreaterThan(0);
     const wrong: string[] = [];
+    let misses = 0;
     for (let run = 0; run < 60; run++) {
       // From 8 ms before to 2 ms after the moment the record usually appears.
       const at = center - 8000 + Math.random() * 10000;
-      const { orphans, signal } = await once(at);
+      const { orphans, signal, missed } = await once(at);
+      if (missed) {
+        // The moment is measured again and this run aimed anew; a machine that never holds still is said, not passed.
+        misses += 1;
+        if (misses > 30) throw new Error("the machine's speed changes too much to aim a signal at the spawn: 30 runs found the ask already finished");
+        const again = (await once(null)).recordedAtUs;
+        if (again > 0) center = again;
+        run -= 1;
+        continue;
+      }
       if (orphans.length > 0) wrong.push(`SIGINT at ${Math.round(at)} us left pid ${orphans.join(", ")}`);
       // Held, never swallowed: Ctrl-C still ends the ask once the record is written.
       if (signal !== "SIGINT") wrong.push(`SIGINT at ${Math.round(at)} us ended the ask with ${String(signal)}`);
