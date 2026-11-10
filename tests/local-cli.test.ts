@@ -132,7 +132,7 @@ describe("jevelry models --local", () => {
     const rows = JSON.parse(r.stdout) as Array<{ id: string; name: string; fit: string; seconds_per_question: number | null }>;
     expect(rows[0]).toEqual({
       id: "vllm-d3-flash", repo: "ggml-org/vllm-d3-flash-GGUF", name: "vLLM-SR d3-flash 9B", quant: "Q8_0", file: "vllm-d3-flash-Q8_0.gguf",
-      download_bytes: expect.any(Number), need_bytes: expect.any(Number), fit: "runs well", score: 55.79,
+      download_bytes: expect.any(Number), need_bytes: expect.any(Number), fit: "runs well", score: 54.27,
       seconds_per_question: expect.any(Number), licence: "Apache-2.0", decision_type: "vllm-d3",
     });
     const big = rows.filter((row) => row.name.includes("27B"));

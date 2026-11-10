@@ -131,7 +131,9 @@ describe("launchArgs", () => {
     // lev gains the same way: on lev 4B the short prompts took 24% less time in a paired test and long states a third
     // of the time. lfm2-d1 does not: its server processed 21% fewer tokens and was no faster, so it keeps one slot.
     expect(slots("lev")).toEqual(["4", "-kvu"]);
-    for (const family of ["vllm-d3", "clef", "laya", "lfm2-d1", "lfm2-d1-omni", "openjev", "mystery-decider"]) expect(slots(family), family).toEqual(["1"]);
+    // lfm3-d1 shares nothing between slots: on Liquid d1 2B the server processed every token with four slots as with
+    // one, and all 267 answers were the same bytes.
+    for (const family of ["vllm-d3", "clef", "laya", "lfm2-d1", "lfm2-d1-omni", "lfm3-d1", "lfm3-d1-omni", "openjev", "mystery-decider"]) expect(slots(family), family).toEqual(["1"]);
   });
 });
 

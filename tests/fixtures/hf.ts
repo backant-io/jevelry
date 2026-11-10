@@ -32,11 +32,14 @@ export const ROWS: Record<string, Array<{ id: string; gguf: Record<string, unkno
     { id: "ggml-org/Clef-Flash-GGUF", gguf: { total: 8_950_000_000, architecture: "qwen35", decision_type: "clef" }, siblings: [f("Clef-Flash-Q8_0.gguf")], cardData: { license: "apache-2.0" } },
     { id: "ggml-org/vllm-d3-flash-for-testing-GGUF", gguf: { total: 8_950_000_000, architecture: "qwen35", decision_type: "vllm-d3" }, siblings: [f("vllm-d3-flash-for-testing-Q8_0.gguf")], cardData: { license: "apache-2.0" } },
     { id: "ggml-org/Mystery-GGUF", gguf: { total: 4_000_000_000, architecture: "mystery", decision_type: "mystery-decider" }, siblings: [f("Mystery-Q8_0.gguf")], cardData: { license: "apache-2.0" } },
+    { id: "ggml-org/d1-Omni-2B-GGUF", gguf: { total: 1_728_801_600, architecture: "lfm3", decision_type: "lfm3-d1-omni" }, siblings: [f("d1-Omni-2B-Q8_0.gguf")], cardData: { license: "other", license_name: "lfm1.0" } },
     // Only a 16-bit file: nothing jevelry offers.
     { id: "ggml-org/vllm-d3-nano-GGUF", gguf: { total: 2_000_000_000, architecture: "qwen35", decision_type: "vllm-d3" }, siblings: [f("vllm-d3-nano-F16.gguf")], cardData: { license: "apache-2.0" } },
   ],
   LiquidAI: [
     { id: "LiquidAI/d1-3B-GGUF", gguf: { total: 2_700_000_000, architecture: "lfm2", decision_type: "lfm2-d1" }, siblings: [f("d1-3B-Q8_0.gguf"), f("d1-3B-Q4_K_M.gguf")], cardData: { license: "other", license_name: "lfm1.0" } },
+    { id: "LiquidAI/d1-2B-GGUF", gguf: { total: 1_728_801_600, architecture: "lfm3", decision_type: "lfm3-d1" }, siblings: [f("d1-2B-Q8_0.gguf"), f("d1-2B-Q4_K_M.gguf")], cardData: { license: "other", license_name: "lfm1.0" } },
+    { id: "LiquidAI/d1-Omni-2B-GGUF", gguf: { total: 1_728_801_600, architecture: "lfm3", decision_type: "lfm3-d1-omni" }, siblings: [f("d1-Omni-2B-Q8_0.gguf")], cardData: { license: "other", license_name: "lfm1.0" } },
     // A chat model: no decision type at all.
     { id: "LiquidAI/LFM2-1.2B-GGUF", gguf: { total: 1_200_000_000, architecture: "lfm2" }, siblings: [f("LFM2-1.2B-Q8_0.gguf")], cardData: { license: "other", license_name: "lfm1.0" } },
   ],

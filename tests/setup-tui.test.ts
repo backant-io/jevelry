@@ -189,8 +189,8 @@ describe("setup with a model on this machine", () => {
       await toList(press);
       fills(lastFrame(), size);
       // The recommendation is the first row and the cursor is on it.
-      expect(lastFrame()).toMatch(/> vLLM-SR d3-flash 9B Q8_0\s+9\.6 GB · runs well · 55\.8 · 2\.1s/);
-      expect(lastFrame()).toMatch(/vLLM-SR d3 27B Q4_K_M\s+19\.9 GB · too big · 66\.3 · -/);
+      expect(lastFrame()).toMatch(/> vLLM-SR d3-flash 9B Q8_0\s+9\.6 GB · runs well · 54\.3 · 2\.1s/);
+      expect(lastFrame()).toMatch(/vLLM-SR d3 27B Q4_K_M\s+19\.9 GB · too big · 67\.2 · -/);
       expect(lastFrame()).toMatch(/OpenJev 27B Q4_K_M\s+19\.9 GB · too big · - · -/);
       expect(lastFrame()).not.toContain("won't fit");
       unmount();
@@ -261,7 +261,7 @@ describe("setup with a model on this machine", () => {
       expect(frame).toMatch(/download {2}about 9\.6 GB/);
       expect(frame).toMatch(/needs {5}11\.2 GB of about 17\.2 GB for models/);
       expect(frame).toMatch(/fit {7}runs well/);
-      expect(frame).toMatch(/score {5}55\.8, hosted Jev 61\.5 \(Jev Decision Index 0\.3\.2\)/);
+      expect(frame).toMatch(/score {5}54\.3, hosted Jev 60\.2 \(Jev Decision Index 0\.4\.1\)/);
       expect(frame).toMatch(/speed {5}about 2\.1 s\/question/);
       expect(frame).toMatch(/licence {3}Apache-2\.0/);
       expect(frame).toContain("enter install   esc back");

@@ -9,6 +9,7 @@ The first release with local models. Everything below was merged after 0.6.0 (1 
 - `jevelry install --local` sets up a Jev-compatible decision model on this machine: it picks one that fits, downloads and verifies it, starts llama.cpp's `llama-server` and asks it one question before it writes the config. `jevelry models --local` lists what fits, with size, memory and speed; `jevelry stop` takes the model out of memory; `install --local-url` uses a Jev server that already runs. (#20)
 - `models --local` and `install --local` say when a model needs more memory than is free right now, and `models --local` says when the Mac is in Low Power Mode, where a local model answers at about two thirds of its speed. (#29, #30, #50)
 - Once a model has answered, `models --local` shows its measured speed next to the estimate. (#45)
+- The model list ranks by the index's current edition, 0.4.1, and offers Liquid d1 2B and d1-Omni 2B, which on the shipped cases are as good as any small model measured, at 1.8 GB. A model two authors publish is listed once. (#62)
 - After a switch to another model, `install --local` offers to remove the previous model's file, and removes the folders made for it when they are empty. (#43, #51)
 - A state too long for the local model exits 5 with the advice to filter it. It exited 2 with llama-server's own words. (#56)
 
