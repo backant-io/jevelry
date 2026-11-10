@@ -136,7 +136,8 @@ export function speed(lines: LogLine[], filter: Filter = {}): SpeedReport[] {
   // ponytail: a local ask that waited for its model to load sits in the same percentiles as a warm one; split them once the log can tell the two apart.
   const groups = new Map<string, { ms: number[]; tokens: number }>();
   for (const line of lines) {
-    if (!wanted(line, filter) || typeof line.ms !== "number" || line.model === null) continue;
+    // An answer read from the log took no model time: counted, it would flatter the model's speed.
+    if (!wanted(line, filter) || typeof line.ms !== "number" || line.model === null || line.cached_from !== undefined) continue;
     const key = `${line.jevel?.name ?? NO_JEVEL}\n${line.model}`;
     let group = groups.get(key);
     if (!group) {

@@ -1,10 +1,10 @@
 import { homedir } from "node:os";
 import { type EntryType, TypeSafeClient } from "@typesafe-ai/sdk";
-import { SERVER_CLIENTS, ask, errorBody, stateHash } from "./ask.js";
+import { SERVER_CLIENTS, ask, errorBody, logFields, stateHash } from "./ask.js";
 import { type JevServer, type LocalModel, jevServer, localModel } from "./config.js";
 import { type Jevel, JevelError, type JevelQuestion, checkState, discoveryDirs, expandQuestions, isEntry, loadJevel } from "./jevel.js";
 import { resolveKey } from "./key.js";
-import { jevelryHome, logAsk, logStateFromEnv } from "./log.js";
+import { cacheFromEnv, findRepeat, jevelryHome, logAsk, logStateFromEnv } from "./log.js";
 import type { Answer, ChoiceAnswer, ErrorBody, FallBackAnswer, NoulAnswer, ScoreAnswer, Usage } from "./protocol.js";
 import { type Call, type RunArgs, dispatcherOf, execute, logRun, planCall } from "./run.js";
 import { localFetch, serverFetch } from "./server.js";
@@ -148,6 +148,8 @@ export interface JevelOptions {
   log?: boolean;
   /** Write the state itself into the log line, not only its hash. Default false, or `JEVELRY_LOG_STATE=1`. */
   logState?: boolean;
+  /** Answer an exact repeat of a local model's ask from the log instead of asking again. Default false, or `JEVELRY_CACHE=1`. */
+  cache?: boolean;
   /** Default: built the way the CLI builds it. */
   client?: TypeSafeClient;
 }
@@ -197,7 +199,8 @@ export function jevel<N extends string>(
     let result: Awaited<ReturnType<typeof ask>>;
     try {
       client ??= defaultClient(home);
-      result = await ask({ client, state: state as EntryType, jevel: loaded, ...(options.model ? { model: options.model } : {}) });
+      const repeat = (options.cache ?? cacheFromEnv(process.env)) ? { repeat: (hash: string, model: string) => findRepeat(home, hash, model) } : {};
+      result = await ask({ client, state: state as EntryType, jevel: loaded, ...(options.model ? { model: options.model } : {}), ...repeat });
     } catch (error) {
       result = { ok: false, error: errorBody(error) };
     }
@@ -212,7 +215,7 @@ export function jevel<N extends string>(
     const logged = (options.logState ?? logStateFromEnv(process.env)) ? { state } : {};
     if (result.ok) {
       const { model, state_hash, answers, usage } = result.document;
-      const logId = options.log === false ? null : await logAsk(home, { jevel: jevelRef, model, state_hash, ...logged, answers, usage, ms: result.ms }, warn);
+      const logId = options.log === false ? null : await logAsk(home, { jevel: jevelRef, model, state_hash, ...logged, answers, usage, ...logFields(result) }, warn);
       const decided = Object.fromEntries(Object.entries(answers).map(([q, a]) => [q, withAnswer(a)]));
       return { logId, error: null, model, usage, ...decided } as never;
     }

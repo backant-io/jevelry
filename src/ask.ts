@@ -17,6 +17,7 @@ import { checkBudgets } from "./budget.js";
 import { type Jevel, JevelError, checkState, expandQuestions, isEntry } from "./jevel.js";
 import { type Answer, type AskDocument, EXIT, type ErrorBody, type ErrorCode, PROTOCOL, type Usage } from "./protocol.js";
 import { DEFAULT_THRESHOLDS, type Thresholds, certaintyOf, decisionOf } from "./decision.js";
+import type { AskLine } from "./log.js";
 
 /** Keys sorted at every level, no whitespace: the same state hashes the same however a host built it. */
 export function canonicalJson(value: unknown): string {
@@ -133,10 +134,22 @@ export interface AskInput {
   jevel?: Jevel;
   questions?: Questions;
   model?: string;
+  /** The logged answer to this exact request by this model, when an exact repeat may be answered from the log. */
+  repeat?: (requestHash: string, model: string) => Promise<AskLine | undefined>;
 }
 
-/** `ms` is the wait for the model. It is the log's, never the document's: the stdout schema takes no other key. */
-export type AskResult = { ok: true; document: AskDocument; ms: number } | { ok: false; error: ErrorBody };
+/**
+ * `ms` is the wait for the model, `request_hash` the state and the questions as they were asked, and `cached_from` the
+ * ask whose logged answer this is. They are the log's, never the document's: the stdout schema takes no other key.
+ */
+export type AskResult = { ok: true; document: AskDocument; ms: number; request_hash: string; cached_from?: string } | { ok: false; error: ErrorBody };
+
+/** What an answered ask adds to its log line beyond the document. */
+export const logFields = (result: Extract<AskResult, { ok: true }>): Pick<AskLine, "ms" | "request_hash" | "cached_from"> => ({
+  ms: result.ms,
+  request_hash: result.request_hash,
+  ...(result.cached_from === undefined ? {} : { cached_from: result.cached_from }),
+});
 
 /** The clients of a Jev server jevelry did not start: its failures name that server, and its log is not jevelry's. */
 export const SERVER_CLIENTS = new WeakSet<TypeSafeClient>();
@@ -174,27 +187,41 @@ export async function ask(input: AskInput): Promise<AskResult> {
       };
     }
     const model = input.model ?? input.jevel?.model;
+    const names = Object.keys(questions);
+    const requestHash = stateHash({ questions, state: input.state });
+    const documentOf = (answeredBy: string, answers: Record<string, Answer>, usage: Usage): AskDocument => ({
+      protocol: PROTOCOL,
+      log_id: null,
+      jevel: input.jevel ? { name: input.jevel.name, version: input.jevel.version } : null,
+      model: answeredBy,
+      state_hash: stateHash(input.state),
+      answers,
+      usage,
+    });
     // The request alone is timed, retries and a local model's load included: that is what the caller waited for.
     const started = Date.now();
+    // Only jevelry's own local model is known to answer a prompt the same every time (17 of 17 prompts over five
+    // repeats, byte for byte, and no faster the second time). Hosted Jev and a server jevelry did not start are not measured.
+    const local = SERVER_CLIENTS.has(input.client) ? undefined : input.client.defaultModel;
+    const logged = input.repeat && local?.startsWith("local/") ? await input.repeat(requestHash, local) : undefined;
+    if (logged && local && names.every((name) => Object.hasOwn(logged.answers, name) && logged.answers[name]?.type === (questions[name] as { type?: unknown }).type)) {
+      // Thresholds may have moved since: the decision is today's reading of the logged certainty.
+      const answers = Object.fromEntries(names.map((name) => {
+        const answer = logged.answers[name] as Answer;
+        return [name, { ...answer, decision: decisionOf(answer.certainty, thresholds[name] ?? DEFAULT_THRESHOLDS) }];
+      }));
+      return { ok: true, document: documentOf(local, answers, { input_tokens: 0, output_tokens: 0 }), ms: Date.now() - started, request_hash: requestHash, cached_from: logged.id };
+    }
     const result = readEnvelope(await input.client.systemOne(model === undefined ? { state: input.state, questions } : { state: input.state, questions, model }));
     const ms = Date.now() - started;
     const answers: Record<string, Answer> = {};
-    for (const name of Object.keys(questions)) {
+    for (const name of names) {
       const raw = Object.hasOwn(result.answers, name) ? result.answers[name] : undefined;
       if (raw === undefined) throw new UnreadableAnswer(`answers.${name}`, `the API returned no answer named ${name}`);
       checkFits(name, raw, questions[name]);
       answers[name] = shapeAnswer(name, raw, thresholds[name] ?? DEFAULT_THRESHOLDS);
     }
-    const document: AskDocument = {
-      protocol: PROTOCOL,
-      log_id: null,
-      jevel: input.jevel ? { name: input.jevel.name, version: input.jevel.version } : null,
-      model: result.model,
-      state_hash: stateHash(input.state),
-      answers,
-      usage: result.usage,
-    };
-    return { ok: true, document, ms };
+    return { ok: true, document: documentOf(result.model, answers, result.usage), ms, request_hash: requestHash };
   } catch (error) {
     return { ok: false, error: errorBody(error, who) };
   }

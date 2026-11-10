@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import type { Questions, TypeSafeClient } from "@typesafe-ai/sdk";
 import { Command, InvalidArgumentError, Option } from "commander";
 import { createInterface } from "node:readline/promises";
-import { ask, errorBody, stateHash } from "./ask.js";
+import { ask, errorBody, logFields, stateHash } from "./ask.js";
 import { askAndLog, askBatch } from "./batch.js";
 import { type Choice, findModel, hfUrl, licenceLabel, listModels, rank, renderTable } from "./catalog.js";
 import { configured, jevServer, localModel } from "./config.js";
@@ -15,7 +15,7 @@ import { defaultClient, fallenAnswers, renderTypes } from "./decide.js";
 import { type Machine, budgetBytes, detectMachine } from "./estimate.js";
 import { type EvalResult, evaluate, readCases, renderEval } from "./eval.js";
 import { resolveKey, storeKey } from "./key.js";
-import { jevelryHome, logAsk, logStateFromEnv, readLog, recordOutcome } from "./log.js";
+import { cacheFromEnv, jevelryHome, logAsk, logStateFromEnv, readLog, recordOutcome } from "./log.js";
 import { type AskDocument, EXIT, EXIT_CASES_FAILED, type ErrorBody, type ErrorDocument, PROTOCOL, type RunReport } from "./protocol.js";
 import { type Call, dispatcherOf, execute, logRun, planCall } from "./run.js";
 import { type QuestionReport, type SpeedReport, renderReport, renderSpeed, report, speed } from "./report.js";
@@ -294,14 +294,15 @@ export function buildProgram(): Command {
     .option("--jevels <dir>", "a jevels directory searched first (repeatable)", (d: string, all: string[]) => [...all, d], [] as string[])
     .option("--no-log", "do not append this ask to the log")
     .option("--log-state", "write the state itself into the log line, not only its hash (or JEVELRY_LOG_STATE=1)")
+    .option("--cache", "answer an exact repeat of a local model's ask from the log instead of asking again (or JEVELRY_CACHE=1)")
     .option("--batch", "NDJSON asks on stdin ({id, jevel or questions, state, model?}), one NDJSON answer per line on stdout as each completes")
     .option("--concurrency <n>", "with --batch, how many asks are in flight at once", (v: string) => {
       const n = Number(v);
       if (!Number.isInteger(n) || n < 1) throw new InvalidArgumentError("a whole number of at least 1");
       return n;
     }, 16)
-    .action(async (jevelName: string | undefined, opts: { state?: string; questions?: string; model?: string; jevels: string[]; log: boolean; logState?: boolean; batch?: boolean; concurrency: number }, command: Command) => {
-      const logOptions = { home: home(), log: opts.log, logState: opts.logState === true || logStateFromEnv(process.env), warn: (m: string) => say(`warning: ${m}`) };
+    .action(async (jevelName: string | undefined, opts: { state?: string; questions?: string; model?: string; jevels: string[]; log: boolean; logState?: boolean; cache?: boolean; batch?: boolean; concurrency: number }, command: Command) => {
+      const logOptions = { home: home(), log: opts.log, logState: opts.logState === true || logStateFromEnv(process.env), cache: opts.cache === true || cacheFromEnv(process.env), warn: (m: string) => say(`warning: ${m}`) };
       if (opts.batch) {
         if (jevelName || opts.questions || opts.state) failAsk(errorBody(new JevelError("batch", "with --batch every stdin line names its own jevel or questions and state")));
         let client: TypeSafeClient;
@@ -400,7 +401,7 @@ export function buildProgram(): Command {
       const logged = opts.logState === true || logStateFromEnv(process.env) ? { state } : {};
       const ref = { name: jevel.name, version: jevel.version };
       const logId = result.ok
-        ? await logAsk(home(), { jevel: ref, model: result.document.model, state_hash: result.document.state_hash, ...logged, answers: result.document.answers, usage: result.document.usage, ms: result.ms }, warn)
+        ? await logAsk(home(), { jevel: ref, model: result.document.model, state_hash: result.document.state_hash, ...logged, answers: result.document.answers, usage: result.document.usage, ...logFields(result) }, warn)
         : await logAsk(home(), { jevel: ref, model: null, state_hash: stateHash(state), ...logged, answers: fallenAnswers(jevel, state), usage: null, error: result.error }, warn);
       // A ./jevels folder in the project comes first in discovery, so the path says whose commands these are.
       const from = `${call.option ?? "fall_back"} from ${jevel.path}: ${call.command}`;
