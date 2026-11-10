@@ -379,9 +379,8 @@ describe("jevelry tui, the command", () => {
     const files = readdirSync("dist").filter((f) => f.endsWith(".js"));
     // The build carries ink and react instead of importing them, so their code is found by the module comments esbuild leaves.
     const reaching = files.filter((f) => /^\/\/ node_modules\/(ink|react|react-reconciler)\//m.test(readFileSync(join("dist", f), "utf8")));
-    // The devtools chunk is ink's own: the tui chunk loads it, and only with DEV=true.
-    expect(reaching.filter((f) => !f.startsWith("devtools-"))).toEqual(["tui.js"]);
-    for (const f of files) expect(readFileSync(join("dist", f), "utf8")).not.toMatch(/from\s*["']\.\/(tui|devtools-[A-Z0-9]+)\.js["']/);
+    expect(reaching).toEqual(["tui.js"]);
+    for (const f of files) expect(readFileSync(join("dist", f), "utf8")).not.toMatch(/from\s*["']\.\/tui\.js["']/);
     expect(readFileSync(join("dist", "cli.js"), "utf8")).toContain('import("./tui.js")');
   });
 });
