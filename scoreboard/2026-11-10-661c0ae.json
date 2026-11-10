@@ -1,0 +1,476 @@
+{
+  "date": "2026-11-10",
+  "commit": "661c0ae",
+  "dirty": false,
+  "machine": {
+    "chip": "Apple M4 Pro",
+    "cpus": 12,
+    "ram_gb": 24,
+    "platform": "darwin",
+    "node": "v25.9.0",
+    "power_mode": 2
+  },
+  "start": {
+    "bare_node_ms": {
+      "min": 38.2,
+      "p25": 39.5,
+      "median": 39.8
+    },
+    "jevelry_version_ms": {
+      "min": 60.1,
+      "p25": 61.5,
+      "median": 62
+    },
+    "jevelry_check_ms": {
+      "min": 67,
+      "p25": 68.3,
+      "median": 69
+    }
+  },
+  "install": {
+    "packages": 2,
+    "megabytes": 3,
+    "seconds": 0.45,
+    "tarball_bytes": 566352
+  },
+  "speed": [
+    {
+      "jevel": "alert-cause",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 4,
+      "p50_ms": 940,
+      "p95_ms": 1199,
+      "tokens_per_s": 1667.383512544803,
+      "cold_asks": 1,
+      "cold_p50_ms": 3248
+    },
+    {
+      "jevel": "change-risk",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 5,
+      "p50_ms": 771,
+      "p95_ms": 792,
+      "tokens_per_s": 1632.433848572177,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "checklist-compliance",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 5,
+      "p50_ms": 906,
+      "p95_ms": 911,
+      "tokens_per_s": 1638.6925795053003,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "duplicate-issue",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 4,
+      "p50_ms": 718,
+      "p95_ms": 756,
+      "tokens_per_s": 1634.974533106961,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "escalation-route",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 5,
+      "p50_ms": 942,
+      "p95_ms": 991,
+      "tokens_per_s": 1638.7896616936332,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "failing-test",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 7,
+      "p50_ms": 712,
+      "p95_ms": 733,
+      "tokens_per_s": 1659.5401371520775,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "issue-readiness",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 5,
+      "p50_ms": 805,
+      "p95_ms": 845,
+      "tokens_per_s": 1668.491786958686,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "log-triage",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 5,
+      "p50_ms": 1174,
+      "p95_ms": 1237,
+      "tokens_per_s": 1663.4615384615386,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "meeting-notes",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 5,
+      "p50_ms": 911,
+      "p95_ms": 964,
+      "tokens_per_s": 1621.419127368885,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "message-triage",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 5,
+      "p50_ms": 779,
+      "p95_ms": 831,
+      "tokens_per_s": 1632.4282786885246,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "notification-triage",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 6,
+      "p50_ms": 891,
+      "p95_ms": 979,
+      "tokens_per_s": 1601.7276235986033,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "pr-description-check",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 6,
+      "p50_ms": 908,
+      "p95_ms": 1012,
+      "tokens_per_s": 1578.308954691402,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "reply-check",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 5,
+      "p50_ms": 558,
+      "p95_ms": 568,
+      "tokens_per_s": 1580.7988274093075,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "review-comment-kind",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 6,
+      "p50_ms": 866,
+      "p95_ms": 942,
+      "tokens_per_s": 1595.4492865406864,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "review-quality",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 6,
+      "p50_ms": 671,
+      "p95_ms": 900,
+      "tokens_per_s": 1604.635761589404,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "task-difficulty",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 6,
+      "p50_ms": 587,
+      "p95_ms": 622,
+      "tokens_per_s": 1594.4648404405534,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    },
+    {
+      "jevel": "ticket-triage",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "asks": 5,
+      "p50_ms": 739,
+      "p95_ms": 741,
+      "tokens_per_s": 1615.9084718060474,
+      "cold_asks": 0,
+      "cold_p50_ms": null
+    }
+  ],
+  "repeats": {
+    "answered_by_model": 91,
+    "answered_from_log": 0
+  },
+  "footprint": {
+    "model": "local/vllm-d3-nano-Q8_0",
+    "rss_bytes": 2254094336,
+    "file_bytes": 2552358496,
+    "estimate_bytes": 4162971232
+  },
+  "quality": [
+    {
+      "jevel": "alert-cause",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 4,
+      "checks": 11,
+      "right": 10,
+      "interval": [
+        0.6226353745137962,
+        0.9837682477371741
+      ],
+      "act": 8,
+      "clear": 10,
+      "wrong_at_act": 1,
+      "p50_ms": 942
+    },
+    {
+      "jevel": "change-risk",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 4,
+      "checks": 10,
+      "right": 9,
+      "interval": [
+        0.5958436145024278,
+        0.9821242504842789
+      ],
+      "act": 7,
+      "clear": 9,
+      "wrong_at_act": 0,
+      "p50_ms": 742
+    },
+    {
+      "jevel": "checklist-compliance",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 4,
+      "checks": 10,
+      "right": 7,
+      "interval": [
+        0.3967732199795652,
+        0.892210712513788
+      ],
+      "act": 8,
+      "clear": 9,
+      "wrong_at_act": 2,
+      "p50_ms": 901
+    },
+    {
+      "jevel": "duplicate-issue",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 3,
+      "checks": 8,
+      "right": 7,
+      "interval": [
+        0.5291051942301385,
+        0.9775830911367039
+      ],
+      "act": 6,
+      "clear": 7,
+      "wrong_at_act": 1,
+      "p50_ms": 756
+    },
+    {
+      "jevel": "escalation-route",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 4,
+      "checks": 10,
+      "right": 8,
+      "interval": [
+        0.49015684672072346,
+        0.9433190520193067
+      ],
+      "act": 7,
+      "clear": 9,
+      "wrong_at_act": 0,
+      "p50_ms": 942
+    },
+    {
+      "jevel": "failing-test",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 6,
+      "checks": 10,
+      "right": 9,
+      "interval": [
+        0.5958436145024278,
+        0.9821242504842789
+      ],
+      "act": 3,
+      "clear": 9,
+      "wrong_at_act": 0,
+      "p50_ms": 714
+    },
+    {
+      "jevel": "issue-readiness",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 4,
+      "checks": 7,
+      "right": 3,
+      "interval": [
+        0.1582169222626268,
+        0.7495457695909742
+      ],
+      "act": 2,
+      "clear": 6,
+      "wrong_at_act": 0,
+      "p50_ms": 787
+    },
+    {
+      "jevel": "log-triage",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 4,
+      "checks": 10,
+      "right": 8,
+      "interval": [
+        0.49015684672072346,
+        0.9433190520193067
+      ],
+      "act": 7,
+      "clear": 9,
+      "wrong_at_act": 0,
+      "p50_ms": 1174
+    },
+    {
+      "jevel": "meeting-notes",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 4,
+      "checks": 13,
+      "right": 11,
+      "interval": [
+        0.5776482949136899,
+        0.9567427368172621
+      ],
+      "act": 8,
+      "clear": 12,
+      "wrong_at_act": 0,
+      "p50_ms": 910
+    },
+    {
+      "jevel": "message-triage",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 4,
+      "checks": 11,
+      "right": 11,
+      "interval": [
+        0.7411599827511859,
+        1
+      ],
+      "act": 9,
+      "clear": 10,
+      "wrong_at_act": 0,
+      "p50_ms": 777
+    },
+    {
+      "jevel": "notification-triage",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 5,
+      "checks": 13,
+      "right": 8,
+      "interval": [
+        0.3552248097226855,
+        0.8229055341876319
+      ],
+      "act": 7,
+      "clear": 12,
+      "wrong_at_act": 0,
+      "p50_ms": 869
+    },
+    {
+      "jevel": "pr-description-check",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 5,
+      "checks": 18,
+      "right": 16,
+      "interval": [
+        0.6719975513339578,
+        0.9689811315464172
+      ],
+      "act": 15,
+      "clear": 17,
+      "wrong_at_act": 1,
+      "p50_ms": 893
+    },
+    {
+      "jevel": "reply-check",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 4,
+      "checks": 7,
+      "right": 5,
+      "interval": [
+        0.35892909014821267,
+        0.9177828342909845
+      ],
+      "act": 5,
+      "clear": 6,
+      "wrong_at_act": 1,
+      "p50_ms": 519
+    },
+    {
+      "jevel": "review-comment-kind",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 5,
+      "checks": 12,
+      "right": 11,
+      "interval": [
+        0.6461140782014047,
+        0.9851352905492264
+      ],
+      "act": 9,
+      "clear": 11,
+      "wrong_at_act": 0,
+      "p50_ms": 849
+    },
+    {
+      "jevel": "review-quality",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 5,
+      "checks": 13,
+      "right": 11,
+      "interval": [
+        0.5776482949136899,
+        0.9567427368172621
+      ],
+      "act": 10,
+      "clear": 12,
+      "wrong_at_act": 0,
+      "p50_ms": 674
+    },
+    {
+      "jevel": "task-difficulty",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 5,
+      "checks": 13,
+      "right": 11,
+      "interval": [
+        0.5776482949136899,
+        0.9567427368172621
+      ],
+      "act": 11,
+      "clear": 12,
+      "wrong_at_act": 1,
+      "p50_ms": 580
+    },
+    {
+      "jevel": "ticket-triage",
+      "model": "local/vllm-d3-nano-Q8_0",
+      "cases": 4,
+      "checks": 10,
+      "right": 10,
+      "interval": [
+        0.7224598312333834,
+        1
+      ],
+      "act": 8,
+      "clear": 9,
+      "wrong_at_act": 0,
+      "p50_ms": 740
+    }
+  ],
+  "not_measured": []
+}
