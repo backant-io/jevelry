@@ -695,7 +695,7 @@ export function buildProgram(): Command {
     .addOption(new Option("--local [model]", "run a model on this machine: that one (an id or row from jevelry models --local), or choose from the list").conflicts("typesafe"))
     .addOption(new Option("--local-url <url>", "ask a Jev server that already runs, like jevd at http://127.0.0.1:8741: no download, no second model").conflicts(["local", "typesafe"]))
     .option("--typesafe", "ask hosted Jev with a TypeSafe key")
-    .option("--yes", "answer yes to the Homebrew and tight-fit questions (needed without a terminal)")
+    .option("--yes", "answer yes to the Homebrew, tight-fit and remove-the-previous-model questions (needed without a terminal)")
     .action(async (opts: { key: boolean; project?: boolean; agent?: string[]; local?: string | true; localUrl?: string; typesafe?: boolean; yes?: boolean }) => {
       installed(opts.project === true, opts.agent);
       if (!opts.key) return;

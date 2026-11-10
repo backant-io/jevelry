@@ -153,6 +153,26 @@ describe("installLocal", () => {
     expect(r.progress.map(([step]) => step)).toContain("loading the model");
   });
 
+  // A model is several GB, and after a switch nothing asks the old one: left alone, every switch costs its size on disk for good.
+  it("offers to remove the previous model's file after a switch, removes it on a yes and keeps it on a no", async () => {
+    const { dir, env } = fixture();
+    const first = await installLocal(choice("d1-3b"), dir, recorder(true).io, env);
+    const no = recorder(false);
+    const second = await installLocal(choice("kev-4b"), dir, no.io, env);
+    expect(no.asked.at(-1)).toMatch(/^Liquid d1 3B is still on disk and jevelry no longer asks it: remove its [\d.]+ GB\?$/);
+    expect(existsSync(first.path)).toBe(true);
+    expect(no.said.at(-1)).toBe(`Liquid d1 3B stays on disk at ${first.path}`);
+    const yes = recorder(true);
+    await installLocal(choice("d1-3b"), dir, yes.io, env);
+    expect(existsSync(second.path)).toBe(false);
+    expect(yes.said.at(-1)).toMatch(/^removed Kev 4B, [\d.]+ GB$/);
+    // The model that is already set up is the one in use: installing it again asks nothing and removes nothing.
+    const again = recorder(true);
+    await installLocal(choice("d1-3b"), dir, again.io, env);
+    expect(again.asked).toEqual([]);
+    expect(existsSync(first.path)).toBe(true);
+  });
+
   // Two models loaded at once is how a GPU runs out of memory: switching stops the old server first.
   it("stops the previous model's server before the new one starts", async () => {
     const { dir, env } = fixture();
