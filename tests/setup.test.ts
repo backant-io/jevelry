@@ -125,6 +125,19 @@ describe("installLocal", () => {
   const choice = (id: string) => rank(models, M4_PRO_24).find((c) => c.model.id === id)!;
 
   // The whole first run in one call: the verified file, the config, a running server and a real answer from it.
+  // The refusal is against what the GPU may use at most. What is free right now can be far less, and a model loaded
+  // into memory other programs hold pushes them out: the person is told before the download starts.
+  it("says before the download when the model needs more memory than is free right now", async () => {
+    const { dir } = fixture();
+    const withFree = (freeBytes: number) => sandboxEnv(dir, { JEVELRY_HF_URL: hf.url, JEVELRY_MACHINE: JSON.stringify({ ...M4_PRO_24, freeBytes }), FAKE_LLAMA_LOAD_MS: "100" });
+    const short = recorder(true);
+    await installLocal(choice("d1-3b"), dir, short.io, withFree(2 ** 30));
+    expect(short.said[0]).toMatch(/^Liquid d1 3B needs about 1\.6 GB and about 1\.1 GB of memory is free right now: close other programs, or loading it will push them out$/);
+    const room = recorder(true);
+    await installLocal(choice("d1-3b"), dir, room.io, withFree(8 * 2 ** 30));
+    expect(room.said.join("\n")).not.toContain("free right now");
+  });
+
   it("downloads, writes the config, starts the server and answers one smoke question", async () => {
     const { dir, env } = fixture();
     const r = recorder(true);

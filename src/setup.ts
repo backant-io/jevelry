@@ -108,6 +108,10 @@ export async function installLocal(choice: Choice, home: string, io: SetupIO, en
     // JEVELRY_MACHINE shows what another machine could run; what is installed must also fit this one.
     const have = Math.min(budget, budgetBytes(realMachine()));
     if (fitOf(need, have) === "won't fit") throw tooBig(need, have);
+    // The refusal above is against what the GPU may use at most; what is free right now can be far less. Said, not
+    // refused: on a Mac the figure leaves out what the system could still compress or drop.
+    const free = detectMachine(env).freeBytes;
+    if (free !== undefined && need > free) io.say(`${model.name} needs about ${gb(need)} and about ${gb(free)} of memory is free right now: close other programs, or loading it will push them out`);
     const path = modelPath(home, model.repo, quant.file);
     // jevelry knows its server by the alias in the process table, which reads the same in every locale only in ASCII.
     const alias = `local/${quant.file.replace(/\.gguf$/i, "")}`;
