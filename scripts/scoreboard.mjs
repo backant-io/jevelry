@@ -9,10 +9,13 @@
 //   --out <file>  where the result goes; by default scoreboard/<date>-<commit>.json
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { cpus, homedir, tmpdir, totalmem } from "node:os";
+import { cpus, homedir, loadavg, tmpdir, totalmem } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { jevelryHome, needBytes, readLog, speed, wilson } from "../dist/index.js";
+
+// Read before anything is timed, so it is the load this run met, not the load it made.
+const loadAtStart = loadavg()[0] ?? 0;
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -165,7 +168,7 @@ const board = {
   date,
   commit,
   dirty: git("status", "--porcelain") !== "",
-  machine: { chip: cpus()[0]?.model ?? "unknown", cpus: cpus().length, ram_gb: Math.round(totalmem() / 2 ** 30), platform: process.platform, node: process.version, power_mode: powerMode() },
+  machine: { chip: cpus()[0]?.model ?? "unknown", cpus: cpus().length, ram_gb: Math.round(totalmem() / 2 ** 30), platform: process.platform, node: process.version, power_mode: powerMode(), load_1m: Math.round(loadAtStart * 100) / 100 },
   start,
   install: installed,
   speed: rows,
