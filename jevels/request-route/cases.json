@@ -1,0 +1,84 @@
+[
+  {
+    "name": "one sentence to translate",
+    "state": {
+      "request": {
+        "prompt": "Translate into German: The invoice is attached, and payment is due within 30 days.",
+        "context": "first message",
+        "tools": "none"
+      }
+    },
+    "expect": {
+      "complexity": 0,
+      "needs_tools": false
+    }
+  },
+  {
+    "name": "a function with a test, everything given",
+    "state": {
+      "request": {
+        "prompt": "Write a TypeScript function that takes dates written like '3 Mar 2026' or '2026-03-03' and returns ISO strings, and add a unit test with both formats and one invalid input.",
+        "context": "first message",
+        "tools": "none"
+      }
+    },
+    "expect": {
+      "complexity": 1,
+      "needs_tools": false
+    }
+  },
+  {
+    "name": "a payment provider switch with four conditions",
+    "state": {
+      "request": {
+        "prompt": "We are switching payment providers next month and checkout has to stay up. Plan the cutover so that no customer is charged twice, refunds for orders paid through the old provider keep working, finance can reconcile both providers for the month, and we can go back within an hour if the error rate rises.",
+        "context": "first message",
+        "tools": "none"
+      }
+    },
+    "expect": {
+      "complexity": 2,
+      "needs_tools": false
+    }
+  },
+  {
+    "name": "tomorrow's calendar",
+    "state": {
+      "request": {
+        "prompt": "What do I have on tomorrow, and is there a free hour before noon?",
+        "context": "first message",
+        "tools": "calendar, mail"
+      }
+    },
+    "expect": {
+      "needs_tools": true
+    }
+  },
+  {
+    "name": "run the tests and fix what fails",
+    "state": {
+      "request": {
+        "prompt": "Run the test suite and fix whatever fails.",
+        "context": "third message in a conversation about a failing CI build",
+        "tools": "shell, file editor"
+      }
+    },
+    "expect": {
+      "needs_tools": true
+    }
+  },
+  {
+    "name": "a yes to the second of three options",
+    "state": {
+      "request": {
+        "prompt": "Yes, do the second one.",
+        "context": "answers a message that listed three ways to proceed",
+        "tools": "none"
+      }
+    },
+    "expect": {
+      "complexity": null,
+      "needs_tools": false
+    }
+  }
+]

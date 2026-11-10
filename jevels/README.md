@@ -2,7 +2,7 @@
 
 A jevel is a folder with one `JEVEL.md` in it, and it does one job: it turns a decision your code has to make about some text or record into a few typed questions for Jev, with the thresholds that say how sure the answer has to be before your code acts on it. You send the state the jevel names, jevelry asks every question in one request, and your code gets a decision per question, `act`, `mark` or `fall_back`, next to the probabilities. So you have a file you can read, check, version and tune from the report, and the prompt and the parser are gone.
 
-Seventeen ship with the package, in general shapes, each with the questions, the thresholds, one `example.json` you can ask it with straight away and a `cases.json` of realistic states with the answer each one should get, which our live tests ask against the real API:
+Eighteen ship with the package, in general shapes, each with the questions, the thresholds, one `example.json` you can ask it with straight away and a `cases.json` of realistic states with the answer each one should get, which our live tests ask against the real API:
 
     npx jevelry show ticket-triage
     npx jevelry ask ticket-triage --state @jevels/ticket-triage/example.json
@@ -22,6 +22,7 @@ Seventeen ship with the package, in general shapes, each with the questions, the
 | `notification-triage` | a batch of notifications collected for one person | `worth_interrupting`, `handle`, `depth` | `person`, `notifications` |
 | `pr-description-check` | a pull request description against its diff summary | `describes_the_change`, `mentions_tests`, `leaves_work_out`, `risk_noted` | `pr` |
 | `reply-check` | a reply to a question or a report, to close the thread or keep it open | `addresses_it`, `next` | `question`, `reply` |
+| `request-route` | a request on its way to a language model, to send it to a small model or a large one | `complexity`, `needs_tools` | `request` |
 | `review-comment-kind` | a review comment or a failing test output, to sort it | `kind`, `actionable`, `blocking` | `comment` |
 | `review-quality` | a finished code review, as a whole | `thoroughness`, `constructive`, `found_a_real_defect` | `review` |
 | `task-difficulty` | a task before you route it to a model or a person | `depth`, `needs_specialist`, `well_specified` | `task` |

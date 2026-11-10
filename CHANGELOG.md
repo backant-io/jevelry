@@ -22,6 +22,10 @@ The first release with local models. Everything below was merged after 0.6.0 (1 
 - `ask --only <names...>` asks some of a jevel's questions, so a question that decides whether the others matter can be asked first. (#47)
 - The `task-difficulty` jevel ships without examples: 12% fewer tokens, with the same answers and decisions on its cases. (#40)
 
+### New jevel
+
+- `request-route` reads a request on its way to a language model and says whether a small or local model can take it: a three-level `complexity` and `needs_tools`. Only a sure answer sends a request to the small model, and a model that cannot answer sends it to the large one. On 75 held-back phrases of bifrost's complexity router, asked of Liquid d1 2B, 14 of the 15 requests it sent to the small model were ones bifrost labels simple and none was complex. `docs/examples.md` has the recipe. (#67)
+
 ### Lighter
 
 - Every dependency but TypeSafe's SDK is in the build: an install is 2 packages where it was 43, and the package is 547 kB where it was 1,361 kB. (#24, #42, #46)

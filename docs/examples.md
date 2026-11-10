@@ -163,6 +163,38 @@ The answers come back as `same_as[0]` and `same_as[1]`, one per candidate, plus 
       }
     }
 
+## Routing a request to a small or a large model
+
+When a small or local model sits next to a large one, `request-route` reads a request before any model answers it and says whether the small one can take it. Only a sure answer moves a request down:
+
+    import { jevel } from "jevelry";
+
+    const route = jevel("request-route");
+
+    /** "small" only when Jev is sure the request is one step and needs nothing fetched or run. */
+    export async function modelFor(prompt: string, tools: string[] = [], context = "first message"): Promise<"small" | "large"> {
+      const d = await route.decide({ request: { prompt, context, tools: tools.length > 0 ? tools.join(", ") : "none" } });
+      const oneStep = d.complexity?.decision === "act" && d.complexity.answer === 0;
+      const selfContained = d.needs_tools?.decision === "act" && d.needs_tools.answer === false;
+      return oneStep && selfContained ? "small" : "large";
+    }
+
+A `mark`, a `fall_back`, a higher level and a yes all go to the large model. So does a request Jev could not read at all: when TypeSafe is busy or the local model is down, `decide` hands every question back as `fall_back` and does not throw, so the router fails open to the model you would have used anyway. To choose among more than two models, map the levels yourself: level 0 to the cheapest, level 2 to the strongest, and anything below `act` to your default.
+
+With a model on this machine (`npx jevelry install --local d1-2b`) no request leaves it before you have decided where it goes. Measured that way on Liquid d1 2B, on an M4 Pro in Low Power Mode: a decision took 0.8 s at the median and 0.9 s at the 95th percentile, for about 890 input tokens.
+
+How good the decision is was measured on labels jevelry's authors did not write: the 150 reference phrases of bifrost's complexity router, 50 each simple, medium and complex ([`exemplars.go`](https://github.com/maximhq/bifrost/blob/dev/plugins/routing/complexity/exemplars.go), Apache-2.0). Half of them were used to tune the wording of the three levels. The other half was asked once, afterwards, each as a first message with no tools:
+
+| Of the 75 held-back phrases, on Liquid d1 2B | | 95% interval |
+| --- | --- | --- |
+| sent to the small model | 15 | |
+| of those, simple by bifrost's label | 14 | 70-99% |
+| of those, medium / complex | 1 / 0 | |
+| of the 25 simple phrases, sent to the small model | 14 | 37-73% |
+| level equal to bifrost's label, over all 75 | 50 | 55-76% |
+
+It has not been asked of hosted Jev. `npx jevelry eval request-route` asks its six cases of whichever model you have set up, and the logic above is held by `tests/route-recipe.test.ts`.
+
 ## Telling jevelry what was true
 
 When you find out whether the ticket above was really urgent, you record it against the `log_id` and the question, and the report shows you how the question is doing:

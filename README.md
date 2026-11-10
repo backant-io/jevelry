@@ -32,7 +32,7 @@ jevelry lets your code and your coding agent ask Jev, the decision model from Ty
 
 Your code and your coding agent make the same small calls every day: is this ticket urgent, which team should get it, is this bug a duplicate, did this test fail because of the code or because of the machine it ran on. Today each of those is usually a prompt that returns text you parse, and you don't learn how sure the model was.
 
-With jevelry you ask each of those questions to Jev with one command. A question lives in a small file called a jevel, and seventeen ready-made jevels ship with the package. Jev answers with how sure it is, and the jevel turns that into one of three decisions:
+With jevelry you ask each of those questions to Jev with one command. A question lives in a small file called a jevel, and eighteen ready-made jevels ship with the package. Jev answers with how sure it is, and the jevel turns that into one of three decisions:
 
 | Decision | Meaning | What your code does |
 |---|---|---|
@@ -194,7 +194,7 @@ On an Apple M4 Pro with 24 GB that prints:
 
 Each row is one model at the quant that suits this machine. `download` is the size of the file, `needs` the memory it takes while it answers, `fit` whether this machine has that memory (`runs well`, `tight` or `won't fit`), `score` its result on the index, `s/question` the seconds a question of about 500 tokens takes here, and `licence` what you may use it for. Models that run well come first, then tight ones, then the ones that won't fit, each group by best score, so row 1 is the one to pick. [Local models](#local-models) says where each number comes from. `--json` prints the same rows for a program.
 
-The index is not the whole answer for the jevels that ship here. These seven models were each asked the 74 cases of the 17 shipped jevels, 186 expected answers in all, on an M4 Pro with llama.cpp 0.9.0 on 10 November 2026. The brackets are 95% intervals.
+The index is not the whole answer for the jevels that ship here. These seven models were each asked the 74 cases of the 17 jevels that shipped that day, 186 expected answers in all, on an M4 Pro with llama.cpp 0.9.0 on 10 November 2026. The brackets are 95% intervals.
 
 | Model | Download | Right, of 186 | Sure enough to act | Right when it acts |
 |---|---|---|---|---|
@@ -517,6 +517,7 @@ Seventeen ship with the package, each with an `example.json` to ask it with and 
 | `notification-triage` | a batch of notifications for one person |
 | `pr-description-check` | a pull request description against its diff |
 | `reply-check` | a reply, to close the thread or keep it open |
+| `request-route` | a request on its way to a language model, to pick a small one or a large one |
 | `review-comment-kind` | a review comment or a failing test output |
 | `review-quality` | a finished code review |
 | `task-difficulty` | a task before you route it |
@@ -766,7 +767,7 @@ npm run test:live -- tests/live/jevels.test.ts
 
 `npm run scoreboard` writes the numbers each change is judged on into `scoreboard/<date>-<commit>.json`: the CLI's start-up next to bare Node, the size and time of an install, how long logged asks took per jevel and model, a running model server's memory next to jevelry's estimate for it, and, with `--eval`, every jevel's cases. It never starts a model, it asks one only with `--eval`, and it lists what it could not measure. With `--eval --gate` it exits 8 when a jevel's cases score worse, or one more answer is wrong at `act`, than in the newest earlier result of the same model: a release can wait on that without anyone choosing a bar.
 
-599 tests run offline against recorded answers from TypeSafe's API reference, against the seventeen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. The local-model tests among them use a fake `llama-server`, a fake jevd, a fake Homebrew and a fake Hugging Face, so no test downloads a model or starts a real server, and they check that a 27B model is never offered as runnable on a 24 GB Mac. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
+603 tests run offline against recorded answers from TypeSafe's API reference, against the eighteen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. The local-model tests among them use a fake `llama-server`, a fake jevd, a fake Homebrew and a fake Hugging Face, so no test downloads a model or starts a real server, and they check that a 27B model is never offered as runnable on a 24 GB Mac. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## License
 
