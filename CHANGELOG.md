@@ -1,50 +1,73 @@
-# Changelog
+<a name="0.7.0"></a>
+# 0.7.0 (2026-11-11)
 
-## 0.7.0
+The first release with local models.
+Numbers are from an M4 Pro with llama.cpp 0.9.0.
 
-The first release with local models. Everything below was merged after 0.6.0 (1 October 2026). Numbers are from the owner's M4 Pro with llama.cpp 0.9.0; the pull request named after each line has how they were measured.
+### local models
 
-### Local models
+| PR | Type | Description |
+| -- | -- | -- |
+| #20 | feat | add `install --local` to install and start a local decision model |
+| #20 | feat | add `models --local` to list the models that fit this machine |
+| #20 | feat | add `stop` to remove the model from memory |
+| #20 | feat | add `install --local-url` to use a Jev server that already runs |
+| #64 | feat | mark a model as good at 60% of GPU memory or less |
+| #64 | feat | select the file with `install --local <id>:Q8_0` or `<id>:Q4_K_M` |
+| #65 | perf | use 30 to 39% less memory with Q4_K_M files |
+| #29 | feat | warn when a model needs more memory than is free |
+| #50 | feat | show Low Power Mode in `models --local` |
+| #45 | feat | show the measured speed of each model in `models --local` |
+| #62 | feat | rank the models by Jev Decision Index 0.4.1 |
+| #62 | feat | add Liquid d1 2B and d1-Omni 2B |
+| #43 | feat | offer to remove the previous model file after a model change |
+| #56 | fix | exit 5 when a state is too long for the local model |
+| #68 | feat | accept 8,192-token states on vLLM-SR d3 and Liquid d1 2B |
 
-- `jevelry install --local` sets up a Jev-compatible decision model on this machine: it picks one that fits, downloads and verifies it, starts llama.cpp's `llama-server` and asks it one question before it writes the config. `jevelry models --local` lists what fits, with size, memory and speed; `jevelry stop` takes the model out of memory; `install --local-url` uses a Jev server that already runs. (#20)
-- A model counts as running well when it needs at most 60% of the memory the GPU may use, less the 1 GiB llama.cpp keeps free, so that other programs keep theirs. On a 24 GB Mac the 9B models are therefore offered at Q4_K_M (6.6 GB) and the smaller ones at Q8_0; `install --local <id>:Q8_0` or `<id>:Q4_K_M` takes the other file. Measured on Liquid d1 3B, lev 4B and Kev 4B: the Q4_K_M file takes 30 to 39% less memory and is right as often on the shipped cases, with about 4% of the values and 6 to 10% of the decisions differing. (#64, #65)
-- `models --local` and `install --local` say when a model needs more memory than is free right now, and `models --local` says when the Mac is in Low Power Mode, where a local model answers at about two thirds of its speed. (#29, #30, #50)
-- Once a model has answered, `models --local` shows its measured speed next to the estimate. (#45)
-- The model list ranks by the index's current edition, 0.4.1, and offers Liquid d1 2B and d1-Omni 2B, which on the shipped cases are as good as any small model measured, at 1.8 GB. A model two authors publish is listed once. (#62)
-- After a switch to another model, `install --local` offers to remove the previous model's file, and removes the folders made for it when they are empty. (#43, #51)
-- A state too long for the local model exits 5 with the advice to filter it. It exited 2 with llama-server's own words. (#56)
-- vLLM-SR d3 and Liquid d1 2B models take a state with one question of up to 8,192 tokens, where they took 4,096: their server gets a batch as large as the context. The answers and the speed on shorter states are the same. (#68)
+### speed
 
-### Faster
+| PR | Type | Description |
+| -- | -- | -- |
+| #48 | perf | decrease the overhead of a local ask from 34 ms to 8 ms |
+| #52 | perf | read the state one time for all questions on Kev and lev |
+| #52 | perf | answer three questions on a 7,300-token state in 7.8 s, not 22.7 s |
+| #27 | feat | add `--cache` to answer an exact repeat from the log |
+| #47 | feat | add `ask --only <names...>` to ask selected questions |
+| #40 | perf | remove the examples from `task-difficulty`: 12% fewer tokens |
 
-- Local asks no longer go through Node's `fetch`: what jevelry itself adds to a local ask went from 34 ms to 8 ms. (#48, #49)
-- A Kev or lev model's server gets four slots that share one context, so it reads the state once for the questions of an ask and not once for every question. On Kev 0.8B: 20% fewer tokens processed over the shipped examples and cases, and three questions about a 7,300-token state in 7.8 s where they took 22.7 s. On Kev 4B and lev 4B the shipped examples took a quarter less time. What it costs: the fourth decimal of such a model's certainty now depends on what the server was asked before. No value and no decision changed in any run. (#52, #58)
-- With `--cache`, `jevel(name, { cache: true })` or `JEVELRY_CACHE=1`, an exact repeat of a local ask is answered from the log in a few milliseconds, without the model loaded. Off unless asked for. `jevelry run` has it too, and an index keeps the lookup fast as the log grows. (#27, #33, #44)
-- `ask --only <names...>` asks some of a jevel's questions, so a question that decides whether the others matter can be asked first. (#47)
-- The `task-difficulty` jevel ships without examples: 12% fewer tokens, with the same answers and decisions on its cases. (#40)
+### footprint
 
-### New jevel
+| PR | Type | Description |
+| -- | -- | -- |
+| #46 | perf | decrease the install from 43 packages to 2 |
+| #46 | perf | decrease the package from 1,361 kB to 554 kB |
+| #26 | perf | use 71% less server memory for Kev models |
+| #42 | fix | stop the growth of the local server log |
 
-- `request-route` reads a request on its way to a language model and says whether a small or local model can take it: a three-level `complexity` and `needs_tools`. Only a sure answer sends a request to the small model, and a model that cannot answer sends it to the large one. On 75 held-back phrases of bifrost's complexity router, asked of Liquid d1 2B, 14 of the 15 requests it sent to the small model were ones bifrost labels simple and none was complex. `docs/examples.md` has the recipe. (#67)
+### jevels
 
-### Lighter
+| PR | Type | Description |
+| -- | -- | -- |
+| #67 | feat | add `request-route` to send simple requests to a small model |
 
-- Every dependency but TypeSafe's SDK is in the build: an install is 2 packages where it was 43, and the package is 554 kB where it was 1,361 kB. (#24, #42, #46)
-- Kev models start with a 512-token ubatch: 71% less server memory, with the same answers. (#26)
-- The local server's log no longer grows with every ask. (#42)
+### measurement
 
-### Knowing how fast and how good
+| PR | Type | Description |
+| -- | -- | -- |
+| #22 | feat | record `ms` in each log line |
+| #22 | feat | add `report --speed` with p50, p95 and tokens per second |
+| #41 | feat | count cold asks apart from warm asks |
+| #23 | feat | add `eval <jevel>`: run the cases, exit 8 on a wrong answer |
+| #35 | feat | add `eval --against <file>` to compare two models |
+| #38 | feat | add `cases <jevel>` to make cases from reviewed asks |
+| #36 | feat | show the overconfidence of each question in `report` |
+| #71 | feat | write the thresholds of each model into a `tuned` block |
 
-- Every answered ask is timed: its log line carries `ms`, and `jevelry report --speed` gives the median, the 95th percentile and the tokens a second for each jevel and model. An ask that waited for a model to load, or woke a sleeping one, is counted apart as cold. (#22, #34, #41)
-- `jevelry eval <jevel>` asks a jevel's cases and reports how many were right, with an interval, and exits 8 when one was not. `--against <file>` gives the agreement with a saved run of another model. (#23, #35)
-- `jevelry cases <jevel>` turns reviewed asks from the log into cases. (#38)
-- `jevelry report` shows how far a question's certainty runs ahead of how often people agreed with it. (#36)
-- A threshold belongs to the model it was measured on: on the same requests a 2B model gave its answers at a median certainty of 0.85 and a 9B model at 0.63. The Jevel screen counts the answers of the model that answered the jevel last, and `T` writes the threshold it proposes under that model's name, in a `tuned` block at the end of the jevel's frontmatter. An answer by another model is judged by the thresholds of the question, as before. (#71)
+### upgrade from 0.6.0
 
-### For those who upgrade from 0.6.0
-
-- An ask of hosted Jev works as before. The answer document is still protocol 2.
-- Log lines have new fields, all additions: `ms`, `cold`, `request_hash`, `cached_from`.
-- New commands: `eval`, `cases`, `stop`. New exit code: 8, from `eval` only.
-- `T` on the Jevel screen writes into the jevel's `tuned` block, where it rewrote the question's `thresholds`. A jevel tuned with 0.6.0 reads as before, and 0.6.0 ignores the block.
-- Node 22 or newer, as before.
+- hosted asks and the answer document (protocol 2) do not change
+- new log fields: `ms`, `cold`, `request_hash`, `cached_from`
+- new commands: `eval`, `cases`, `stop`
+- new exit code: 8, from `eval` only
+- `T` on the Jevel screen writes into `tuned`, not into the question thresholds
+- Node 22 or later, as before
