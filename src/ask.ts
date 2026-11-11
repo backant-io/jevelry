@@ -14,7 +14,7 @@ import {
   UnprocessableEntityError,
 } from "@typesafe-ai/sdk";
 import { checkBudgets } from "./budget.js";
-import { type Jevel, JevelError, checkState, expandQuestions, isEntry } from "./jevel.js";
+import { type Jevel, JevelError, checkState, expandQuestions, isEntry, thresholdsFor } from "./jevel.js";
 import { type Answer, type AskDocument, EXIT, type ErrorBody, type ErrorCode, PROTOCOL, type Usage } from "./protocol.js";
 import { DEFAULT_THRESHOLDS, type Thresholds, certaintyOf, decisionOf } from "./decision.js";
 import type { AskLine } from "./log.js";
@@ -178,10 +178,9 @@ export async function ask(input: AskInput): Promise<AskResult> {
     // takes a `null` too; a null state answers nothing, so it is refused here with the rest.
     if (!isEntry(input.state)) throw new JevelError("state", "state must be a string, a JSON object or an array");
     let questions: Questions;
-    let thresholds: Record<string, Thresholds>;
     if (input.jevel) {
       checkState(input.jevel, input.state);
-      ({ questions, thresholds } = expandQuestions(input.jevel, input.state));
+      ({ questions } = expandQuestions(input.jevel, input.state));
       if (input.only !== undefined) {
         if (input.only.length === 0) throw new JevelError("only", "only names no question");
         const known = input.jevel.questions;
@@ -194,8 +193,10 @@ export async function ask(input: AskInput): Promise<AskResult> {
     } else {
       if (input.only !== undefined) throw new JevelError("only", "only picks among a jevel's questions; with questions of your own, give just the ones you want");
       questions = input.questions ?? {};
-      thresholds = Object.fromEntries(Object.keys(questions).map((k) => [k, DEFAULT_THRESHOLDS]));
     }
+    // Only the answer names its model, so the thresholds are read after it. A threshold tuned for one model does not apply to a different model.
+    const thresholdsOf = (name: string, answeredBy: string): Thresholds =>
+      input.jevel ? thresholdsFor(input.jevel, name.replace(/\[\d+\]$/, ""), answeredBy) : DEFAULT_THRESHOLDS;
     if (Object.keys(questions).length === 0) throw new JevelError("questions", "there are no questions to ask");
     const breach = checkBudgets(input.state, questions, input.jevel?.state.budget_tokens);
     if (breach) {
@@ -232,7 +233,7 @@ export async function ask(input: AskInput): Promise<AskResult> {
       // Thresholds may have moved since: the decision is today's reading of the logged certainty.
       const answers = Object.fromEntries(names.map((name) => {
         const answer = logged.answers[name] as Answer;
-        return [name, { ...answer, decision: decisionOf(answer.certainty, thresholds[name] ?? DEFAULT_THRESHOLDS) }];
+        return [name, { ...answer, decision: decisionOf(answer.certainty, thresholdsOf(name, local)) }];
       }));
       return { ok: true, document: documentOf(local, answers, { input_tokens: 0, output_tokens: 0 }), ms: Date.now() - started, request_hash: requestHash, cached_from: logged.id };
     }
@@ -247,7 +248,7 @@ export async function ask(input: AskInput): Promise<AskResult> {
       const raw = Object.hasOwn(result.answers, name) ? result.answers[name] : undefined;
       if (raw === undefined) throw new UnreadableAnswer(`answers.${name}`, `the API returned no answer named ${name}`);
       checkFits(name, raw, questions[name]);
-      answers[name] = shapeAnswer(name, raw, thresholds[name] ?? DEFAULT_THRESHOLDS);
+      answers[name] = shapeAnswer(name, raw, thresholdsOf(name, result.model));
     }
     return { ok: true, document: documentOf(result.model, answers, result.usage), ms, request_hash: requestHash, ...(cold ? { cold: true as const } : {}) };
   } catch (error) {

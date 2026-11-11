@@ -79,6 +79,17 @@ describe("the call's certainty", () => {
     expect(c).toMatchObject({ option: "flaky", command: "rerun 2 true", certainty: 0.75, decision: "mark" });
     expect(planCall(call, { cause: pick("flaky", 0.99), retries: pick("2", 0.5), loud: noul(true, 0.95) })).toMatchObject({ option: null, command: "echo unsure", decision: "fall_back" });
   });
+  // On act the command runs unasked, so the threshold that lets it run must be the one measured on the model that answered.
+  it("is judged by the thresholds tuned for the model that answered", () => {
+    const tuned = parseJevel(
+      `---\nname: t\nversion: 1\nquestions:\n  cause: { type: choice, instructions: x, criteria: { flaky: x, defect: x }, thresholds: { act: 0.9, mark: 0.7 }, run: { defect: "echo defect" } }\ntuned:\n  local/big-Q4_K_M:\n    cause: { act: 0.75 }\n---\n`,
+      "t",
+    ).jevel;
+    const answers = { cause: pick("defect", 0.8) };
+    expect(planCall(tuned, answers, "local/big-Q4_K_M")).toMatchObject({ option: "defect", decision: "act" });
+    expect(planCall(tuned, answers, "jev-1.13.0")).toMatchObject({ option: "defect", decision: "mark" });
+    expect(planCall(tuned, answers)).toMatchObject({ option: "defect", decision: "mark" });
+  });
   it("ignores arguments the picked command does not name", () => {
     const c = planCall(call, { cause: pick("defect", 0.95), retries: pick("2", 0.1), loud: noul(true, 0.5) });
     expect(c).toMatchObject({ option: "defect", command: "echo defect", certainty: 0.95, decision: "act", args: {} });
@@ -119,6 +130,18 @@ const cli = (args: string[], env: Record<string, string> = {}) =>
     child.stdin.end();
   });
 const runLines = async (home: string): Promise<RunLine[]> => (await readLog(home)).filter((l): l is RunLine => l.kind === "run");
+/**
+ * A jevels folder with one jevel whose command the question's own thresholds only mark (the test server answers at 0.88),
+ * and which the threshold tuned for the server's model lets act. The whole path is under test, not planCall alone: the
+ * answer's model name has to reach the plan.
+ */
+const tunedJevels = (): string => {
+  const dir = mkdtempSync(join(tmpdir(), "jevelry-run-tuned-"));
+  mkdirSync(join(dir, "run-tuned"));
+  writeFileSync(join(dir, "run-tuned", "JEVEL.md"), `---\nname: run-tuned\nversion: 1\nmodel: jev-1.13.0\nquestions:\n  cause:\n    type: choice\n    instructions: "What made \`test\` fail?"\n    criteria: { flaky: "now and then", defect: "the code is wrong" }\n    thresholds: { act: 0.95, mark: 0.7 }\n    run:\n      flaky: "echo ran"\ntuned:\n  jev-1.13.0:\n    cause: { act: 0.85 }\n---\n`);
+  return dir;
+};
+
 const state = (extra: Record<string, unknown> = {}) => JSON.stringify({ test: { name: "checkout > pays", output: "Timeout after 5000 ms" }, ...extra });
 
 describe("jevelry run", () => {
@@ -137,6 +160,11 @@ describe("jevelry run", () => {
     expect(JSON.parse(readFileSync(join(out, "stdin.json"), "utf8"))).toEqual(JSON.parse(state()));
     expect(JSON.parse(readFileSync(join(out, "file.json"), "utf8"))).toEqual(JSON.parse(state()));
     expect(existsSync(readFileSync(join(out, "path"), "utf8").trim()), "the state file is removed afterwards").toBe(false);
+  });
+
+  it("runs the command unasked at a threshold tuned for the model that answered", async () => {
+    const r = await cli(["run", "run-tuned", "--state", state()], { JEVELRY_JEVELS: tunedJevels() });
+    expect((JSON.parse(r.stdout) as { run: Record<string, unknown> }).run).toMatchObject({ option: "flaky", decision: "act", exit: 0 });
   });
 
   it("writes a run line under the ask's id with the option, the command, the exit code and the time", async () => {
@@ -234,6 +262,12 @@ describe("run() in a program", () => {
     const no = await load(home).run(marked, { flaky }, { confirm: () => false });
     const none = await load(home).run(marked, { flaky });
     expect([no.ran?.confirmed, none.ran?.confirmed, calls]).toEqual([false, false, 1]);
+  });
+
+  it("runs the handler unasked at a threshold tuned for the model that answered", async () => {
+    const home = mkdtempSync(join(tmpdir(), "jevelry-run-lib-"));
+    const { ran } = await jevel("run-tuned", { jevels: [tunedJevels()], home, client: client() }).run(JSON.parse(state()), { flaky: () => "ran" });
+    expect(ran).toMatchObject({ option: "flaky", decision: "act", result: "ran" });
   });
 
   it("calls fall_back with the decisions when Jev cannot answer", async () => {

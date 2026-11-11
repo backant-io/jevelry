@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 import { render } from "ink-testing-library";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
-import { parseJevel } from "../src/jevel.js";
+import { parseJevel, thresholdsFor } from "../src/jevel.js";
 import type { AskLine, LogLine, OutcomeLine } from "../src/log.js";
 import { App } from "../src/tui/app.js";
 import { placeOf, proposeAct, setActThreshold, tallies } from "../src/tui/tuning.js";
@@ -29,6 +29,13 @@ const reviewed = (list: Array<[certainty: number, right: boolean]>) => list.map(
 /** `n` reviewed decisions spread evenly from `from` to `to`, right when `right(c)` says so. */
 const spread = (n: number, from: number, to: number, right: (c: number) => boolean) =>
   reviewed(Array.from({ length: n }, (_, i) => { const c = Math.round((from + ((to - from) * i) / (n - 1)) * 100) / 100; return [c, right(c)]; }));
+
+/** The file as tuning leaves it: `version` one higher (0 leaves it), and `block` at the end of the front matter. */
+const withTuned = (text: string, version: number, block: string): string => {
+  const close = text.indexOf("\n---\n", 4);
+  return (version === 0 ? text.slice(0, close) : text.slice(0, close).replace(`version: ${version}`, `version: ${version + 1}`)) + block + text.slice(close);
+};
+const TUNED = "\ntuned:\n  jev-1.13.0:\n    team: { act: 0.7 }";
 
 describe("the tuning rule", () => {
   const thresholds = { act: 0.9, mark: 0.6 };
@@ -102,63 +109,90 @@ describe("the tuning rule", () => {
     expect(t).toMatchObject({ act: 2, mark: 2, fallBack: 4, actReviewed: 1, actRight: 1, markReviewed: 1, markRight: 0 });
     expect(t.certainties).toHaveLength(6);
     expect(t.reviewed).toEqual([{ certainty: 0.95, right: true }, { certainty: 0.8, right: false }]);
+    expect(t.model).toBe("jev-1.13.0");
+  });
+
+  // Two models are sure to different degrees about the same answers, so one histogram of both describes neither, and a
+  // threshold read off it would be set for a model that does not exist. The numbers are those of the model in use now.
+  it("counts the model that answered the jevel last, and leaves another model's answers out", () => {
+    const ask = (id: string, at: string, model: string, c: number): AskLine => ({
+      kind: "ask", id, at, jevel: { name: "t", version: 1 }, model, state_hash: hash, usage: null, cwd: "/w",
+      answers: { q: { type: "noul", noul: c, yes: true, certainty: c, decision: "act" } },
+    });
+    const outcome = (id: string): OutcomeLine => ({ kind: "outcome", id, question: "q", outcome: "agree", value: null, note: null, at: "2026-11-12T10:00:00.000Z" });
+    const lines = [ask("old", "2026-11-10T09:00:00.000Z", "local/small-Q8_0", 0.97), outcome("old"), ask("new1", "2026-11-11T09:00:00.000Z", "local/big-Q4_K_M", 0.66), outcome("new1"), ask("new2", "2026-11-11T09:01:00.000Z", "local/big-Q4_K_M", 0.62)];
+    const t = tallies(lines).get("t\nq")!;
+    expect(t.model).toBe("local/big-Q4_K_M");
+    expect(t.certainties).toEqual([0.66, 0.62]);
+    expect(t.reviewed).toEqual([{ certainty: 0.66, right: true }]);
+    expect(t.act).toBe(2);
+    // Whichever way round the lines were read.
+    expect(tallies([...lines].reverse()).get("t\nq")!.model).toBe("local/big-Q4_K_M");
   });
 });
 
 describe("setting the act threshold in the file", () => {
   const shipped = readFileSync(join(SHIPPED, "ticket-triage", "JEVEL.md"), "utf8");
   const wake = readFileSync(join(FIXTURES, "wake-gate", "JEVEL.md"), "utf8");
-  /** The lines that differ, as [line number, before, after]; the files must have the same number of lines. */
-  const diff = (a: string, b: string): Array<[number, string, string]> => {
-    const x = a.split("\n");
-    const y = b.split("\n");
-    expect(y).toHaveLength(x.length);
-    return x.flatMap((l, i) => (l === y[i] ? [] : [[i + 1, l, y[i]!] as [number, string, string]]));
-  };
+  const MODEL = "local/vllm-d3-flash-Q4_K_M";
 
-  // A person reads the diff of their jevel in review; a reserialised file would bury the one change in noise.
-  it("changes the question's act value and the version, and every other byte stays", () => {
-    const edited = setActThreshold(shipped, "team", 0.72);
-    expect(diff(shipped, edited.text)).toEqual([
-      [3, "version: 3", "version: 4"],
-      [43, "    thresholds: { act: 0.8, mark: 0.6 }", "    thresholds: { act: 0.72, mark: 0.6 }"],
-    ]);
+  // What was measured was measured on one model, so it is written under that model's name and the author's own
+  // thresholds stay. A person reads the diff of their jevel in review; a reserialised file would bury the change in noise.
+  it("writes the threshold under the model it was measured on, at the end of the front matter, and every other byte stays", () => {
+    const edited = setActThreshold(shipped, MODEL, "team", 0.72);
+    expect(edited.text).toBe(withTuned(shipped, 3, `\ntuned:\n  ${MODEL}:\n    team: { act: 0.72 }`));
+    // The confirm dialog shows these: lines that are new are shown as new, with no neighbour repeated as if it had changed.
     expect(edited.changes).toEqual([
       { line: 3, before: "version: 3", after: "version: 4" },
-      { line: 43, before: "    thresholds: { act: 0.8, mark: 0.6 }", after: "    thresholds: { act: 0.72, mark: 0.6 }" },
+      { line: shipped.slice(0, shipped.indexOf("\n---\n", 4)).split("\n").length + 1, before: "", after: `tuned:\n  ${MODEL}:\n    team: { act: 0.72 }` },
     ]);
     const parsed = parseJevel(edited.text, "ticket-triage").jevel;
-    expect(parsed.questions.team!.thresholds).toEqual({ act: 0.72, mark: 0.6 });
+    expect(thresholdsFor(parsed, "team", MODEL)).toEqual({ act: 0.72, mark: 0.6 });
+    expect(thresholdsFor(parsed, "team", "jev-1.13.0")).toEqual({ act: 0.8, mark: 0.6 });
+    expect(parsed.questions.team!.thresholds).toEqual({ act: 0.8, mark: 0.6 });
     expect(parsed.version).toBe(4);
     expect(parsed.body).toBe(parseJevel(shipped, "ticket-triage").jevel.body);
   });
 
+  it("changes a threshold already tuned where it stands, and adds a question or a model above the ones there", () => {
+    const once = setActThreshold(wake, MODEL, "same_as", 0.8).text;
+    const next = (text: string): string => text.replace("version: 2", "version: 3");
+    expect(setActThreshold(once, MODEL, "same_as", 0.78).text).toBe(next(once).replace("same_as: { act: 0.8 }", "same_as: { act: 0.78 }"));
+    const added = setActThreshold(once, MODEL, "worth_a_turn", 0.82);
+    expect(added.text).toBe(next(once).replace("    same_as: { act: 0.8 }", "    worth_a_turn: { act: 0.82 }\n    same_as: { act: 0.8 }"));
+    expect(added.changes[1]).toEqual({ line: once.split("\n").indexOf("    same_as: { act: 0.8 }") + 1, before: "", after: "    worth_a_turn: { act: 0.82 }" });
+    expect(setActThreshold(once, "jev-1.13.0", "same_as", 0.81).text).toBe(next(once).replace(`  ${MODEL}:\n`, `  jev-1.13.0:\n    same_as: { act: 0.81 }\n  ${MODEL}:\n`));
+  });
+
+  // A mark for one model is written by hand; setting act must not cost that line.
+  it("keeps the mark someone wrote for that model, on one line or on its own", () => {
+    const flow = withTuned(wake, 0, `\ntuned:\n  ${MODEL}:\n    same_as: { mark: 0.5 }`);
+    expect(setActThreshold(flow, MODEL, "same_as", 0.6).text).toBe(flow.replace("version: 1", "version: 2").replace("same_as: { mark: 0.5 }", "same_as: { act: 0.6, mark: 0.5 }"));
+    const block = withTuned(wake, 0, `\ntuned:\n  ${MODEL}:\n    same_as:\n      mark: 0.5`);
+    expect(setActThreshold(block, MODEL, "same_as", 0.6).text).toBe(block.replace("version: 1", "version: 2").replace("      mark: 0.5", "      act: 0.6\n      mark: 0.5"));
+  });
+
   // A CRLF file with one LF line reads as a mixed file in every diff and editor.
-  it("inserts a line with the file's own CRLF line end", () => {
+  it("writes its lines with the file's own CRLF line end", () => {
     const crlf = wake.replace(/\n/g, "\r\n");
-    for (const question of ["worth_a_turn", "same_as"]) {
-      const text = crlf.replace("    thresholds: { act: 0.85 }", "    thresholds:\r\n      mark: 0.7");
-      const edited = setActThreshold(text, question, 0.8).text;
-      expect(edited).not.toMatch(/[^\r]\n/);
+    const once = setActThreshold(crlf, MODEL, "same_as", 0.8).text;
+    expect(once).toBe(withTuned(wake, 1, `\ntuned:\n  ${MODEL}:\n    same_as: { act: 0.8 }`).replace(/\n/g, "\r\n"));
+    expect(setActThreshold(once, MODEL, "worth_a_turn", 0.82).text).not.toMatch(/[^\r]\n/);
+    expect(setActThreshold(once, "jev-1.13.0", "same_as", 0.81).text).not.toMatch(/[^\r]\n/);
+  });
+
+  // The name is whatever the server calls its model. One that YAML would read as something else is quoted, and must read back as itself.
+  it("writes a model name YAML would misread in quotes", () => {
+    for (const model of ["org/model:v2 #1", "true", "0.5", "- x"]) {
+      const edited = setActThreshold(wake, model, "same_as", 0.8).text;
+      expect(edited).toContain(`\n  ${JSON.stringify(model)}:\n`);
+      expect(thresholdsFor(parseJevel(edited, "wake-gate").jevel, "same_as", model).act).toBe(0.8);
     }
   });
 
-  it("keeps CRLF line ends and edits a flow map without mark", () => {
-    const crlf = wake.replace(/\n/g, "\r\n");
-    const edited = setActThreshold(crlf, "depth", 0.75).text;
-    expect(edited).toBe(crlf.replace("version: 1", "version: 2").replace("    thresholds: { act: 0.7 }", "    thresholds: { act: 0.75 }"));
-  });
-
-  it("adds the threshold to a question that inherits it, indented like its other keys", () => {
-    const edited = setActThreshold(wake, "worth_a_turn", 0.8);
-    expect(edited.text).toBe(wake.replace("version: 1", "version: 2").replace("  worth_a_turn:\n    type: noul", "  worth_a_turn:\n    thresholds: { act: 0.8 }\n    type: noul"));
-    expect(parseJevel(edited.text, "wake-gate").jevel.questions.worth_a_turn!.thresholds).toEqual({ act: 0.8 });
-    expect(edited.changes[1]).toEqual({ line: 13, before: "    type: noul", after: "    thresholds: { act: 0.8 }\n    type: noul" });
-  });
-
   it("refuses a question the file does not have, and an act under the question's mark", () => {
-    expect(() => setActThreshold(shipped, "nope", 0.7)).toThrow("no question named nope");
-    expect(() => setActThreshold(shipped, "team", 0.5)).toThrow("mark (0.6) must not exceed act (0.5)");
+    expect(() => setActThreshold(shipped, MODEL, "nope", 0.7)).toThrow("no question named nope");
+    expect(() => setActThreshold(shipped, MODEL, "team", 0.5)).toThrow("mark (0.6) must not exceed act (0.5)");
   });
 
   it("tells a shipped jevel and one in JEVELRY_HOME from a project's own", () => {
@@ -214,7 +248,8 @@ describe("jevel screen", () => {
       const frame = lastFrame() ?? "";
       expect(frame.split("\n")).toHaveLength(size.rows);
       for (const l of frame.split("\n")) expect(l.length).toBeLessThanOrEqual(size.columns);
-      expect(frame).toContain("Jevel ticket-triage  v3 · 3 questions · 60 decisions");
+      // The numbers are one model's, so the screen names it.
+      expect(frame).toContain("Jevel ticket-triage  v3 · 3 questions · 60 decisions by jev-1.13.0");
       expect(frame).toMatch(/> team {2}choice {2}act ≥ 0\.80 {2}mark ≥ 0\.60 {2}60 decisions/);
       expect(frame).toMatch(/█+▓+ {2}act 40% {2}mark 60% {2}fall_back 0%/);
       expect(frame).toContain("act right 100% of 20   mark right 47% of 30");
@@ -241,15 +276,19 @@ describe("jevel screen", () => {
     expect(confirm).toContain("ticket-triage team: act 0.80 → 0.70");
     expect(confirm).toContain("- version: 3");
     expect(confirm).toContain("+ version: 4");
-    expect(confirm).toContain("- thresholds: { act: 0.8, mark: 0.6 }");
-    expect(confirm).toContain("+ thresholds: { act: 0.7, mark: 0.6 }");
+    // The threshold is this model's: the dialog says whose, and the question's own line is not touched.
+    expect(confirm).toContain("For jev-1.13.0 only, the model these answers came from.");
+    expect(confirm).not.toContain("thresholds: {");
+    expect(confirm).toContain("+ tuned:");
+    expect(confirm).toContain("+   jev-1.13.0:");
+    expect(confirm).toContain("+     team: { act: 0.7 }");
     // The footer names enter the way the dialog does.
     expect(confirm.split("\n").at(-1)).toMatch(/^ enter set it {2}esc cancel/);
     expect(readFileSync(path, "utf8")).toBe(before);
     await press(stdin, ESC);
     expect(readFileSync(path, "utf8")).toBe(before);
     await press(stdin, "T", ENTER);
-    expect(readFileSync(path, "utf8")).toBe(before.replace("version: 3", "version: 4").replace("thresholds: { act: 0.8, mark: 0.6 }", "thresholds: { act: 0.7, mark: 0.6 }"));
+    expect(readFileSync(path, "utf8")).toBe(withTuned(before, 3, TUNED));
     expect(lastFrame()).toContain("threshold set to 0.70 in");
     expect(lastFrame()).toMatch(/> team {2}choice {2}act ≥ 0\.70/);
     expect(lastFrame()).toContain("Jevel ticket-triage  v4");
@@ -275,7 +314,7 @@ describe("jevel screen", () => {
     await press(stdin, ENTER);
     expect(readFileSync(shippedPath, "utf8")).toBe(before);
     const copy = join(project, "ticket-triage", "JEVEL.md");
-    expect(readFileSync(copy, "utf8")).toBe(before.replace("version: 3", "version: 4").replace("thresholds: { act: 0.8, mark: 0.6 }", "thresholds: { act: 0.7, mark: 0.6 }"));
+    expect(readFileSync(copy, "utf8")).toBe(withTuned(before, 3, TUNED));
     expect(existsSync(join(project, "ticket-triage", "example.json"))).toBe(true);
     expect(lastFrame()).toContain("your project's file: ");
     unmount();
@@ -295,7 +334,7 @@ describe("jevel screen", () => {
     expect(lastFrame()).not.toContain("Cannot");
     expect((lastFrame() ?? "").split("\n").at(-1)).toMatch(/^ enter set it {2}esc cancel/);
     await press(stdin, ENTER);
-    expect(readFileSync(path, "utf8")).toBe(before.replace("version: 3", "version: 4").replace("thresholds: { act: 0.8, mark: 0.6 }", "thresholds: { act: 0.7, mark: 0.6 }"));
+    expect(readFileSync(path, "utf8")).toBe(withTuned(before, 3, TUNED));
     expect(existsSync(join(source, "ticket-triage", "ticket-triage"))).toBe(false);
     unmount();
   });

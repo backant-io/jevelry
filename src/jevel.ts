@@ -40,6 +40,8 @@ export interface Jevel {
   questions: Record<string, JevelQuestion>;
   /** A shell command run when the dispatcher's decision is fall_back or Jev could not answer. */
   fall_back?: string;
+  /** Thresholds that the tuning screen measured on one model. The first key is the model name in its answers. The second key is the question. */
+  tuned?: Record<string, Record<string, Partial<Thresholds>>>;
   body: string;
   path: string;
 }
@@ -97,6 +99,37 @@ function refuseRenamedKey(raw: Record<string, unknown>, prefix: string): void {
 function checkMarkUnderAct(layers: Array<Partial<Thresholds>>, field: string): void {
   const merged = mergeThresholds(...layers);
   if (merged.mark > merged.act) throw new JevelError(field, `${field}: mark (${merged.mark}) must not exceed act (${merged.act})`);
+}
+
+/** Reads `tuned`. Each entry must name a question of the jevel. The mark must not exceed the act after the entry applies. */
+function tunedOf(raw: unknown, jevel: Jevel): NonNullable<Jevel["tuned"]> {
+  if (!isRecord(raw)) throw new JevelError("tuned", "tuned must map a model name to the thresholds of its questions");
+  const tuned: NonNullable<Jevel["tuned"]> = {};
+  for (const [model, entries] of Object.entries(raw)) {
+    const at = `tuned.${model}`;
+    if (!isRecord(entries)) throw new JevelError(at, `${at} must map question names to thresholds`);
+    const byQuestion: Record<string, Partial<Thresholds>> = {};
+    for (const [id, value] of Object.entries(entries)) {
+      const field = `${at}.${id}`;
+      if (!Object.hasOwn(jevel.questions, id)) throw new JevelError(field, `${field} names no question of this jevel, which has ${Object.keys(jevel.questions).join(", ")}`);
+      const thresholds = thresholdsOf(value, field);
+      checkMarkUnderAct([jevel.thresholds, jevel.questions[id]!.thresholds ?? {}, thresholds], field);
+      byQuestion[id] = thresholds;
+    }
+    tuned[model] = byQuestion;
+  }
+  return tuned;
+}
+
+/**
+ * The thresholds for one answer. Later layers win: the jevel, then the question, then the `tuned` entry for the model
+ * that gave the answer. `model` is the name in the answer. Without a name or an entry, the first two layers decide.
+ */
+export function thresholdsFor(jevel: Jevel, question: string, model?: string | null): Thresholds {
+  const own = Object.hasOwn(jevel.questions, question) ? jevel.questions[question]!.thresholds : undefined;
+  // Own properties only, because a server supplies the model name.
+  const entries = jevel.tuned && typeof model === "string" && Object.hasOwn(jevel.tuned, model) ? jevel.tuned[model]! : undefined;
+  return mergeThresholds(jevel.thresholds, own, entries && Object.hasOwn(entries, question) ? entries[question] : undefined);
 }
 
 function questionOf(id: string, raw: unknown, jevelThresholds: Partial<Thresholds>): JevelQuestion {
@@ -299,6 +332,7 @@ export function parseJevel(markdown: string, dirName: string, path = "<inline>")
     if (typeof raw.fall_back !== "string" || raw.fall_back.trim() === "") throw new JevelError("fall_back", "fall_back must be a command string");
     jevel.fall_back = raw.fall_back;
   }
+  if (raw.tuned !== undefined) jevel.tuned = tunedOf(raw.tuned, jevel);
   checkRun(jevel);
   return { jevel, warnings: warningsOf(jevel) };
 }

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { TypeSafeClient } from "@typesafe-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { ask, canonicalJson, stateHash } from "../src/ask.js";
-import { loadJevel } from "../src/jevel.js";
+import { loadJevel, parseJevel } from "../src/jevel.js";
 import { CHOICE_BODY, CHOICE_QUESTIONS, NOUL_BODY, NOUL_QUESTIONS, REFERENCE_STATE, SCORE_BODY, SCORE_QUESTIONS, jsonResponse, scriptedFetch } from "./fixtures/responses.js";
 
 const client = (fetch: (url: string, init?: RequestInit) => Promise<Response>, retry = { maxRetries: 0 }) =>
@@ -250,5 +250,27 @@ describe("error mapping", () => {
       throw new TypeError("fetch failed");
     };
     expect(await ask({ client: local(failing), state, questions })).toMatchObject({ ok: false, error: { exit: 6, message: expect.stringMatching(/; see llama-server\.log in \$JEVELRY_HOME$/) } });
+  });
+});
+
+// The model's name is known only once it has answered: an alias and a default both resolve on the server. A threshold tuned
+// for one model must reach its answers and nobody else's, or a model that was never measured acts on another's evidence.
+describe("ask with thresholds tuned for a model", () => {
+  const jevel = parseJevel(
+    `---\nname: t\nversion: 1\nquestions:\n  sure: { type: noul, instructions: x }\n  each: { type: noul, instructions: "Is \`item\` it?", repeat: { over: items, as: item } }\ntuned:\n  local/big-Q4_K_M:\n    sure: { act: 0.6, mark: 0.55 }\n    each: { act: 0.6, mark: 0.55 }\n---\n`,
+    "t",
+  ).jevel;
+  const answeredBy = (model: string) =>
+    scriptedFetch([() => jsonResponse(200, { model, answers: { sure: { type: "noul", noul: 0.65 }, "each[0]": { type: "noul", noul: 0.65 }, "each[1]": { type: "noul", noul: 0.52 } }, usage: { input_tokens: 9, output_tokens: 3 } })]).fetch;
+  const decisions = async (model: string) => {
+    const result = await ask({ client: client(answeredBy(model)), state: { items: ["a", "b"] }, jevel });
+    if (!result.ok) throw new Error(result.error.message);
+    return Object.fromEntries(Object.entries(result.document.answers).map(([name, a]) => [name, a.decision]));
+  };
+  it("decides by the thresholds of the model that answered, a repeated question under its own name", async () => {
+    expect(await decisions("local/big-Q4_K_M")).toEqual({ sure: "act", "each[0]": "act", "each[1]": "fall_back" });
+  });
+  it("leaves every other model on the question's own thresholds", async () => {
+    expect(await decisions("jev-1.13.0")).toEqual({ sure: "fall_back", "each[0]": "fall_back", "each[1]": "fall_back" });
   });
 });

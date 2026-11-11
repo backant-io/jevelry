@@ -3,8 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { constants, tmpdir } from "node:os";
 import { join } from "node:path";
 import { UnreadableAnswer } from "./ask.js";
-import { decisionOf, mergeThresholds } from "./decision.js";
-import { type Jevel, JevelError, PLACEHOLDER, SAFE_VALUE } from "./jevel.js";
+import { decisionOf } from "./decision.js";
+import { type Jevel, JevelError, PLACEHOLDER, SAFE_VALUE, thresholdsFor } from "./jevel.js";
 import { appendLine } from "./log.js";
 import type { Answer, Decision, RunReport } from "./protocol.js";
 
@@ -40,7 +40,7 @@ const answered = (a: unknown): a is Answer =>
  * names and true/false reach the command, and each is checked again here, because the answer came
  * over the network.
  */
-export function planCall(jevel: Jevel, answers: Answers | null): Call {
+export function planCall(jevel: Jevel, answers: Answers | null, model?: string): Call {
   const id = dispatcherOf(jevel);
   const q = jevel.questions[id]!;
   const fallBack: Call = { option: null, command: jevel.fall_back ?? null, args: {}, certainty: 0, decision: "fall_back" };
@@ -65,7 +65,7 @@ export function planCall(jevel: Jevel, answers: Answers | null): Call {
     args[name!] = a.type === "choice" ? a.choice : a.type === "noul" ? a.yes : String(a.score);
     certainty = Math.min(certainty, a.certainty);
   }
-  const decision = decisionOf(certainty, mergeThresholds(jevel.thresholds, q.thresholds));
+  const decision = decisionOf(certainty, thresholdsFor(jevel, id, model));
   if (decision === "fall_back") return { ...fallBack, certainty };
   const command = template === null ? null : template.replace(PLACEHOLDER, (_, name: string) => String(args[name]));
   return { option, command, args, certainty, decision };

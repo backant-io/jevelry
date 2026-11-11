@@ -192,7 +192,7 @@ How good the decision is was measured on labels jevelry's authors did not write:
 | of those, simple / medium / complex | 14 / 1 / 0 | 4 / 0 / 0 |
 | of the 25 simple phrases, sent to the small model | 14 (37-73%) | 4 (6-35%) |
 
-The brackets are 95% intervals. The thresholds in the jevel were set on Liquid d1 2B. The 9B model reads the levels better and is less sure of itself: its answers at the first level have a median certainty of 0.63, where the 2B model's have 0.85, so at `act: 0.8` it moves little. With the threshold at 0.5 it would have sent 15 of the 25 simple phrases to the small model and nothing else, but that figure is read off the same phrases it is reported on. Set the threshold on the model you run, with `jevelry report` once you have outcomes, as for any jevel.
+The brackets are 95% intervals. The thresholds in the jevel were set on Liquid d1 2B. The 9B model reads the levels better and is less sure of itself: its answers at the first level have a median certainty of 0.63, where the 2B model's have 0.85, so at `act: 0.8` it moves little. With the threshold at 0.5 it would have sent 15 of the 25 simple phrases to the small model and nothing else, but that figure is read off the same phrases it is reported on. Set the threshold on the model you run, with `jevelry report` once you have outcomes, as for any jevel. The Jevel screen of `jevelry tui` does it per model: the threshold it proposes for one model goes into the jevel's `tuned` block under that model's name, and the other model keeps the thresholds of the question.
 
 It has not been asked of hosted Jev. `npx jevelry eval request-route` asks its six cases of whichever model you have set up, and the logic above is held by `tests/route-recipe.test.ts`.
 

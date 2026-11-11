@@ -405,7 +405,7 @@ export function buildProgram(): Command {
       let call: Call | undefined;
       if (result.ok) {
         try {
-          call = planCall(jevel, result.document.answers);
+          call = planCall(jevel, result.document.answers, result.document.model);
         } catch (error) {
           result = { ok: false, error: errorBody(error) };
         }

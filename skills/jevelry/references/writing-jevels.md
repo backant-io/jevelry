@@ -225,6 +225,14 @@ When you know later what was actually true, tell jevelry and read the report:
 
 After a few hundred asks the report shows you, per question, how often `act` decisions agreed with reality, and that is the number you move thresholds by. A question that agrees 95% of the time can probably act lower, and one that agrees 70% of the time goes up or gets rewritten, with a new case for the state it got wrong.
 
+A threshold belongs to the model it was measured on, because two models are sure to different degrees about the same answers. The Jevel screen of `npx jevelry tui` counts the answers of the model in use and writes the threshold it proposes under that model's name, in a `tuned` block at the end of the frontmatter:
+
+    tuned:
+      local/vllm-d3-flash-Q4_K_M:
+        complexity: { act: 0.65 }
+
+An entry decides the answers that model gives to that question, and every other answer keeps the thresholds of the question. Leave the block to the screen. Write the thresholds of the questions for a model you have not measured yet, which means high.
+
 Bump `version` each time you change a question or a threshold, so the log tells the asks apart. Keep `model` pinned to a concrete version like `jev-1.13.0`. An alias like `jev-latest` moves when TypeSafe ships a release, and thresholds you tuned on one version usually need a look on the next, so move the pin yourself once the cases pass on the new version and the report looks right.
 
 ## Checklist

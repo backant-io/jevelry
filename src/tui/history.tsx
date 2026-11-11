@@ -1,7 +1,7 @@
 import { Box, Text, useInput } from "ink";
 import { useMemo, useState } from "react";
-import { type Thresholds, mergeThresholds } from "../decision.js";
-import { type JevelQuestion, loadJevel } from "../jevel.js";
+import type { Thresholds } from "../decision.js";
+import { type JevelQuestion, loadJevel, thresholdsFor } from "../jevel.js";
 import type { AskLine, LogLine, OutcomeLine, RunLine } from "../log.js";
 import type { Answer, FallBackAnswer } from "../protocol.js";
 import { recordedDecision, report } from "../report.js";
@@ -306,6 +306,6 @@ export function thresholdsLookup(dirs: string[]): (row: Row) => Found | null {
     if (!j) return null;
     const base = baseName(row.question);
     const question = Object.hasOwn(j.questions, base) ? j.questions[base] : undefined;
-    return { thresholds: mergeThresholds(j.thresholds, question?.thresholds), version: j.version, ...(question ? { question } : {}) };
+    return { thresholds: thresholdsFor(j, base, row.ask.model), version: j.version, ...(question ? { question } : {}) };
   };
 }
