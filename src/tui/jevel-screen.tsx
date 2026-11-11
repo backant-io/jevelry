@@ -3,8 +3,8 @@ import { homedir } from "node:os";
 import { join, relative } from "node:path";
 import { Box, Text, useInput } from "ink";
 import { useMemo, useRef, useState } from "react";
-import { mergeThresholds, type Thresholds } from "../decision.js";
-import type { Jevel } from "../jevel.js";
+import type { Thresholds } from "../decision.js";
+import { type Jevel, thresholdsFor } from "../jevel.js";
 import { histogram, mix } from "./charts.js";
 import { Dialog, moves, useChrome } from "./dialog.js";
 import { wrapLine } from "./history.js";
@@ -38,10 +38,12 @@ export interface QuestionView {
 export function questionViews(jevel: Jevel | null, name: string, tallies: Map<string, Tally>): QuestionView[] {
   const logged = [...tallies.values()].filter((t) => t.jevel === name);
   const names = [...Object.keys(jevel?.questions ?? {}), ...logged.map((t) => t.question).filter((q) => !jevel || !Object.hasOwn(jevel.questions, q))];
+  // All tallies of a jevel are for one model. Each question shows the thresholds for that model, also a question with no answers.
+  const model = logged.find((t) => t.model !== null)?.model;
   return names.map((q) => {
     const tally = logged.find((t) => t.question === q) ?? null;
     const question = jevel && Object.hasOwn(jevel.questions, q) ? jevel.questions[q]! : null;
-    const thresholds = jevel && question ? mergeThresholds(jevel.thresholds, question.thresholds) : null;
+    const thresholds = jevel && question ? thresholdsFor(jevel, q, model) : null;
     return { name: q, type: question?.type ?? null, thresholds, tally, proposal: tally && thresholds ? proposeAct(tally, thresholds) : null };
   });
 }
@@ -139,12 +141,14 @@ export function JevelView(props: {
   const whose = props.place?.kind === "shipped" ? "ships with jevelry" : props.place?.kind === "home" ? "in JEVELRY_HOME, shared by every project" : props.place?.kind === "source" ? "jevelry's own source file" : "your project's file";
   // ponytail: the path goes last so a long one is what gets cut at the right edge.
   const totals = views.reduce((n, v) => n + (v.tally ? v.tally.act + v.tally.mark + v.tally.fallBack : 0), 0);
+  // All tallies of a jevel are for the model that answered last.
+  const model = views.find((v) => v.tally?.model)?.tally?.model;
   return (
     <Box flexDirection="column" paddingX={1} height={props.height}>
       <Text wrap="truncate">
         <Text bold color={theme.accent}>Jevel </Text>
         <Text bold color={theme.text}>{props.name}</Text>
-        <Text color={theme.muted}>{`  ${props.jevel ? `v${props.jevel.version} · ` : ""}${plural(views.length, "question")} · ${plural(totals, "decision")}`}</Text>
+        <Text color={theme.muted}>{`  ${props.jevel ? `v${props.jevel.version} · ` : ""}${plural(views.length, "question")} · ${plural(totals, "decision")}${model ? ` by ${model}` : ""}`}</Text>
       </Text>
       <Text color={theme.muted} wrap="truncate">{where ? `${whose}: ${where}` : "The jevel file is not found in the jevels folders; these numbers come from the log alone."}</Text>
       <Text> </Text>
@@ -197,7 +201,8 @@ export function tunePlan(jevel: Jevel, place: Place, view: QuestionView, project
   const copy = place.kind === "shipped" || place.kind === "home";
   const target = join(project, jevel.name);
   try {
-    return { edited: setActThreshold(readFileSync(jevel.path, "utf8"), view.name, view.proposal!.act), blocked: null, copy, target };
+    // A proposal comes from reviewed answers, and each answer has a model.
+    return { edited: setActThreshold(readFileSync(jevel.path, "utf8"), view.tally!.model!, view.name, view.proposal!.act), blocked: null, copy, target };
   } catch (e) {
     return { edited: null, copy, target, blocked: `The file cannot be edited here: ${e instanceof Error ? e.message : String(e)}` };
   }
@@ -232,7 +237,7 @@ export function TuneDialog(props: {
       done.current = true;
       try {
         const path = copy ? copyJevel(props.jevel.path, props.project) : props.jevel.path;
-        writeActThreshold(path, q, p.act);
+        writeActThreshold(path, props.view.tally!.model!, q, p.act);
         props.onDone(`threshold set to ${th(p.act)} in ${shown(path)}`);
       } catch (e) {
         props.onDone(`threshold not set: ${e instanceof Error ? e.message : String(e)}`, true);
@@ -243,6 +248,7 @@ export function TuneDialog(props: {
   const lines: Array<{ text: string; color: string; bold?: boolean }> = [
     { text: `${props.jevel.name} ${q}: act ${th(props.view.thresholds!.act)} → ${th(p.act)}`, color: theme.text, bold: true },
     { text: `act would still be right ${pct(p.agreement)} (now ${pct(p.current)}), from ${p.reviewed} reviewed.`, color: theme.muted },
+    { text: `For ${props.view.tally!.model} only, the model these answers came from.`, color: theme.muted },
     { text: " ", color: theme.text },
   ];
   if (blocked !== null) {
@@ -258,8 +264,9 @@ export function TuneDialog(props: {
     lines.push({ text: `in ${copy ? shown(join(target, "JEVEL.md")) : shown(props.jevel.path)}`, color: theme.muted });
     for (const c of plan.edited?.changes ?? []) {
       lines.push({ text: `line ${c.line}`, color: theme.muted });
-      lines.push({ text: `- ${c.before.trim()}`, color: theme.fallBack });
-      for (const after of c.after.split("\n")) lines.push({ text: `+ ${after.trim()}`, color: theme.act });
+      if (c.before !== "") lines.push({ text: `- ${c.before.trim()}`, color: theme.fallBack });
+      // New lines keep their indentation, because it shows the model and the question.
+      for (const after of c.after.split("\n")) lines.push({ text: `+ ${c.before === "" ? after.trimEnd() : after.trim()}`, color: theme.act });
     }
     lines.push({ text: "Every other byte of the file stays as it is.", color: theme.muted });
   }

@@ -550,7 +550,7 @@ A few cases prove little, and the best new ones are states that really came up. 
 | `mark` | certainty at or above the mark threshold | acts and flags it for a person |
 | `fall_back` | below the mark threshold, or Jev could not answer | what it did before jevelry |
 
-A yes/no question's certainty is how far its probability sits from 0.5, and a choice or score uses the confidence Jev reports. The thresholds live in the jevel, per question, with `act: 0.9, mark: 0.7` when the jevel sets none, so a question that skips an expensive step can ask for a higher bar than one that only sorts a list.
+A yes/no question's certainty is how far its probability sits from 0.5, and a choice or score uses the confidence Jev reports. The thresholds live in the jevel, per question, with `act: 0.9, mark: 0.7` when the jevel sets none, so a question that skips an expensive step can ask for a higher bar than one that only sorts a list. A threshold tuned for one model sits in the jevel's `tuned` block and decides that model's answers only ([Tuning thresholds](#tuning-thresholds)).
 
 ### The answer document
 
@@ -600,6 +600,16 @@ Every question of a jevel is read against the whole state, so a question whose a
 ### Tuning thresholds
 
 Once a question has 20 reviewed decisions, the Jevel screen proposes a lower act threshold when the decisions above it were right at least 90% of the time and at least as often as at the current threshold, less two points. `T` writes it into the jevel file. A jevel that came with jevelry is first copied into `./jevels`, and from then on your project uses that copy.
+
+A threshold belongs to the model it was measured on. Two models are sure to different degrees about the same answers: on the same requests one 2B model gave its answers at a median certainty of 0.85 and a 9B model at 0.63. So the Jevel screen counts the answers of the model that answered the jevel last, names it in its title, and `T` writes the threshold under that model's name, in a `tuned` block at the end of the frontmatter:
+
+```yaml
+tuned:
+  local/vllm-d3-flash-Q4_K_M:
+    complexity: { act: 0.65 }
+```
+
+An answer that this model gives to this question is judged by the entry. Every other answer is judged by the thresholds of the question, which stay as you wrote them. Nobody has to write the block by hand. An entry takes `act`, `mark` or both, `check` refuses one that names no question of the jevel, and jevelry 0.6 ignores the block.
 
 ## Local models
 
@@ -768,7 +778,7 @@ npm run test:live -- tests/live/jevels.test.ts
 
 `npm run scoreboard` writes the numbers each change is judged on into `scoreboard/<date>-<commit>.json`: the CLI's start-up next to bare Node, the size and time of an install, how long logged asks took per jevel and model, a running model server's memory next to jevelry's estimate for it, and, with `--eval`, every jevel's cases. It never starts a model, it asks one only with `--eval`, and it lists what it could not measure. With `--eval --gate` it exits 8 when a jevel's cases score worse, or one more answer is wrong at `act`, than in the newest earlier result of the same model: a release can wait on that without anyone choosing a bar.
 
-604 tests run offline against recorded answers from TypeSafe's API reference, against the eighteen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. The local-model tests among them use a fake `llama-server`, a fake jevd, a fake Homebrew and a fake Hugging Face, so no test downloads a model or starts a real server, and they check that a 27B model is never offered as runnable on a 24 GB Mac. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
+615 tests run offline against recorded answers from TypeSafe's API reference, against the eighteen jevels and their cases, and against every screen of `jevelry tui` at 80x24 and 120x40. The local-model tests among them use a fake `llama-server`, a fake jevd, a fake Homebrew and a fake Hugging Face, so no test downloads a model or starts a real server, and they check that a 27B model is never offered as runnable on a 24 GB Mac. 99 tests run against the real API on demand with `npm run test:live`: every jevel answers its own `example.json`, every case in every `cases.json` gets the answer it expects, five more cover the API itself, one routes the `ticket-triage` example through `decide` in your program, one asks `ticket-triage` from the Try screen of `jevelry tui` and one lets `failing-test` run its command. One of those tests reads the log afterwards and checks that your key stays out of it.
 
 ## License
 

@@ -1,15 +1,17 @@
 import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
-import { type Node, isMap, isScalar, parseDocument } from "yaml";
-import { mergeThresholds, type Thresholds } from "../decision.js";
-import { SHIPPED_JEVELS, parseJevel } from "../jevel.js";
+import { type Node, type YAMLMap, isMap, isScalar, parseDocument } from "yaml";
+import type { Thresholds } from "../decision.js";
+import { SHIPPED_JEVELS, parseJevel, thresholdsFor } from "../jevel.js";
 import type { AskLine, LogLine } from "../log.js";
 import { recordedDecision } from "../report.js";
 
-/** One question of one jevel, as the log has seen it. */
+/** One question of one jevel, as the log shows it for the model that answered the jevel last. */
 export interface Tally {
   jevel: string;
   question: string;
+  /** The name of that model as its answers give it. Null when no model answered this jevel. */
+  model: string | null;
   act: number;
   mark: number;
   fallBack: number;
@@ -27,17 +29,30 @@ export interface Tally {
 const NO_JEVEL = "(questions)";
 export const tallyKey = (jevel: string, question: string): string => `${jevel}\n${question}`;
 
-/** Per jevel and question (a `repeat` question under its base name): the mix, how often act and mark were right, and the certainties. */
+/**
+ * For each jevel and question (a `repeat` question under its base name): the mix, how often act and mark were right, and
+ * the certainties. The count is for one model, the model that answered the jevel last. Two models have different
+ * certainties for the same answers, so one count for the two models describes neither.
+ */
 export function tallies(lines: LogLine[]): Map<string, Tally> {
   const last = new Map<string, "agree" | "disagree">();
   for (const l of lines) if (l.kind === "outcome") last.set(`${l.id}\n${l.question}`, l.outcome);
-  const out = new Map<string, Tally>();
-  for (const ask of lines.filter((l): l is AskLine => l.kind === "ask")) {
+  const asks = lines.filter((l): l is AskLine => l.kind === "ask");
+  const latest = new Map<string, { at: string; model: string }>();
+  for (const ask of asks) {
     const jevel = ask.jevel?.name ?? NO_JEVEL;
+    if (ask.model !== null && !((latest.get(jevel)?.at ?? "") > ask.at)) latest.set(jevel, { at: ask.at, model: ask.model });
+  }
+  const out = new Map<string, Tally>();
+  for (const ask of asks) {
+    const jevel = ask.jevel?.name ?? NO_JEVEL;
+    const model = latest.get(jevel)?.model ?? null;
+    // An ask with no answer has no model. It stays as a fall_back of the model in use.
+    if (ask.model !== null && ask.model !== model) continue;
     for (const [name, answer] of Object.entries(ask.answers)) {
       const question = name.replace(/\[\d+\]$/, "");
       const key = tallyKey(jevel, question);
-      const t = out.get(key) ?? { jevel, question, act: 0, mark: 0, fallBack: 0, actReviewed: 0, actRight: 0, markReviewed: 0, markRight: 0, certainties: [], reviewed: [] };
+      const t = out.get(key) ?? { jevel, question, model, act: 0, mark: 0, fallBack: 0, actReviewed: 0, actRight: 0, markReviewed: 0, markRight: 0, certainties: [], reviewed: [] };
       out.set(key, t);
       const d = recordedDecision(answer);
       if (d === "act") t.act += 1;
@@ -103,7 +118,7 @@ export function proposeAct(t: Pick<Tally, "reviewed" | "certainties">, threshold
   return null;
 }
 
-/** One edit to the file, by position: the line as it was and as it will be, for the confirm dialog. */
+/** One edit to the file, by position: the line before and after, for the confirm dialog. New lines have an empty `before`. */
 export interface Change {
   line: number;
   before: string;
@@ -116,18 +131,23 @@ const lineAt = (text: string, offset: number): { number: number; start: number; 
   return { number: text.slice(0, start).split("\n").length, start, end: newline === -1 ? text.length : newline };
 };
 
+/** A key that YAML reads back as the same string: plain for a simple name, quoted for all others. */
+const yamlKey = (key: string): string => (/^[A-Za-z_][A-Za-z0-9._/-]*$/.test(key) && !/^(true|false|null|yes|no|on|off|y|n)$/i.test(key) ? key : JSON.stringify(key));
+
 /**
- * `thresholds.act` of one question set to `act` and `version` raised by one, each value edited where it stands in the
- * frontmatter, so every other byte of the file stays as it was. Throws when the file has no question of that name,
- * when the edit would not read back as the new threshold, or when the frontmatter is written in a way this cannot edit.
+ * Sets `tuned.<model>.<question>.act` to `act` and raises `version` by one. The threshold is for the model that gave the
+ * reviewed answers, so the thresholds that the author wrote stay. The function edits each value in its position and adds
+ * a missing `tuned` block at the end of the frontmatter, so all other bytes of the file stay. It throws when the file has
+ * no question of that name, when the result does not read back as the new threshold, or when it cannot edit the frontmatter.
  */
-export function setActThreshold(text: string, question: string, act: number): { text: string; changes: Change[]; version: number } {
+export function setActThreshold(text: string, model: string, question: string, act: number): { text: string; changes: Change[]; version: number } {
   const open = /^---\r?\n/.exec(text);
   if (!open) throw new Error("the file does not start with a --- frontmatter block");
   const close = /\r?\n---(\r?\n|$)/.exec(text.slice(open[0].length - 1));
   if (!close) throw new Error("the frontmatter block is never closed with ---");
   const base = open[0].length;
-  const doc = parseDocument(text.slice(base, open[0].length - 1 + close.index));
+  const end = open[0].length - 1 + close.index;
+  const doc = parseDocument(text.slice(base, end));
   if (doc.errors.length > 0) throw new Error(`the frontmatter is not YAML: ${doc.errors[0]!.message}`);
   const value = String(act);
   // An inserted line takes the file's own line end.
@@ -137,22 +157,37 @@ export function setActThreshold(text: string, question: string, act: number): { 
   const q = doc.getIn(["questions", question], true) as Node | undefined;
   if (!isMap(q) || q.items.length === 0) throw new Error(`no question named ${question} in this file`);
   const indentAt = (offset: number): string => " ".repeat(offset - (text.lastIndexOf("\n", offset - 1) + 1));
-  const thresholds = q.get("thresholds", true) as Node | undefined;
-  if (thresholds === undefined) {
-    if (q.flow) throw new Error(`questions.${question} is written on one line; add thresholds to it by hand`);
-    const at = base + (q.items[0]!.key as Node).range![0];
-    edits.push([at, 0, `thresholds: { act: ${value} }${eol}${indentAt(at)}`]);
-  } else if (!isMap(thresholds)) {
-    throw new Error(`questions.${question}.thresholds is not a map`);
+  // The text to add at each depth: below `tuned`, below the model, and in the entry of the question.
+  const tails = (indent: string, flow: boolean): string[] => [
+    flow ? `${yamlKey(model)}: { ${question}: { act: ${value} } }` : `${yamlKey(model)}:${eol}${indent}  ${question}: { act: ${value} }`,
+    `${question}: { act: ${value} }`,
+    `act: ${value}`,
+  ];
+  let node = doc.get("tuned", true) as Node | undefined;
+  if (node === undefined) {
+    edits.push([end, 0, `${eol}tuned:${eol}  ${tails("  ", false)[0]}`]);
   } else {
-    const current = thresholds.get("act", true) as Node | undefined;
-    if (isScalar(current)) {
-      edits.push([base + current.range![0], current.range![1] - current.range![0], value]);
-    } else if (thresholds.items.length === 0) {
-      edits.push([base + thresholds.range![0], thresholds.range![1] - thresholds.range![0], `{ act: ${value} }`]);
+    // Go down through `tuned`, the model and the question as far as the file has them.
+    const path = [model, question, "act"];
+    let depth = 0;
+    let at = "tuned";
+    let map: YAMLMap | undefined;
+    for (; depth < path.length; depth++) {
+      if (!isMap(node) || node.items.length === 0) throw new Error(`${at} is not a map with entries; write this threshold there by hand`);
+      map = node;
+      const next = node.get(path[depth]!, true) as Node | undefined;
+      if (next === undefined) break;
+      node = next;
+      at += `.${path[depth]}`;
+    }
+    if (depth === path.length) {
+      if (!isScalar(node)) throw new Error(`${at} is not a number; write this threshold there by hand`);
+      edits.push([base + node.range![0], node.range![1] - node.range![0], value]);
     } else {
-      const at = base + (thresholds.items[0]!.key as Node).range![0];
-      edits.push([at, 0, thresholds.flow ? `act: ${value}, ` : `act: ${value}${eol}${indentAt(at)}`]);
+      // Add the entry above the entries that are there, in their style: in the line of a flow map, or on a new line.
+      const first = base + (map!.items[0]!.key as Node).range![0];
+      const indent = indentAt(first);
+      edits.push([first, 0, map!.flow ? `${tails(indent, true)[depth]}, ` : `${tails(indent, false)[depth]}${eol}${indent}`]);
     }
   }
   const version = doc.get("version", true) as Node | undefined;
@@ -168,14 +203,19 @@ export function setActThreshold(text: string, question: string, act: number): { 
   for (const [at, length, insert] of [...edits].sort((a, b) => a[0] - b[0])) {
     const was = lineAt(text, at);
     const now = lineAt(out, at + shift);
-    const afterEnd = insert.includes("\n") ? lineAt(out, at + shift + insert.length).end : now.end;
-    changes.push({ line: was.number, before: text.slice(was.start, was.end), after: out.slice(now.start, afterEnd) });
+    if (insert.includes("\n")) {
+      // New lines go after the line at the edit position or above it. They show as new, without the adjacent line.
+      const after = insert.startsWith(eol);
+      const lines = after ? out.slice(at + shift + eol.length, at + shift + insert.length) : out.slice(now.start, at + shift + insert.length - eol.length - (at - was.start));
+      changes.push({ line: was.number + (after ? 1 : 0), before: "", after: lines });
+    } else {
+      changes.push({ line: was.number, before: text.slice(was.start, was.end), after: out.slice(now.start, now.end) });
+    }
     shift += insert.length - length;
   }
-  // Read it back: the new file must parse and give this question exactly the new act threshold.
+  // Read the file back: it must parse and give this model the new act threshold for this question.
   const parsed = parseJevel(out, String(doc.get("name")));
-  const q2 = parsed.jevel.questions[question];
-  if (mergeThresholds(parsed.jevel.thresholds, q2?.thresholds).act !== act || parsed.jevel.version !== next) {
+  if (thresholdsFor(parsed.jevel, question, model).act !== act || parsed.jevel.version !== next) {
     throw new Error("the edited file does not read back with the new threshold");
   }
   return { text: out, changes, version: next };
@@ -216,8 +256,8 @@ export function copyJevel(path: string, projectJevels: string): string {
 }
 
 /** Reads the file, edits it and writes it back. */
-export function writeActThreshold(path: string, question: string, act: number): { changes: Change[]; version: number } {
-  const edited = setActThreshold(readFileSync(path, "utf8"), question, act);
+export function writeActThreshold(path: string, model: string, question: string, act: number): { changes: Change[]; version: number } {
+  const edited = setActThreshold(readFileSync(path, "utf8"), model, question, act);
   writeFileSync(path, edited.text);
   return { changes: edited.changes, version: edited.version };
 }

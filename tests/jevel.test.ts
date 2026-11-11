@@ -2,7 +2,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { JevelError, SHIPPED_JEVELS, discoveryDirs, findJevel, listJevels, loadJevel, parseJevel } from "../src/jevel.js";
+import { JevelError, SHIPPED_JEVELS, discoveryDirs, findJevel, listJevels, loadJevel, parseJevel, thresholdsFor } from "../src/jevel.js";
 
 const FIXTURES = join(process.cwd(), "tests", "fixtures", "jevels");
 
@@ -163,6 +163,47 @@ describe("parseJevel", () => {
   });
   it("is clean on a good jevel", () => {
     expect(parseJevel(good, "t").warnings).toEqual([]);
+  });
+});
+
+// A threshold says how sure one model has to be. Asked the same requests, a 2B model gave its "simple" answers at a median
+// certainty of 0.85 and a 9B model at 0.63: a threshold measured on one of them lets the other act too often or never.
+describe("thresholds tuned for one model", () => {
+  const head = `name: t
+version: 1
+thresholds: { mark: 0.6 }
+questions:
+  q: { type: noul, instructions: x, thresholds: { act: 0.8 } }
+  r: { type: noul, instructions: x }
+tuned:`;
+  const refuses = (frontmatter: string, field: string) => {
+    expect(() => parseJevel(minimal(frontmatter), "t")).toThrowError(expect.objectContaining({ name: "JevelError", field }) as unknown as Error);
+  };
+  const { jevel } = parseJevel(minimal(`${head}
+  local/big-Q4_K_M:
+    q: { act: 0.65 }
+    r: { act: 0.5, mark: 0.4 }`), "t");
+
+  it("gives the model that was measured its own thresholds, and every other model the question's", () => {
+    // An entry carries what was measured and no more: the mark nobody tuned stays the question's.
+    expect(thresholdsFor(jevel, "q", "local/big-Q4_K_M")).toEqual({ act: 0.65, mark: 0.6 });
+    expect(thresholdsFor(jevel, "r", "local/big-Q4_K_M")).toEqual({ act: 0.5, mark: 0.4 });
+    expect(thresholdsFor(jevel, "q", "local/small-Q8_0")).toEqual({ act: 0.8, mark: 0.6 });
+    expect(thresholdsFor(jevel, "r", "jev-1.13.0")).toEqual({ act: 0.9, mark: 0.6 });
+    expect(thresholdsFor(jevel, "q")).toEqual({ act: 0.8, mark: 0.6 });
+    // What the author wrote is still what the author wrote.
+    expect(jevel.questions.q!.thresholds).toEqual({ act: 0.8 });
+  });
+  // The model name comes from the server's answer: a name like __proto__ must find nothing, not Object.prototype.
+  it("never reads a model name off the prototype", () => {
+    for (const model of ["__proto__", "constructor", "toString"]) expect(thresholdsFor(jevel, "q", model)).toEqual({ act: 0.8, mark: 0.6 });
+  });
+  it("refuses an entry for a question the jevel does not have, a value out of range, and an act under the mark it would sit over", () => {
+    refuses(`${head}\n  m:\n    nope: { act: 0.7 }`, "tuned.m.nope");
+    refuses(`${head}\n  m:\n    q: { act: 1.5 }`, "tuned.m.q");
+    refuses(`${head}\n  m:\n    q: { act: 0.5 }`, "tuned.m.q");
+    refuses(`${head} [m]`, "tuned");
+    refuses(`${head}\n  m: 3`, "tuned.m");
   });
 });
 

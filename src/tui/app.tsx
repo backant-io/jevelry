@@ -5,8 +5,7 @@ import { Box, Text, render, useApp, useInput, useWindowSize } from "ink";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { dirname, join } from "node:path";
 import { configured } from "../config.js";
-import { mergeThresholds } from "../decision.js";
-import { type Jevel, listJevels, loadJevel } from "../jevel.js";
+import { type Jevel, listJevels, loadJevel, thresholdsFor } from "../jevel.js";
 import { LOG_FILE, type LogLine, readLog } from "../log.js";
 import { ChromeContext, Dialog, type Hint, SelectDialog, type SelectItem, newKeyMemory, useChrome } from "./dialog.js";
 import { ALL, DecisionsView, type Filters, NO_JEVEL, ReportView, jevelNames, rowsOf, thresholdsLookup } from "./history.js";
@@ -192,8 +191,7 @@ export function App(props: {
   // Every question whose act threshold could come down, for the dashboard's "Needs you".
   const worth = useMemo(() => [...byQuestion.values()].filter((t) => {
     const j = loaded(t.jevel);
-    const q = j && Object.hasOwn(j.questions, t.question) ? j.questions[t.question]! : null;
-    return j !== null && q !== null && proposeAct(t, mergeThresholds(j.thresholds, q.thresholds)) !== null;
+    return j !== null && Object.hasOwn(j.questions, t.question) && proposeAct(t, thresholdsFor(j, t.question, t.model)) !== null;
   }).map((t) => ({ jevel: t.jevel, question: t.question })), [byQuestion, loaded]);
   const [tuning, setTuning] = useState<QuestionView | null>(null);
   const [quiet, setQuiet] = useState(false);

@@ -194,7 +194,7 @@ export function jevel<N extends string>(
    * `plan` runs on Jev's answers before anything is logged; when it throws, the ask is logged and
    * returned as a failure like any other, so the log never holds a clean decision nobody could act on.
    */
-  const decideWith = async (state: unknown, plan?: (answers: Record<string, Answer>) => void): Promise<Decisions> => {
+  const decideWith = async (state: unknown, plan?: (answers: Record<string, Answer>, model: string) => void): Promise<Decisions> => {
     // The caller's own bugs: thrown, because no amount of retrying Jev fixes them.
     if (!isEntry(state)) throw new JevelError("state", "state must be a string, a JSON object or an array");
     checkState(loaded, state);
@@ -209,7 +209,7 @@ export function jevel<N extends string>(
     }
     if (result.ok && plan) {
       try {
-        plan(result.document.answers);
+        plan(result.document.answers, result.document.model);
       } catch (error) {
         result = { ok: false, error: errorBody(error) };
       }
@@ -238,7 +238,7 @@ export function jevel<N extends string>(
     async run(state: unknown, handlers: RunHandlers = {}, runOptions: RunOptions = {}) {
       dispatcherOf(loaded);
       let planned: Call | null = null;
-      const decisions = await decideWith(state, (answers) => { planned = planCall(loaded, answers); });
+      const decisions = await decideWith(state, (answers, model) => { planned = planCall(loaded, answers, model); });
       const call = decisions.error ? planCall(loaded, null) : planned!;
       const key = call.decision === "fall_back" ? "fall_back" : call.option!;
       const handler = Object.hasOwn(handlers, key) ? handlers[key] : undefined;

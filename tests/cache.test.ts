@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { TypeSafeClient } from "@typesafe-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { ask } from "../src/ask.js";
+import { parseJevel } from "../src/jevel.js";
 import { type AskLine, REQUESTS_FILE, appendLine, findRepeat, logAsk } from "../src/log.js";
 import { speed } from "../src/report.js";
 import { jsonResponse, scriptedFetch } from "./fixtures/responses.js";
@@ -42,6 +43,13 @@ describe("an exact repeat answered from the log", () => {
   it("judges the logged answer by today's thresholds, not by the decision written back then", async () => {
     const strict = logged({ answers: { urgent: { type: "noul", noul: 0.99, yes: true, certainty: 0.99, decision: "fall_back" } } });
     const result = await ask({ client: client(never), state: "Help!", questions: QUESTIONS, repeat: async () => strict });
+    expect(result.ok && result.document.answers.urgent?.decision).toBe("act");
+  });
+  // The answer in the log is the local model's, so the thresholds tuned for that model read it, as they would a fresh answer.
+  it("judges the logged answer by the thresholds tuned for the model that gave it", async () => {
+    const jevel = parseJevel(`---\nname: t\nversion: 1\nquestions:\n  urgent: { type: noul, instructions: "Is it urgent?" }\ntuned:\n  ${LOCAL}:\n    urgent: { act: 0.6, mark: 0.55 }\n---\n`, "t").jevel;
+    const unsure = logged({ answers: { urgent: { type: "noul", noul: 0.65, yes: true, certainty: 0.65, decision: "fall_back" } } });
+    const result = await ask({ client: client(never), state: "Help!", jevel, repeat: async () => unsure });
     expect(result.ok && result.document.answers.urgent?.decision).toBe("act");
   });
   // Only jevelry's own local model is known to answer the same every time; hosted Jev is never measured, because asking it costs money.

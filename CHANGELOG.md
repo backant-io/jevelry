@@ -29,7 +29,7 @@ The first release with local models. Everything below was merged after 0.6.0 (1 
 
 ### Lighter
 
-- Every dependency but TypeSafe's SDK is in the build: an install is 2 packages where it was 43, and the package is 552 kB where it was 1,361 kB. (#24, #42, #46)
+- Every dependency but TypeSafe's SDK is in the build: an install is 2 packages where it was 43, and the package is 554 kB where it was 1,361 kB. (#24, #42, #46)
 - Kev models start with a 512-token ubatch: 71% less server memory, with the same answers. (#26)
 - The local server's log no longer grows with every ask. (#42)
 
@@ -39,10 +39,12 @@ The first release with local models. Everything below was merged after 0.6.0 (1 
 - `jevelry eval <jevel>` asks a jevel's cases and reports how many were right, with an interval, and exits 8 when one was not. `--against <file>` gives the agreement with a saved run of another model. (#23, #35)
 - `jevelry cases <jevel>` turns reviewed asks from the log into cases. (#38)
 - `jevelry report` shows how far a question's certainty runs ahead of how often people agreed with it. (#36)
+- A threshold belongs to the model it was measured on: on the same requests a 2B model gave its answers at a median certainty of 0.85 and a 9B model at 0.63. The Jevel screen counts the answers of the model that answered the jevel last, and `T` writes the threshold it proposes under that model's name, in a `tuned` block at the end of the jevel's frontmatter. An answer by another model is judged by the thresholds of the question, as before. (#71)
 
 ### For those who upgrade from 0.6.0
 
 - An ask of hosted Jev works as before. The answer document is still protocol 2.
 - Log lines have new fields, all additions: `ms`, `cold`, `request_hash`, `cached_from`.
 - New commands: `eval`, `cases`, `stop`. New exit code: 8, from `eval` only.
+- `T` on the Jevel screen writes into the jevel's `tuned` block, where it rewrote the question's `thresholds`. A jevel tuned with 0.6.0 reads as before, and 0.6.0 ignores the block.
 - Node 22 or newer, as before.
